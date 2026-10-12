@@ -1,0 +1,9 @@
+# Uploaded to Cloud Build for `gcloud run deploy --source`. Never ship secrets or licensed content.
+.gcloudignore
+.env
+.venv/
+app/data/assessments/
+tests/
+__pycache__/
+.pytest_cache/
+*.pyc
