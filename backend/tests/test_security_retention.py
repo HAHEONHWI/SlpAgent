@@ -112,3 +112,9 @@ def test_swagger_authorize_scheme_and_docs_hidden_in_production(client, monkeypa
         monkeypatch.undo()
         config.get_settings.cache_clear()
         importlib.reload(main)
+
+
+def test_api_prefix_from_hosting_rewrite_is_stripped(client):
+    assert client.get("/api/healthz").json() == {"ok": True}
+    assert client.get("/api/children", headers=H()).status_code == 200
+    assert client.get("/healthz").json() == {"ok": True}

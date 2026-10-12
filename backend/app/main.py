@@ -10,10 +10,26 @@ from .rate_limit import RateLimitMiddleware
 _docs = get_settings().env != "production"
 app = FastAPI(title="SLP Agent API", docs_url="/docs" if _docs else None, redoc_url=None,
               openapi_url="/openapi.json" if _docs else None)
+
+
+class StripApiPrefix:
+    """Firebase Hosting forwards /api/** to Cloud Run unchanged; routes are defined without the prefix."""
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] in ("http", "websocket"):
+            path = scope.get("path", "")
+            if path == "/api" or path.startswith("/api/"):
+                scope = {**scope, "path": path[4:] or "/", "raw_path": (path[4:] or "/").encode()}
+        await self.app(scope, receive, send)
+
+
 app.add_middleware(RateLimitMiddleware, limit=get_settings().rate_limit_requests,
                    window_seconds=get_settings().rate_limit_window_seconds)
 app.add_middleware(CORSMiddleware, allow_origins=get_settings().cors_origins.split(","),
                    allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(StripApiPrefix)  # added last = outermost, so rate limiting and CORS see the real path
 for r in (children.router, records.router, plans.router, proposals.router, chat.router, org.router,
           schedules.router, knowledge.router, analysis.router, documents.router, consultations.router, admin.router, platform.router):
     app.include_router(r)
