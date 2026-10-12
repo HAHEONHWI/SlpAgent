@@ -84,9 +84,13 @@ def _sections(kind: str, data: dict) -> list[tuple[str, list[str] | None, list[l
         return [("검사 결과", ["검사", "검사일", "검사 당시 월령", "입력 원점수", "규준 상태", "문항 응답"], rows),
                 ("해석 제한", None, "공식 규준표가 제공되지 않은 검사는 표준점수·발달연령·백분위를 산출하지 않았습니다.")]
     if kind == "parent_consultation":
-        rows = [[r.get("date", ""), r.get("topic", ""), r.get("content", ""), r.get("follow_up", "")]
-                for r in data.get("consultations", [])]
-        return [("상담 기록", ["일자", "주제", "내용", "후속 확인"], rows),
+        rows = [[r.get("date", ""),
+                 f"{r['start']}-{r['end']}" if r.get("start") and r.get("end") else "",
+                 _value(r.get("counselor")), ", ".join(r.get("participants") or []),
+                 ", ".join(r.get("topics") or []), r.get("summary") or "",
+                 r.get("guidance_given") or "", r.get("follow_up") or ""]
+                for r in sorted(data.get("consultations", []), key=lambda c: (c.get("date", ""), c.get("start") or ""))]
+        return [("상담 기록", ["일자", "시간", "상담자", "참석자", "주제", "상담 내용", "안내 사항", "후속 확인"], rows),
                 ("서명", None, "상담자: 수기 입력 · 보호자: 수기 입력")]
     raise ValueError(f"unsupported document type: {kind}")
 

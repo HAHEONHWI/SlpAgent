@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
-from ..auth import Principal, require_write
+from ..auth import Principal, current_principal, require_write
 from ..config import get_settings
 from ..deps import audit, child_or_404, get_repo
 from ..repo.base import NotFound
@@ -119,6 +119,29 @@ def approve_document(document_id: str, request: Request, p: Principal = Depends(
     url, expires = _signed_url(request, updated, get_settings())
     return {"id": document_id, "status": "approved", "download_url": url, "cleanup_pending": cleanup_pending,
             "expires_at": datetime.fromtimestamp(expires, timezone.utc).isoformat()}
+
+
+@router.get("/children/{child_id}/documents")
+def list_documents(child_id: str, p: Principal = Depends(current_principal), repo=Depends(get_repo)):
+    child_or_404(repo, p, child_id)
+    rows = sorted(repo.list("generated_documents", p.org_id, child_id=child_id),
+                  key=lambda r: r.get("created_at", ""), reverse=True)
+    return [{"id": r["id"], "type": r.get("doc_type"), "month": r.get("month"), "format": r.get("format"),
+             "status": r.get("status"), "created_at": r.get("created_at"), "approved_at": r.get("approved_at"),
+             "hwpx_validation": r.get("hwpx_validation")} for r in rows]
+
+
+@router.post("/generated-documents/{document_id}/link")
+def document_link(document_id: str, request: Request, p: Principal = Depends(current_principal), repo=Depends(get_repo)):
+    try:
+        document = repo.get("generated_documents", p.org_id, document_id)
+    except NotFound:
+        raise HTTPException(404, "document not found")
+    if not document.get("storage_key") or not document.get("storage_kind"):
+        raise HTTPException(404, "document file not found")
+    url, expires = _signed_url(request, document, get_settings())
+    audit(repo, p, "read", "generated_documents", document_id, document.get("child_id"))
+    return {"download_url": url, "expires_at": datetime.fromtimestamp(expires, timezone.utc).isoformat()}
 
 
 @router.get("/generated-documents/{document_id}/download", name="download_document")
