@@ -4,15 +4,14 @@ import { api } from "../lib/api";
 import { errText, useCreate, useRecords } from "../lib/hooks";
 import RequireChild from "../components/RequireChild";
 import { Badge, Button, Card, Empty, Input, Label, Notice, PageTitle, Select, Table, Td } from "../components/ui";
-
-const STATUS: Record<string, string> = { not_observed: "미관찰", emerging: "출현 중", with_prompt: "촉진 시 가능", independent: "독립 사용" };
-const MOD: Record<string, string> = { receptive: "수용", expressive: "표현" };
+import { MOD, STATUS, VocabChangeChart, WordHistory, type VocabRecord } from "../components/vocab/VocabTracking";
 
 function Inner({ childId }: { childId: string }) {
-  const list = useRecords<any>(childId, "vocabulary");
+  const list = useRecords<VocabRecord>(childId, "vocabulary");
   const home = useQuery({ queryKey: ["home", childId, list.dataUpdatedAt], queryFn: () => api<any>(`/children/${childId}/vocabulary/home-list`) });
   const create = useCreate(childId, "vocabulary");
   const [q, setQ] = useState(""), [mod, setMod] = useState("");
+  const [sel, setSel] = useState<{ word: string; modality: string } | null>(null);
   const [f, setF] = useState({ word: "", modality: "expressive", status: "emerging", observed_on: "", category: "", difficulty: "", target: false });
   const rows = (list.data ?? []).filter((r) => (!mod || r.modality === mod) && (!q || r.word.includes(q)));
   return (
@@ -34,9 +33,12 @@ function Inner({ childId }: { childId: string }) {
         <Card title="가정연계 어휘 목록 (초안)">
           {home.data?.words.length ? <div className="flex flex-wrap gap-1.5">{home.data.words.map((w: string) => <Badge key={w} tone="indigo">{w}</Badge>)}</div> : <Empty>목표어휘(미독립)가 없습니다.</Empty>}
         </Card>
+        <VocabChangeChart rows={list.data ?? []} />
+        {sel && <WordHistory word={sel.word} modality={sel.modality} rows={list.data ?? []} onClose={() => setSel(null)} />}
         <Card title="어휘 기록">
+          <p className="mb-2 text-xs text-slate-500">어휘를 누르면 관찰일별 상태 변화를 볼 수 있습니다.</p>
           <div className="mb-3 flex gap-2"><Input placeholder="어휘 검색" value={q} onChange={(e) => setQ(e.target.value)} /><Select className="w-32" value={mod} onChange={(e) => setMod(e.target.value)}><option value="">전체</option>{Object.entries(MOD).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select></div>
-          {!rows.length ? <Empty>기록이 없습니다.</Empty> : <Table head={["어휘", "구분", "상태", "관찰일", "범주", "목표"]}>{rows.map((r) => <tr key={r.id}><Td>{r.word}</Td><Td>{MOD[r.modality]}</Td><Td>{STATUS[r.status]}</Td><Td>{r.observed_on}</Td><Td>{r.category ?? "-"}</Td><Td>{r.target ? "●" : ""}</Td></tr>)}</Table>}
+          {!rows.length ? <Empty>기록이 없습니다.</Empty> : <Table head={["어휘", "구분", "상태", "관찰일", "범주", "목표"]}>{rows.map((r) => <tr key={r.id} className={sel?.word === r.word && sel?.modality === r.modality ? "bg-indigo-50" : undefined}><Td><button type="button" className="text-indigo-700 hover:underline" onClick={() => setSel({ word: r.word, modality: r.modality })}>{r.word}</button></Td><Td>{MOD[r.modality]}</Td><Td>{STATUS[r.status]}</Td><Td>{r.observed_on}</Td><Td>{r.category ?? "-"}</Td><Td>{r.target ? "●" : ""}</Td></tr>)}</Table>}
         </Card>
       </div>
     </div>
