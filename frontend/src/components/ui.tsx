@@ -1,4 +1,5 @@
 import clsx from "clsx";
+import { ApiError } from "../lib/api";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 
 // Minimal shadcn/ui-style primitives (hand-written; the shadcn CLI was not run).
@@ -33,3 +34,6 @@ export const Table = ({ head, children }: { head: string[]; children: ReactNode 
 );
 export const Td = ({ children, className }: { children?: ReactNode; className?: string }) => <td className={clsx("px-2 py-2 align-top", className)}>{children}</td>;
 export const Empty = ({ children }: { children: ReactNode }) => <p className="py-6 text-center text-sm text-slate-400">{children}</p>;
+// API error notice; 404 from endpoints the server has not shipped yet shows a soft notice instead.
+export const ErrorNotice = ({ error }: { error: unknown }) => !error ? null : error instanceof ApiError && error.status === 404
+  ? <Notice>서버가 아직 이 기능을 지원하지 않습니다.</Notice> : <Notice tone="red">{error instanceof Error ? error.message : String(error)}</Notice>;

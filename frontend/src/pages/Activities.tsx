@@ -4,7 +4,7 @@ import { api, ageLabel } from "../lib/api";
 import { useChild } from "../lib/child";
 import { errText } from "../lib/hooks";
 import RequireChild from "../components/RequireChild";
-import { DraftView, type Draft } from "../components/DraftView";
+import { ApprovedHistory, DraftView, type Draft } from "../components/DraftView";
 import { Button, Card, Input, Label, Notice, PageTitle, Textarea } from "../components/ui";
 
 const SECTIONS: [string, string][] = [["purpose", "활동 목적"], ["materials", "준비물"], ["sequence", "진행 순서"], ["modeling_examples", "언어적 모델링 예시"],
@@ -39,9 +39,10 @@ function Inner({ childId }: { childId: string }) {
           <Button disabled={run.isPending}>{run.isPending ? "생성 중…" : "AI 활동 초안 생성"}</Button>
         </form>
       </Card>
-      <div className="lg:col-span-2">
+      <div className="space-y-4 lg:col-span-2">
         {draft ? <DraftView draft={draft} sections={SECTIONS} onDone={() => setDraft(null)} />
           : <Notice>조건을 입력하고 생성하면 활동 초안이 여기에 표시됩니다. 승인 전에는 저장되지 않습니다.</Notice>}
+        <ApprovedHistory path={`/children/${childId}/therapy-activities`} sections={SECTIONS} kindLabel="치료활동" />
       </div>
     </div>
   );

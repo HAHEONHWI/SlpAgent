@@ -12,7 +12,7 @@ import Plans from "./pages/Plans";
 import Sessions from "./pages/Sessions";
 import Progress from "./pages/Progress";
 import Voucher from "./pages/Voucher";
-import Pending from "./pages/Pending";
+import Parents from "./pages/Parents";
 import Settings from "./pages/Settings";
 import Schedule from "./pages/Schedule";
 import Knowledge from "./pages/Knowledge";
@@ -37,7 +37,7 @@ export default function App() {
         <Route path="activities" element={<Activities />} />
         <Route path="sessions" element={<Sessions />} />
         <Route path="progress" element={<Progress />} />
-        <Route path="parents" element={<Pending title="보호자 상담" note="상담 기록을 저장하는 백엔드 API가 아직 없습니다(문서 생성기는 parent_consultations를 읽기만 함). 상담자료 초안은 AI 채팅(아동 선택)에서 요청할 수 있습니다." />} />
+        <Route path="parents" element={<Parents />} />
         <Route path="voucher" element={<Voucher />} />
         <Route path="knowledge" element={<Knowledge />} />
         <Route path="schedule" element={<Schedule />} />
