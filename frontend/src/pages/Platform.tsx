@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ShieldCheck } from "lucide-react";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { errText } from "../lib/hooks";
+import BrandLogo from "../components/BrandLogo";
 import { Badge, Button, Card, Empty, Input, Notice, PageTitle, Table, Td } from "../components/ui";
 
 type Signup = { uid: string; email: string | null; org_name: string; therapist_name: string; status: string; reason: string | null; created_at: string; org_id?: string };
@@ -33,7 +33,7 @@ export default function Platform() {
   return (
     <div className="min-h-screen">
       <header className="flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-2.5">
-        <ShieldCheck size={18} className="text-indigo-600" /><span className="font-bold text-indigo-700">SLP Agent 사이트 관리</span>
+        <BrandLogo className="w-28" /><span className="text-sm font-semibold text-slate-600">사이트 관리</span>
         <span className="ml-auto text-sm text-slate-500">{label}</span><Button variant="ghost" onClick={logout}>로그아웃</Button>
       </header>
       <main className="mx-auto max-w-6xl space-y-5 p-4 md:p-6">

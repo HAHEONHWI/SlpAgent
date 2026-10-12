@@ -4,6 +4,7 @@ import { useAuth } from "../lib/auth";
 import { useChild } from "../lib/child";
 import { useMe } from "../lib/me";
 import { ageLabel } from "../lib/api";
+import BrandLogo from "./BrandLogo";
 import { Button, Select } from "./ui";
 
 const MENU: { to: string; label: string; icon: typeof LayoutDashboard; soon?: boolean }[] = [
@@ -32,7 +33,7 @@ export default function Layout() {
   return (
     <div className="flex min-h-screen">
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-slate-200 bg-white md:flex">
-        <div className="px-4 py-4 text-base font-bold text-indigo-700">SLP Agent</div>
+        <div className="px-4 py-3"><BrandLogo className="mx-auto w-40" /></div>
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-4">
           {MENU.map(({ to, label, icon: I, soon }) => (
             <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) =>

@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import type { Me } from "../lib/me";
 import { errText } from "../lib/hooks";
+import BrandLogo from "../components/BrandLogo";
 import { Badge, Button, Card, Input, Label, Notice } from "../components/ui";
 import { PENDING_SIGNUP } from "./Login";
 
@@ -28,7 +29,8 @@ export default function SignupGate({ me }: { me: Me }) {
 
   return (
     <div className="grid min-h-screen place-items-center p-4">
-      <Card title="SLP Agent 가입" className="w-full max-w-md" action={<Button variant="ghost" onClick={logout}>로그아웃</Button>}>
+      <Card title="기관 가입 신청" className="w-full max-w-md" action={<Button variant="ghost" onClick={logout}>로그아웃</Button>}>
+        <BrandLogo className="mx-auto mb-3 w-36" />
         <p className="mb-3 text-sm text-slate-500">{me.email ?? label}</p>
         {me.status === "pending" && (
           <div className="space-y-3">

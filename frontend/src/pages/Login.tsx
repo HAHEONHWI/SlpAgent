@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { DEV_LOGIN, FIREBASE_ENABLED, useAuth } from "../lib/auth";
+import BrandLogo from "../components/BrandLogo";
 import { Button, Card, Input, Label, Notice, Select } from "../components/ui";
 
 export const PENDING_SIGNUP = "pendingSignup";
@@ -24,7 +25,7 @@ export default function Login() {
   return (
     <div className="grid min-h-screen place-items-center p-4">
       <Card className="w-full max-w-sm">
-        <div className="mb-4 text-center text-lg font-bold text-indigo-700">SLP Agent</div>
+        <BrandLogo className="mx-auto mb-4 w-44" />
         <div className="mb-4 grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1 text-sm">
           {(["login", "signup"] as const).map((t) => (
             <button key={t} onClick={() => { setTab(t); setErr(""); }} className={`rounded-md py-1.5 ${tab === t ? "bg-white font-semibold shadow-sm" : "text-slate-600"}`}>{t === "login" ? "로그인" : "회원가입"}</button>))}
