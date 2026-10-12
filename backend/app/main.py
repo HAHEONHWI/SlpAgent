@@ -6,7 +6,10 @@ from .repo.base import NotFound
 from .routers import admin, analysis, chat, children, consultations, documents, knowledge, org, plans, proposals, records, schedules
 from .rate_limit import RateLimitMiddleware
 
-app = FastAPI(title="SLP Agent API")
+# API docs (Swagger UI /docs, /openapi.json) are for development; production does not expose them.
+_docs = get_settings().env != "production"
+app = FastAPI(title="SLP Agent API", docs_url="/docs" if _docs else None, redoc_url=None,
+              openapi_url="/openapi.json" if _docs else None)
 app.add_middleware(RateLimitMiddleware, limit=get_settings().rate_limit_requests,
                    window_seconds=get_settings().rate_limit_window_seconds)
 app.add_middleware(CORSMiddleware, allow_origins=get_settings().cors_origins.split(","),

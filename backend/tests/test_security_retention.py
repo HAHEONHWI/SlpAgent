@@ -95,3 +95,20 @@ def test_retention_dry_run_and_permanent_delete_are_org_scoped(repo, tmp_path):
     assert repo.get("audit_logs", "orgA", event["id"])["child_id"] is None
     assert len(repo.list("children", "orgB")) == 1
     assert any(row["action"] == "permanent_delete" for row in repo.list("audit_logs", "orgA"))
+
+
+def test_swagger_authorize_scheme_and_docs_hidden_in_production(client, monkeypatch):
+    spec = client.get("/openapi.json").json()
+    assert any(v.get("scheme") == "bearer" for v in spec["components"]["securitySchemes"].values())
+    import importlib, app.config as config, app.main as main
+    monkeypatch.setenv("ENV", "production")
+    monkeypatch.setenv("AUTH_MODE", "firebase")
+    monkeypatch.setenv("STORAGE_BACKEND", "firestore")
+    config.get_settings.cache_clear()
+    try:
+        prod = importlib.reload(main).app
+        assert prod.docs_url is None and prod.openapi_url is None
+    finally:
+        monkeypatch.undo()
+        config.get_settings.cache_clear()
+        importlib.reload(main)

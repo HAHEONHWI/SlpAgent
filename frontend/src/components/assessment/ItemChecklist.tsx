@@ -14,6 +14,8 @@ export type BankItem = {
   needs_review?: boolean;
 };
 
+const SECTION: Record<string, string> = { pre: "언어이전", receptive: "수용언어", expressive: "표현언어" };
+
 const optLabel = (o: unknown) =>
   typeof o === "string" || typeof o === "number" ? String(o)
     : o && typeof o === "object" && "label" in o ? String((o as { label: unknown }).label)
@@ -27,13 +29,16 @@ export function ItemChecklist({ items, responses, onChange }: {
   onChange: (itemId: string, value: string) => void;
 }) {
   if (!items.length) return <Empty>적재된 문항이 없습니다.</Empty>;
-  // Group by domain, then age_range, keeping bank order.
-  const groups: { key: string; domain: string; age: string | null; items: BankItem[] }[] = [];
+  // Group by section (receptive/expressive, from the item_id prefix), domain, then age_range, keeping bank order.
+  // Without the section, receptive and expressive items of the same domain/age mix and their numbers collide.
+  const groups: { key: string; section: string | null; domain: string; age: string | null; items: BankItem[] }[] = [];
   for (const it of items) {
     const domain = it.domain || "영역 미지정", age = it.age_range || null;
-    const key = `${domain}\u0000${age ?? ""}`;
+    const prefix = it.item_id.split("-")[0];
+    const section = prefix === domain ? null : SECTION[prefix] ?? prefix;
+    const key = `${section ?? ""}\u0000${domain}\u0000${age ?? ""}`;
     let g = groups.find((x) => x.key === key);
-    if (!g) groups.push((g = { key, domain, age, items: [] }));
+    if (!g) groups.push((g = { key, section, domain, age, items: [] }));
     g.items.push(it);
   }
   const answered = items.filter((i) => (responses[i.item_id] ?? "") !== "").length;
@@ -47,7 +52,7 @@ export function ItemChecklist({ items, responses, onChange }: {
         {groups.map((g) => (
           <div key={g.key} className="rounded-md border border-slate-200">
             <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50 px-2 py-1.5 text-xs font-semibold text-slate-700">
-              <span>{g.domain}</span>{g.age && <Badge>{g.age}</Badge>}
+              {g.section && <Badge tone="indigo">{g.section}</Badge>}<span>{g.domain}</span>{g.age && <Badge>{g.age}</Badge>}
             </div>
             <ul className="divide-y divide-slate-100">
               {g.items.map((it) => {

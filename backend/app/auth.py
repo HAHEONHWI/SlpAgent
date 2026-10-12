@@ -1,5 +1,6 @@
 from typing import Literal
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from .config import get_settings
 
@@ -36,10 +37,14 @@ def _verify_firebase(token: str) -> Principal:
     return Principal(uid=claims["uid"], org_id=org, role=role)
 
 
-def current_principal(authorization: str | None = Header(default=None)) -> Principal:
-    if not authorization or not authorization.startswith("Bearer "):
+# HTTPBearer (instead of a raw header) lets Swagger UI show an "Authorize" button.
+bearer = HTTPBearer(auto_error=False, description="Firebase ID token. Dev mode: dev:<org>:<role>:<uid>")
+
+
+def current_principal(cred: HTTPAuthorizationCredentials | None = Depends(bearer)) -> Principal:
+    if not cred or cred.scheme.lower() != "bearer" or not cred.credentials:
         raise HTTPException(401, "missing bearer token")
-    token = authorization[7:]
+    token = cred.credentials
     s = get_settings()
     if s.auth_mode == "dev":
         # "dev:<org>:<role>:<uid>" -- only reachable outside production (see Settings validator)

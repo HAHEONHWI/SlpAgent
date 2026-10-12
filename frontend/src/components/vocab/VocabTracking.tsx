@@ -1,4 +1,4 @@
-import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Badge, Button, Card, Empty, Table, Td } from "../ui";
 
 export type VocabRecord = {
@@ -44,13 +44,13 @@ function ModalityChart({ modality, rows }: { modality: string; rows: VocabRecord
       <p className="mb-1 text-xs font-semibold text-slate-700">{MOD[modality]}어휘</p>
       {data.length < 2 ? <Empty>관찰일이 2개 이상 기록되면 변화 그래프가 표시됩니다.</Empty> : (
         <div className="h-64"><ResponsiveContainer>
-          <AreaChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+          <BarChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis dataKey="date" fontSize={11} />
             <YAxis allowDecimals={false} fontSize={11} />
             <Tooltip /><Legend wrapperStyle={{ fontSize: 12 }} />
-            {SERIES.map((s) => <Area key={s.key} type="stepAfter" stackId="1" dataKey={STATUS[s.key]} stroke={s.color} fill={s.color} fillOpacity={0.35} isAnimationActive={false} />)}
-          </AreaChart>
+            {SERIES.map((s) => <Bar key={s.key} stackId="1" dataKey={STATUS[s.key]} fill={s.color} maxBarSize={36} isAnimationActive={false} />)}
+          </BarChart>
         </ResponsiveContainer></div>)}
     </div>
   );
