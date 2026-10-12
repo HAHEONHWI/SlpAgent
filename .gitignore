@@ -1,0 +1,13 @@
+reference-docs/
+backend/.venv/
+node_modules/
+.env
+*.pyc
+__pycache__/
+extracted/
+# licensed assessment item text (local-only; see docs/assessment-extraction.md)
+backend/app/data/assessments/
+# build output and machine-local config
+frontend/dist/
+*.tsbuildinfo
+.claude/

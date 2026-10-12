@@ -1,0 +1,7 @@
+# Licensed assessment item text must never be baked into the image (mount privately instead).
+app/data/assessments/
+.venv/
+.env
+tests/
+__pycache__/
+.pytest_cache/

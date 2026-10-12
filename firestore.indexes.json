@@ -1,0 +1,23 @@
+{
+  "indexes": [
+    {"collectionGroup":"children","queryScope":"COLLECTION","fields":[{"fieldPath":"organization_id","order":"ASCENDING"},{"fieldPath":"archived","order":"ASCENDING"}]},
+    {"collectionGroup":"assessments","queryScope":"COLLECTION","fields":[{"fieldPath":"organization_id","order":"ASCENDING"},{"fieldPath":"child_id","order":"ASCENDING"}]},
+    {"collectionGroup":"behavior_observations","queryScope":"COLLECTION","fields":[{"fieldPath":"organization_id","order":"ASCENDING"},{"fieldPath":"child_id","order":"ASCENDING"}]},
+    {"collectionGroup":"vocabulary_records","queryScope":"COLLECTION","fields":[{"fieldPath":"organization_id","order":"ASCENDING"},{"fieldPath":"child_id","order":"ASCENDING"}]},
+    {"collectionGroup":"therapy_sessions","queryScope":"COLLECTION","fields":[{"fieldPath":"organization_id","order":"ASCENDING"},{"fieldPath":"child_id","order":"ASCENDING"}]},
+    {"collectionGroup":"session_notes","queryScope":"COLLECTION","fields":[{"fieldPath":"organization_id","order":"ASCENDING"},{"fieldPath":"child_id","order":"ASCENDING"}]},
+    {"collectionGroup":"treatment_plans","queryScope":"COLLECTION","fields":[{"fieldPath":"organization_id","order":"ASCENDING"},{"fieldPath":"child_id","order":"ASCENDING"},{"fieldPath":"status","order":"ASCENDING"}]},
+    {"collectionGroup":"schedules","queryScope":"COLLECTION","fields":[{"fieldPath":"organization_id","order":"ASCENDING"},{"fieldPath":"child_id","order":"ASCENDING"}]},
+    {"collectionGroup":"schedules","queryScope":"COLLECTION","fields":[{"fieldPath":"organization_id","order":"ASCENDING"},{"fieldPath":"date","order":"ASCENDING"},{"fieldPath":"status","order":"ASCENDING"}]},
+    {"collectionGroup":"parent_consultations","queryScope":"COLLECTION","fields":[{"fieldPath":"organization_id","order":"ASCENDING"},{"fieldPath":"child_id","order":"ASCENDING"}]},
+    {"collectionGroup":"ai_analyses","queryScope":"COLLECTION","fields":[{"fieldPath":"organization_id","order":"ASCENDING"},{"fieldPath":"status","order":"ASCENDING"}]},
+    {"collectionGroup":"ai_analyses","queryScope":"COLLECTION","fields":[{"fieldPath":"organization_id","order":"ASCENDING"},{"fieldPath":"child_id","order":"ASCENDING"}]},
+    {"collectionGroup":"clinical_analyses","queryScope":"COLLECTION","fields":[{"fieldPath":"organization_id","order":"ASCENDING"},{"fieldPath":"child_id","order":"ASCENDING"}]},
+    {"collectionGroup":"therapy_activities","queryScope":"COLLECTION","fields":[{"fieldPath":"organization_id","order":"ASCENDING"},{"fieldPath":"child_id","order":"ASCENDING"}]},
+    {"collectionGroup":"generated_documents","queryScope":"COLLECTION","fields":[{"fieldPath":"organization_id","order":"ASCENDING"},{"fieldPath":"child_id","order":"ASCENDING"}]},
+    {"collectionGroup":"chat_conversations","queryScope":"COLLECTION","fields":[{"fieldPath":"organization_id","order":"ASCENDING"},{"fieldPath":"child_id","order":"ASCENDING"}]},
+    {"collectionGroup":"chat_messages","queryScope":"COLLECTION","fields":[{"fieldPath":"organization_id","order":"ASCENDING"},{"fieldPath":"conversation_id","order":"ASCENDING"}]},
+    {"collectionGroup":"audit_logs","queryScope":"COLLECTION","fields":[{"fieldPath":"organization_id","order":"ASCENDING"},{"fieldPath":"child_id","order":"ASCENDING"}]}
+  ],
+  "fieldOverrides": []
+}

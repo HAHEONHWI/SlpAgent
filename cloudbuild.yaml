@@ -1,0 +1,36 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "backend/Dockerfile", "-t", "$_REGION-docker.pkg.dev/$PROJECT_ID/slp-agent/api:$COMMIT_SHA", "backend"]
+  - name: gcr.io/cloud-builders/docker
+    args: ["push", "$_REGION-docker.pkg.dev/$PROJECT_ID/slp-agent/api:$COMMIT_SHA"]
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - $_SERVICE
+      - --image=$_REGION-docker.pkg.dev/$PROJECT_ID/slp-agent/api:$COMMIT_SHA
+      - --region=$_REGION
+      - --service-account=$_SERVICE_ACCOUNT
+      - --allow-unauthenticated
+      - --set-secrets=OPENAI_API_KEY=OPENAI_API_KEY:latest
+      # Licensed item banks are not in the image; mount them read-only from a private bucket.
+      - --add-volume=name=item-banks,type=cloud-storage,bucket=$_ITEM_BANK_BUCKET,readonly=true
+      - --add-volume-mount=volume=item-banks,mount-path=/mnt/item-banks
+      - --set-env-vars=^@^ENV=production@AUTH_MODE=firebase@STORAGE_BACKEND=firestore@OPENAI_MODEL=$_OPENAI_MODEL@OPENAI_EMBEDDING_MODEL=$_OPENAI_EMBEDDING_MODEL@OPENAI_ALLOW_REFERENCE_EMBEDDING_UPLOAD=$_ALLOW_REFERENCE_EMBEDDING_UPLOAD@GCS_BUCKET=$_GCS_BUCKET@CORS_ORIGINS=$_CORS_ORIGINS@ASSESSMENT_DATA_DIR=/mnt/item-banks
+      - --min=0
+      - --max=5
+images:
+  - $_REGION-docker.pkg.dev/$PROJECT_ID/slp-agent/api:$COMMIT_SHA
+options:
+  logging: CLOUD_LOGGING_ONLY
+substitutions:
+  _REGION: asia-northeast3
+  _SERVICE: slp-agent-api
+  _SERVICE_ACCOUNT: slp-agent-runtime@$PROJECT_ID.iam.gserviceaccount.com
+  _GCS_BUCKET: replace-with-private-bucket
+  _ITEM_BANK_BUCKET: replace-with-private-item-bank-bucket
+  _OPENAI_MODEL: replace-with-supported-model
+  _OPENAI_EMBEDDING_MODEL: ""
+  _ALLOW_REFERENCE_EMBEDDING_UPLOAD: "false"
+  _CORS_ORIGINS: https://replace-with-hosting-domain
