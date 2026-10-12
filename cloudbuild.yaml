@@ -33,4 +33,4 @@ substitutions:
   _OPENAI_MODEL: replace-with-supported-model
   _OPENAI_EMBEDDING_MODEL: ""
   _ALLOW_REFERENCE_EMBEDDING_UPLOAD: "false"
-  _CORS_ORIGINS: https://replace-with-hosting-domain
+  _CORS_ORIGINS: https://slpai.heonhwi.dev,https://slp-agent-2026.web.app,https://slp-agent-2026.firebaseapp.com

@@ -46,14 +46,16 @@ class AssessmentIn(BaseModel):
 
 
 @router.get("/assessment-definitions")
-def definitions(p: Principal = Depends(current_principal)):
-    return assessment_defs.public_definitions()
+def definitions(p: Principal = Depends(current_principal), repo=Depends(get_repo)):
+    return assessment_defs.public_definitions(assessment_defs.licensed_codes(repo, p.org_id))
 
 
 @router.get("/assessment-definitions/{code}/items")
-def assessment_items(code: str, p: Principal = Depends(current_principal)):
+def assessment_items(code: str, p: Principal = Depends(current_principal), repo=Depends(get_repo)):
     if code not in assessment_defs.DEFS:
         raise HTTPException(404, "assessment definition not found")
+    if code not in assessment_defs.licensed_codes(repo, p.org_id):
+        raise HTTPException(403, "이 기관은 해당 검사의 사용 허가가 없습니다")
     return assessment_defs.load_item_bank(code)
 
 

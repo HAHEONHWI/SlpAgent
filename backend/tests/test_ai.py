@@ -70,6 +70,8 @@ def test_chat_endpoint_and_conversation_child_locked(client, repo, child, monkey
 
 
 def test_knowledge_search_cites_page_and_skips_ocr_pages(repo):
+    from tests.conftest import grant_license
+    grant_license(repo, "orgA", "REVT")
     repo.create("knowledge_documents", "orgA", {"source": "REVT 매뉴얼.pdf", "page": 2, "test_code": "REVT", "text": "검사 시 유의사항 대상자가 틀리게 반응했을 경우라도 격려한다", "needs_ocr": False})
     repo.create("knowledge_documents", "orgA", {"source": "스캔.pdf", "page": 1, "test_code": "REVT", "text": "", "needs_ocr": True})
     from app.services import knowledge

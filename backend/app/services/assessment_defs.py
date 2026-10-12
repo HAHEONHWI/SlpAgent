@@ -60,9 +60,21 @@ def load_item_bank(code: str) -> list[dict]:
     return items
 
 
-def public_definitions() -> list[dict]:
-    return [definition.model_copy(update={"item_bank_loaded": bool(load_item_bank(code))}).model_dump()
-            for code, definition in DEFS.items()]
+def licensed_codes(repo, org_id: str) -> set[str]:
+    """Tests this organization is licensed to use, set by a site admin. Item text and source excerpts of a
+    test are served only to licensed organizations."""
+    from ..repo.base import NotFound
+    try:
+        org = repo.get("organizations", org_id, org_id)
+    except NotFound:
+        return set()
+    return {c for c in org.get("licensed_assessments") or [] if c in DEFS}
+
+
+def public_definitions(licensed: set[str] | None = None) -> list[dict]:
+    licensed = licensed or set()
+    return [definition.model_copy(update={"item_bank_loaded": code in licensed and bool(load_item_bank(code))}).model_dump()
+            | {"licensed": code in licensed} for code, definition in DEFS.items()]
 
 
 def derived_scores(code: str) -> dict:

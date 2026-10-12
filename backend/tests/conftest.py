@@ -30,3 +30,11 @@ def child(client):
                                        "guardian_contact": "010-0000-0000"}, headers=H())
     assert r.status_code == 201
     return r.json()
+
+
+def grant_license(repo, org, *codes):
+    """Record that `org` holds a license for these tests (normally set by a site admin)."""
+    try:
+        repo.update("organizations", org, org, {"licensed_assessments": list(codes)})
+    except Exception:
+        repo.create("organizations", org, {"licensed_assessments": list(codes)}, doc_id=org)

@@ -7,7 +7,8 @@ import { errText } from "../lib/hooks";
 import { Badge, Button, Card, Empty, Input, Notice, PageTitle, Table, Td } from "../components/ui";
 
 type Signup = { uid: string; email: string | null; org_name: string; therapist_name: string; status: string; reason: string | null; created_at: string; org_id?: string };
-type Org = { org_id: string; name: string; status: string; created_at: string; users: number; children: number; sessions_30d: number; last_activity: string | null };
+type Org = { org_id: string; name: string; status: string; created_at: string; users: number; children: number; sessions_30d: number; last_activity: string | null; licensed_assessments: string[] };
+const TESTS = ["K-SNAP", "ESDM", "EASIC", "K-MB-CDI-I", "K-MB-CDI-T", "REVT", "SELSI", "PRES", "KOSECT", "K-CDI"];
 const dt = (s?: string | null) => (s ? s.slice(0, 16).replace("T", " ") : "-");
 const ST: Record<string, [string, any]> = { pending: ["승인 대기", "amber"], approved: ["승인됨", "green"], rejected: ["거절됨", "red"] };
 
@@ -22,6 +23,9 @@ export default function Platform() {
   const orgs = useQuery({ queryKey: ["platform", "orgs"], queryFn: () => api<Org[]>("/platform/organizations") });
   const refresh = () => qc.invalidateQueries({ queryKey: ["platform"] });
   const approve = useMutation({ mutationFn: (uid: string) => api(`/platform/signups/${uid}/approve`, { method: "POST" }), onSuccess: refresh });
+  const [editing, setEditing] = useState<{ org: string; codes: string[] } | null>(null);
+  const saveLic = useMutation({ mutationFn: (e: { org: string; codes: string[] }) => api(`/platform/organizations/${e.org}/licenses`, { method: "PUT", json: { codes: e.codes } }),
+    onSuccess: () => { setEditing(null); refresh(); } });
   const reject = useMutation({ mutationFn: (uid: string) => api(`/platform/signups/${uid}/reject`, { method: "POST", json: { reason: reason[uid] } }), onSuccess: refresh });
   const s = summary.data;
   const kpi = (k: string, v: any) => <Card key={k}><p className="text-xs text-slate-500">{k}</p><p className="mt-1 text-2xl font-bold">{v ?? "–"}</p></Card>;
@@ -61,11 +65,26 @@ export default function Platform() {
 
         <Card title={`기관 (${orgs.data?.length ?? 0})`}>
           {!orgs.data?.length ? <Empty>승인된 기관이 없습니다.</Empty> : (
-            <Table head={["기관명", "생성일", "사용자", "아동", "최근 30일 회기", "마지막 활동", "상태"]}>
+            <Table head={["기관명", "생성일", "사용자", "아동", "최근 30일 회기", "마지막 활동", "상태", "사용 허가 검사"]}>
               {orgs.data.map((o) => (
                 <tr key={o.org_id}><Td className="font-medium">{o.name}</Td><Td className="text-xs">{dt(o.created_at)}</Td><Td>{o.users}</Td><Td>{o.children}</Td><Td>{o.sessions_30d}</Td>
-                  <Td className="text-xs">{dt(o.last_activity)}</Td><Td><Badge tone={o.status === "active" ? "green" : "slate"}>{o.status === "active" ? "사용 중" : o.status}</Badge></Td></tr>))}
+                  <Td className="text-xs">{dt(o.last_activity)}</Td><Td><Badge tone={o.status === "active" ? "green" : "slate"}>{o.status === "active" ? "사용 중" : o.status}</Badge></Td>
+                  <Td>{editing?.org === o.org_id ? (
+                    <div className="space-y-2">
+                      <div className="flex max-w-xs flex-wrap gap-1">{TESTS.map((t) => {
+                        const on = editing.codes.includes(t);
+                        return <button key={t} type="button" onClick={() => setEditing({ ...editing, codes: on ? editing.codes.filter((c) => c !== t) : [...editing.codes, t] })}
+                          className={`rounded-full border px-2 py-0.5 text-xs ${on ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-300 text-slate-600"}`}>{t}</button>; })}</div>
+                      <div className="flex gap-1"><Button onClick={() => saveLic.mutate(editing)} disabled={saveLic.isPending}>저장</Button><Button variant="ghost" onClick={() => setEditing(null)}>취소</Button></div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-1">
+                      {o.licensed_assessments.length ? o.licensed_assessments.map((c) => <Badge key={c} tone="indigo">{c}</Badge>) : <span className="text-xs text-slate-400">없음</span>}
+                      <Button variant="ghost" onClick={() => setEditing({ org: o.org_id, codes: o.licensed_assessments })}>편집</Button>
+                    </div>)}</Td></tr>))}
             </Table>)}
+          {saveLic.error && <div className="mt-2"><Notice tone="red">{errText(saveLic.error)}</Notice></div>}
+          <p className="mt-2 text-xs text-slate-500">사용 허가(라이선스)를 확인한 검사만 지정하세요. 허가된 기관만 해당 검사의 문항과 자료실 원문을 볼 수 있습니다.</p>
         </Card>
       </main>
     </div>

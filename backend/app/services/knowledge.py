@@ -39,9 +39,13 @@ def search(repo, org_id: str, query: str, test_code: str | None = None, k: int =
     model = settings.openai_embedding_model if embedding_model is None else embedding_model
     if not settings.openai_allow_reference_embedding_upload:
         model = ""
+    from .assessment_defs import licensed_codes
+    licensed = licensed_codes(repo, org_id)
     documents = []
     for doc in repo.list("knowledge_documents", org_id):
         if doc.get("needs_ocr") or doc.get("needs_review") or not doc.get("text"):
+            continue
+        if doc.get("test_code") and doc["test_code"] not in licensed:  # licensed test material only
             continue
         if test_code and doc.get("test_code") != test_code:
             continue

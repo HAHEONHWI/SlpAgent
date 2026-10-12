@@ -10,6 +10,7 @@ from ..auth import Identity, current_identity, require_site_admin
 from ..deps import get_repo
 from ..repo.base import NotFound
 from ..services.accounts import PLATFORM, get_claims_setter
+from ..services.assessment_defs import DEFS, licensed_codes
 
 router = APIRouter(tags=["platform"])
 
@@ -17,6 +18,10 @@ router = APIRouter(tags=["platform"])
 class SignupIn(BaseModel):
     org_name: str = Field(min_length=1, max_length=80)
     therapist_name: str = Field(min_length=1, max_length=40)
+
+
+class LicensesIn(BaseModel):
+    codes: list[str] = Field(default_factory=list, max_length=50)
 
 
 class RejectIn(BaseModel):
@@ -123,7 +128,26 @@ def organizations(admin: Identity = Depends(require_site_admin), repo=Depends(ge
     since = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
     rows = repo.list("organization_registry", PLATFORM)
     return sorted(({"org_id": r["org_id"], "name": r["name"], "status": r.get("status"), "created_at": r.get("created_at"),
+                    "licensed_assessments": sorted(licensed_codes(repo, r["org_id"])),
                     **_org_stats(repo, r["org_id"], since)} for r in rows), key=lambda r: r["created_at"] or "", reverse=True)
+
+
+@router.put("/platform/organizations/{org_id}/licenses")
+def set_licenses(org_id: str, body: LicensesIn, admin: Identity = Depends(require_site_admin), repo=Depends(get_repo)):
+    """Record which tests an organization holds a license for. Only site admins can change this."""
+    unknown = [c for c in body.codes if c not in DEFS]
+    if unknown:
+        raise HTTPException(422, f"unknown test codes: {unknown}")
+    try:
+        repo.get("organizations", org_id, org_id)
+    except NotFound:
+        raise HTTPException(404, "organization not found")
+    codes = sorted(set(body.codes))
+    repo.update("organizations", org_id, org_id, {"licensed_assessments": codes})
+    repo.create("audit_logs", PLATFORM, {"actor": admin.uid, "role": "site_admin", "action": "set_licenses",
+                                         "collection": "organizations", "doc_id": org_id, "child_id": None,
+                                         "via_ai": False, "detail": codes})
+    return {"org_id": org_id, "licensed_assessments": codes}
 
 
 @router.get("/platform/summary")
