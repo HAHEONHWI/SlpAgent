@@ -317,6 +317,20 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "signup_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "organization_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -2,6 +2,7 @@ import { NavLink, Outlet } from "react-router-dom";
 import { Bell, BookOpen, Brain, CalendarDays, ClipboardList, FileText, HeartHandshake, LayoutDashboard, LineChart, ListChecks, MessageSquare, NotebookPen, Settings, Sparkles, Stethoscope, Users, Library, LogOut } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useChild } from "../lib/child";
+import { useMe } from "../lib/me";
 import { ageLabel } from "../lib/api";
 import { Button, Select } from "./ui";
 
@@ -26,6 +27,7 @@ const MENU: { to: string; label: string; icon: typeof LayoutDashboard; soon?: bo
 
 export default function Layout() {
   const { label, logout } = useAuth();
+  const me = useMe().data;
   const { childId, child, children, setChildId } = useChild();
   return (
     <div className="flex min-h-screen">
@@ -47,7 +49,7 @@ export default function Layout() {
             {children.map((c) => <option key={c.id} value={c.id}>{c.alias} · {c.display_name}</option>)}
           </Select></div>
           {child && <span className="hidden text-sm text-slate-500 sm:inline">{ageLabel(child.age_months)}</span>}
-          <div className="ml-auto flex items-center gap-3 text-sm text-slate-500"><Bell size={16} />{label}<Button variant="ghost" onClick={logout}><LogOut size={14} />로그아웃</Button></div>
+          <div className="ml-auto flex items-center gap-3 text-sm text-slate-500"><Bell size={16} />{me?.org_name && <span className="font-medium text-slate-700">{me.org_name}</span>}<span className="hidden md:inline">{me?.email ?? label}</span><Button variant="ghost" onClick={logout}><LogOut size={14} />로그아웃</Button></div>
         </header>
         <main className="mx-auto w-full max-w-6xl flex-1 p-4 md:p-6"><Outlet /></main>
       </div>

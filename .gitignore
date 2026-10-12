@@ -11,3 +11,4 @@ backend/app/data/assessments/
 frontend/dist/
 *.tsbuildinfo
 .claude/
+*.local

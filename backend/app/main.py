@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from .config import get_settings
 from .repo.base import NotFound
-from .routers import admin, analysis, chat, children, consultations, documents, knowledge, org, plans, proposals, records, schedules
+from .routers import admin, analysis, chat, children, consultations, documents, knowledge, org, plans, platform, proposals, records, schedules
 from .rate_limit import RateLimitMiddleware
 
 # API docs (Swagger UI /docs, /openapi.json) are for development; production does not expose them.
@@ -15,7 +15,7 @@ app.add_middleware(RateLimitMiddleware, limit=get_settings().rate_limit_requests
 app.add_middleware(CORSMiddleware, allow_origins=get_settings().cors_origins.split(","),
                    allow_methods=["*"], allow_headers=["*"])
 for r in (children.router, records.router, plans.router, proposals.router, chat.router, org.router,
-          schedules.router, knowledge.router, analysis.router, documents.router, consultations.router, admin.router):
+          schedules.router, knowledge.router, analysis.router, documents.router, consultations.router, admin.router, platform.router):
     app.include_router(r)
 
 
