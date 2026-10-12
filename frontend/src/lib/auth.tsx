@@ -59,7 +59,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!fbAuth) throw new Error("Firebase 설정(VITE_FIREBASE_*)이 없습니다");
       try { await createUserWithEmailAndPassword(fbAuth, e, p); } catch (x) { throw friendly(x); }
     },
-    devLogin: (org, role, uid = "dev-user") => { const t = `dev:${org}:${role}:${uid}`; sessionStorage.setItem("devToken", t); setDev(t); },
+    devLogin: (org, role, uid = "dev-user") => {
+      if (!import.meta.env.DEV) return; // build-time constant: production bundles contain no dev-token code
+      const t = `dev:${org}:${role}:${uid}`; sessionStorage.setItem("devToken", t); setDev(t);
+    },
     refresh: async () => { if (user) await user.getIdToken(true); },
     // Clear cached server data so nothing from this account is shown to the next one in this browser.
     logout: () => { sessionStorage.removeItem("devToken"); localStorage.removeItem("childId"); setDev(null); qc.clear(); if (fbAuth) signOut(fbAuth); },

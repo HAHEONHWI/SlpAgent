@@ -40,7 +40,7 @@ export default function SignupGate({ me }: { me: Me }) {
         {me.status === "approved" && (
           <div className="space-y-3">
             <Badge tone="green">승인됨</Badge>
-            <Notice>승인되었습니다. 화면이 바뀌지 않으면 로그아웃 후 다시 로그인하세요.{label.startsWith("dev:") && me.signup?.org_id && <> (개발 모드: 기관 ID <code>{me.signup.org_id}</code>, 역할 admin으로 개발용 로그인)</>}</Notice>
+            <Notice>승인되었습니다. 화면이 바뀌지 않으면 로그아웃 후 다시 로그인하세요.{import.meta.env.DEV && label.startsWith("dev:") && me.signup?.org_id && <> (개발 모드: 기관 ID <code>{me.signup.org_id}</code>, 역할 admin으로 개발용 로그인)</>}</Notice>
             <Button onClick={recheck}>다시 확인</Button>
           </div>
         )}

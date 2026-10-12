@@ -48,7 +48,8 @@ export default function Login() {
             <Button className="w-full" disabled={busy}>가입 신청</Button>
           </form>
         )}
-        {DEV_LOGIN && (
+        {/* import.meta.env.DEV is a build-time constant, so production builds drop this block entirely. */}
+        {import.meta.env.DEV && DEV_LOGIN && (
           <div className="mt-5 space-y-3 border-t border-slate-100 pt-4">
             <Notice>개발 모드 전용 로그인입니다(프로덕션 빌드에서는 제거됨). 백엔드를 AUTH_MODE=dev로 실행해야 합니다.</Notice>
             <Label label="기관 ID"><Input value={org} onChange={(e) => setOrg(e.target.value)} /></Label>
