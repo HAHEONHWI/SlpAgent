@@ -3,17 +3,17 @@ import { useMutation } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { errText } from "../lib/hooks";
 import RequireChild from "../components/RequireChild";
-import { DraftView, type Draft } from "../components/DraftView";
+import { ApprovedHistory, DraftView, type Draft } from "../components/DraftView";
 import { Button, Card, Notice, PageTitle } from "../components/ui";
 
 const MODES = {
   integrated: {
-    label: "통합 발달 분석", path: "analysis/integrated", needs: "검사 기록",
+    label: "통합 발달 분석", path: "analysis/integrated", kind: "integrated_analysis", needs: "검사 기록",
     sections: [["assessment_overview", "평가 개요"], ["age_and_assessment_dates", "생활연령 및 검사일"], ["strengths", "강점 영역"], ["support_needs", "지원 필요 영역"],
       ["shared_observations", "검사 간 공통 관찰"], ["inconsistencies", "검사 간 불일치"], ["additional_assessment_needs", "추가 평가 필요 사항"], ["candidate_treatment_goals", "치료목표 후보"]],
   },
   behavior: {
-    label: "행동 패턴 분석", path: "analysis/behavior", needs: "ABC 관찰 기록",
+    label: "행동 패턴 분석", path: "analysis/behavior", kind: "behavior_analysis", needs: "ABC 관찰 기록",
     sections: [["abc_patterns", "반복 패턴"], ["tentative_function_hypotheses", "행동기능 잠정 가설 (확정 아님)"], ["environmental_factors", "가능한 환경적 요인"],
       ["additional_observations_needed", "추가 관찰이 필요한 정보"], ["replacement_communication_candidates", "대체 의사소통 행동 후보"], ["therapist_review_strategies", "치료사 검토용 지원전략 초안"]],
   },
@@ -37,6 +37,7 @@ function Inner({ childId, initial }: { childId: string; initial: Mode }) {
         {run.error && <div className="mt-3"><Notice tone="red">{errText(run.error)}</Notice></div>}
       </Card>
       {draft && <DraftView draft={draft} sections={m.sections as unknown as [string, string][]} onDone={() => setDraft(null)} />}
+      <ApprovedHistory key={mode} path={`/children/${childId}/clinical-analyses?kind=${m.kind}`} sections={m.sections as unknown as [string, string][]} kindLabel={m.label} />
     </div>
   );
 }

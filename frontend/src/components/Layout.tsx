@@ -5,7 +5,7 @@ import { useChild } from "../lib/child";
 import { ageLabel } from "../lib/api";
 import { Button, Select } from "./ui";
 
-const MENU = [
+const MENU: { to: string; label: string; icon: typeof LayoutDashboard; soon?: boolean }[] = [
   { to: "/", label: "대시보드", icon: LayoutDashboard },
   { to: "/chat", label: "AI 전문 채팅", icon: MessageSquare },
   { to: "/children", label: "아동 관리", icon: Users },
@@ -17,7 +17,7 @@ const MENU = [
   { to: "/activities", label: "치료활동 생성", icon: Sparkles },
   { to: "/sessions", label: "회기별 치료기록", icon: NotebookPen },
   { to: "/progress", label: "발달 진행도 분석", icon: LineChart },
-  { to: "/parents", label: "보호자 상담", icon: HeartHandshake, soon: true },
+  { to: "/parents", label: "보호자 상담", icon: HeartHandshake },
   { to: "/voucher", label: "바우처·문서 생성", icon: FileText },
   { to: "/knowledge", label: "AI 지식자료실", icon: Library },
   { to: "/schedule", label: "일정 관리", icon: CalendarDays },
