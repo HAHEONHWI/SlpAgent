@@ -103,3 +103,53 @@ def test_behavior_and_activity_routes_use_fake_client_and_approval(client, repo,
     assert generated.json()["payload"]["requested_time_minutes"] == 20
     applied = client.post(f"/proposals/{generated.json()['id']}/approve", headers=H())
     assert applied.status_code == 200 and applied.json()["applied_to"] == "therapy_activities"
+
+
+FIELDS = ("assessment_overview", "age_and_assessment_dates", "strengths", "support_needs",
+          "shared_observations", "inconsistencies", "additional_assessment_needs", "candidate_treatment_goals")
+
+
+class SequenceClient:
+    """Returns one payload per call, so a rejected first answer can be followed by a corrected one."""
+    def __init__(self, payloads):
+        self.payloads, self.calls = list(payloads), []
+        self.responses = self
+
+    def parse(self, **kwargs):
+        self.calls.append(kwargs)
+        return NS(output_parsed=kwargs["text_format"].model_validate(self.payloads.pop(0)))
+
+
+def _integrated(client, child, fake):
+    app.dependency_overrides[get_analysis_client] = lambda: fake
+    try:
+        return client.post(f"/children/{child['id']}/analysis/integrated", headers=H())
+    finally:
+        app.dependency_overrides.pop(get_analysis_client, None)
+
+
+def test_citable_evidence_is_sent_and_one_retry_recovers(client, child):
+    import json
+    client.post(f"/children/{child['id']}/assessments", headers=H(), json={
+        "test_code": "SELSI", "assessed_on": "2026-09-01", "examiner": "t", "items": [{"item_id": "5", "response": "통과"}]})
+    bad = {f: [] for f in FIELDS}
+    bad["assessment_overview"] = [{"text": "x", "evidence": [{"document": "SELSI", "evaluation_date": "2020-01-01"}]}]
+    good = {f: [] for f in FIELDS}
+    good["assessment_overview"] = [{"text": "문항 5 통과", "evidence": [{"document": "SELSI", "item_number": "5", "evaluation_date": "2026-09-01"}]}]
+    fake = SequenceClient([bad, good])
+    response = _integrated(client, child, fake)
+    assert response.status_code == 201 and len(fake.calls) == 2
+    sent = json.loads(fake.calls[0]["input"])
+    assert {"document": "SELSI", "item_number": "5", "evaluation_date": "2026-09-01"} in sent["citable_evidence"]
+    assert "rejected" in fake.calls[1]["instructions"]
+
+
+def test_analysis_gives_up_after_one_retry_with_brief_error(client, child):
+    client.post(f"/children/{child['id']}/assessments", headers=H(), json={
+        "test_code": "SELSI", "assessed_on": "2026-09-01", "examiner": "t"})
+    bad = {f: [] for f in FIELDS}
+    bad["assessment_overview"] = [{"text": "x", "evidence": [{"document": "SELSI", "evaluation_date": "2020-01-01"}]}]
+    fake = SequenceClient([bad, bad])
+    response = _integrated(client, child, fake)
+    assert response.status_code == 422 and len(fake.calls) == 2
+    assert response.json()["detail"].startswith("AI 응답의 근거가 기록과 일치하지 않아 거부했습니다")

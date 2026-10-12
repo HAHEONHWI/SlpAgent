@@ -8,8 +8,10 @@ export type Evidence = { document?: string | null; page?: number | null; item_nu
 export type Claim = { text: string; evidence: Evidence[] };
 export type Draft = { id: string; kind: string; status: string; payload: Record<string, any> };
 
+// ABC/session evidence cites internal record ids as item_number; the date identifies them for a reader.
+const RECORD_DOCS = new Set(["ABC 관찰", "회기기록"]);
 const evLabel = (e: Evidence) => e.request_field ? `입력: ${e.request_field}`
-  : [e.document, e.page && `p.${e.page}`, e.item_number && `문항 ${e.item_number}`, e.evaluation_date].filter(Boolean).join(" · ");
+  : [e.document, e.page && `p.${e.page}`, e.item_number && !RECORD_DOCS.has(e.document ?? "") && `문항 ${e.item_number}`, e.evaluation_date].filter(Boolean).join(" · ");
 
 export function ClaimList({ claims }: { claims: Claim[] }) {
   if (!claims?.length) return <p className="text-sm text-slate-400">해당 없음</p>;

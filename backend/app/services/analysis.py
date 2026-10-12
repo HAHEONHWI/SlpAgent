@@ -1,6 +1,6 @@
 import json
 from datetime import date
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, ValidationError, model_validator
 from . import knowledge
 from .privacy import sanitize_external_value
 from ..repo.base import NotFound
@@ -143,17 +143,56 @@ def validate_evidence(payload: BaseModel, allowed_refs: set[tuple], request_fiel
                     raise ValueError(f"unsupported evidence reference: {json.dumps(evidence.model_dump(mode='json'), ensure_ascii=False)}")
 
 
-def generate(client, model: str, output_model: type[BaseModel], instruction: str, context: dict,
-             allowed_refs: set[tuple], request_fields: set[str] | None = None) -> dict:
-    response = client.responses.parse(model=model, instructions=f"{SYSTEM}\n{instruction}",
-                                      input=json.dumps(context, ensure_ascii=False),
-                                      text_format=output_model, store=False)
+def citable_evidence(allowed_refs: set[tuple], request_fields: set[str] | None = None) -> list[dict]:
+    """The exact evidence objects the validator accepts. The model must copy these verbatim; without
+    this list it has to guess the reference format and invents data paths that are then rejected."""
+    items = [{"document": d, "page": p, "item_number": i, "evaluation_date": e}
+             for d, p, i, e in sorted(allowed_refs, key=lambda r: tuple("" if v is None else str(v) for v in r))
+             if d != "user_request"]
+    items += [{"document": "user_request", "request_field": f} for f in sorted(request_fields or ())]
+    return [{k: v for k, v in item.items() if v is not None} for item in items]
+
+
+EVIDENCE_RULE = ("Every evidence entry MUST be copied verbatim from `citable_evidence` (same keys and values). "
+                 "Never cite data paths such as `assessments[0].items`, and never invent documents, pages, items or dates.")
+
+
+def _parse_once(client, model, output_model, instructions, payload):
+    try:
+        response = client.responses.parse(model=model, instructions=instructions,
+                                          input=json.dumps(payload, ensure_ascii=False),
+                                          text_format=output_model, store=False)
+    except ValidationError as error:  # SDK validates the structured output against output_model
+        raise ValueError(_brief(error)) from error
     result = response.output_parsed
     if result is None:
         raise ValueError("model returned no structured result")
     if isinstance(result, dict):
-        result = output_model.model_validate(result)
-    elif not isinstance(result, output_model):
-        result = output_model.model_validate(result.model_dump())
-    validate_evidence(result, allowed_refs, request_fields)
-    return result.model_dump(mode="json")
+        return output_model.model_validate(result)
+    if not isinstance(result, output_model):
+        return output_model.model_validate(result.model_dump())
+    return result
+
+
+def _brief(error: Exception) -> str:
+    if isinstance(error, ValidationError):
+        first = error.errors()[0]
+        return f"{error.error_count()} evidence/format errors (first: {first.get('msg')})"
+    return str(error)[:300]
+
+
+def generate(client, model: str, output_model: type[BaseModel], instruction: str, context: dict,
+             allowed_refs: set[tuple], request_fields: set[str] | None = None) -> dict:
+    payload = {"records": context, "citable_evidence": citable_evidence(allowed_refs, request_fields)}
+    instructions = f"{SYSTEM}\n{EVIDENCE_RULE}\n{instruction}"
+    error = None
+    for _ in range(2):  # one retry with the validator's feedback; never a silent fallback
+        try:
+            result = _parse_once(client, model, output_model, instructions, payload)
+            validate_evidence(result, allowed_refs, request_fields)
+            return result.model_dump(mode="json")
+        except (ValueError, ValidationError) as caught:
+            error = caught
+            instructions = (f"{SYSTEM}\n{EVIDENCE_RULE}\n{instruction}\n"
+                            f"Your previous answer was rejected: {_brief(caught)}. Fix the evidence entries.")
+    raise ValueError(f"AI 응답의 근거가 기록과 일치하지 않아 거부했습니다: {_brief(error)}")
