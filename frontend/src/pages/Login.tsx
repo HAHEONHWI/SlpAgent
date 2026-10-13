@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { DEV_LOGIN, FIREBASE_ENABLED, useAuth } from "../lib/auth";
+import { AlertCircle } from "lucide-react";
+import { AuthError, DEV_LOGIN, FIREBASE_ENABLED, useAuth } from "../lib/auth";
 import { PRIVACY_POLICY_VERSION } from "../lib/privacy";
 import BrandLogo from "../components/BrandLogo";
 import { Button, Card, Input, Label, Notice, Select } from "../components/ui";
@@ -11,10 +12,15 @@ export default function Login() {
   const [tab, setTab] = useState<"login" | "signup">("login");
   const [f, setF] = useState({ email: "", password: "", password2: "", org_name: "", therapist_name: "" });
   const [agree, setAgree] = useState(false);
-  const [err, setErr] = useState(""), [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<{ title: string; detail: string } | null>(null), [busy, setBusy] = useState(false);
   const [org, setOrg] = useState("demo"), [role, setRole] = useState("therapist");
   const set = (k: keyof typeof f) => (e: any) => setF({ ...f, [k]: e.target.value });
-  const run = async (fn: () => Promise<void>) => { setErr(""); setBusy(true); try { await fn(); } catch (x: any) { setErr(x.message); } finally { setBusy(false); } };
+  const run = async (fn: () => Promise<void>) => {
+    setErr(null); setBusy(true);
+    try { await fn(); }
+    catch (x: any) { setErr(x instanceof AuthError ? { title: x.title, detail: x.message } : { title: "다시 확인해 주세요", detail: x?.message ?? "" }); }
+    finally { setBusy(false); }
+  };
 
   const doSignup = () => run(async () => {
     if (f.password !== f.password2) throw new Error("비밀번호가 서로 다릅니다.");
@@ -31,13 +37,13 @@ export default function Login() {
         <BrandLogo className="mx-auto mb-4 w-44" />
         <div className="mb-4 grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1 text-sm">
           {(["login", "signup"] as const).map((t) => (
-            <button key={t} onClick={() => { setTab(t); setErr(""); }} className={`rounded-md py-1.5 ${tab === t ? "bg-white font-semibold shadow-sm" : "text-slate-600"}`}>{t === "login" ? "로그인" : "회원가입"}</button>))}
+            <button key={t} onClick={() => { setTab(t); setErr(null); }} className={`rounded-md py-1.5 ${tab === t ? "bg-white font-semibold shadow-sm" : "text-slate-600"}`}>{t === "login" ? "로그인" : "회원가입"}</button>))}
         </div>
         {tab === "login" ? (
           <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); run(() => login(f.email.trim(), f.password)); }}>
             <Label label="아이디 (이메일)"><Input type="email" value={f.email} onChange={set("email")} required autoComplete="username" /></Label>
             <Label label="비밀번호"><Input type="password" value={f.password} onChange={set("password")} required autoComplete="current-password" /></Label>
-            {err && <Notice tone="red">{err}</Notice>}
+            {err && <LoginAlert {...err} />}
             <Button className="w-full" disabled={busy || !FIREBASE_ENABLED}>로그인</Button>
           </form>
         ) : (
@@ -52,7 +58,7 @@ export default function Login() {
               <span>(필수) <a href="/privacy" target="_blank" rel="noopener" className="text-indigo-700 underline">개인정보처리방침</a>을 확인했으며 개인정보 수집·이용에 동의합니다. AI 기능 사용 시 입력 내용이 OpenAI(미국)로 전송될 수 있습니다.</span>
             </label>
             <Notice>가입 후 사이트 관리자가 승인해야 사용할 수 있습니다.</Notice>
-            {err && <Notice tone="red">{err}</Notice>}
+            {err && <LoginAlert {...err} />}
             <Button className="w-full" disabled={busy}>가입 신청</Button>
           </form>
         )}
@@ -67,6 +73,15 @@ export default function Login() {
         )}
       </Card>
       <a href="/privacy" className="mt-3 block text-center text-xs text-slate-500 underline">개인정보처리방침</a>
+    </div>
+  );
+}
+
+function LoginAlert({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div role="alert" className="flex gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-900">
+      <AlertCircle size={18} className="mt-0.5 shrink-0 text-red-600" aria-hidden />
+      <div><p className="text-sm font-semibold">{title}</p>{detail && <p className="mt-0.5 text-sm text-red-800/90">{detail}</p>}</div>
     </div>
   );
 }
