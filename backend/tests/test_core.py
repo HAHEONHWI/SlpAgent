@@ -65,3 +65,9 @@ def test_plan_versioning_and_approval(client, child):
     client.post(f"/plans/{p2['id']}/approve", headers=H())
     plans = client.get(f"/children/{child['id']}/plans", headers=H()).json()
     assert [(x["version"], x["status"]) for x in plans] == [(1, "superseded"), (2, "active")]
+
+
+def test_children_list_includes_current_age_months(client, child):
+    from app.routers.children import age_months
+    row = client.get("/children", headers=H()).json()[0]
+    assert row["age_months"] == age_months("2022-03-15") and row["age_months"] > 0

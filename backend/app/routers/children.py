@@ -30,7 +30,8 @@ def create_child(body: ChildIn, p: Principal = Depends(require_write), repo=Depe
 
 @router.get("")
 def list_children(p: Principal = Depends(current_principal), repo=Depends(get_repo)):
-    return [c for c in repo.list("children", p.org_id) if not c.get("archived")]
+    # age_months is derived on read (never stored) so it is always current
+    return [{**c, "age_months": age_months(c["birth_date"])} for c in repo.list("children", p.org_id) if not c.get("archived")]
 
 
 @router.get("/{child_id}")
