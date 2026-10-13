@@ -16,7 +16,7 @@ function Inner({ childId }: { childId: string }) {
   const [f, setF] = useState({ goal_area: "", current_level: "", preferences: "", materials: "", time_minutes: "30", prompting_level: "" });
   const [draft, setDraft] = useState<Draft | null>(null);
   const run = useMutation({
-    mutationFn: () => api<Draft>(`/children/${childId}/activities/generate`, { method: "POST", json: {
+    mutationFn: () => api<Draft>(`/children/${childId}/activities/generate`, { method: "POST", long: true, json: {
       goal_area: f.goal_area, current_level: f.current_level, preferences: list(f.preferences), materials: list(f.materials),
       time_minutes: Number(f.time_minutes), prompting_level: f.prompting_level } }),
     onSuccess: setDraft,

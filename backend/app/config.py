@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     storage_backend: str = "firestore"  # firestore | memory
     openai_api_key: str = ""  # from Secret Manager in production
     openai_model: str = ""  # must be set to a model the account supports
+    groq_api_key: str = ""  # speech-to-text; from Secret Manager in production
+    stt_model: str = ""  # e.g. whisper-large-v3-turbo; must be a model the Groq account supports
     openai_embedding_model: str = ""
     openai_allow_reference_embedding_upload: bool = False
     cors_origins: str = "http://localhost:5173"

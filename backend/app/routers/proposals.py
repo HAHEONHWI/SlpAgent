@@ -65,6 +65,12 @@ def approve(pid: str, p: Principal = Depends(require_write), repo=Depends(get_re
                                                               "payload": d, "status": "approved",
                                                               "approved_by": p.uid})
         target = ("clinical_analyses", result["id"])
+    elif kind == "consultation_recording":  # therapist-reviewed draft from a consultation recording
+        keys = ("date", "start", "end", "minutes", "counselor", "participants", "topics", "summary", "session_summary",
+                "parent_concerns", "guidance_given", "home_activities", "follow_up", "transcript", "duration_seconds")
+        result = repo.create("parent_consultations", p.org_id, {**{k: d.get(k) for k in keys}, "child_id": child,
+                                                                "source": "recording_ai_approved", "created_by": p.uid})
+        target = ("parent_consultations", result["id"])
     elif kind == "activity_plan":
         result = repo.create("therapy_activities", p.org_id, {"child_id": child, "payload": d,
                                                               "status": "approved", "approved_by": p.uid})

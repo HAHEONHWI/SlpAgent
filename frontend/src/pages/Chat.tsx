@@ -98,10 +98,10 @@ export default function Chat() {
         else if (selectedChildId) form.append("child_id", selectedChildId);
         form.append("privacy_confirmed", String(confirmed));
         attachments.forEach((file) => form.append("files", file));
-        return api<ChatReply>("/ai/dialogue", { method: "POST", body: form });
+        return api<ChatReply>("/ai/dialogue", { method: "POST", body: form, long: true });
       }
       return api<ChatReply>("/ai/dialogue", {
-        method: "POST",
+        method: "POST", long: true,
         json: { message, mode: dialogueMode, allow_drafts: draftsAllowed, conversation_id: activeId, child_id: activeId ? undefined : selectedChildId },
       });
     },

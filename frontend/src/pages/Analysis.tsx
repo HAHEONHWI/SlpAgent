@@ -23,7 +23,7 @@ type Mode = keyof typeof MODES;
 function Inner({ childId, initial }: { childId: string; initial: Mode }) {
   const [mode, setMode] = useState<Mode>(initial);
   const [draft, setDraft] = useState<Draft | null>(null);
-  const run = useMutation({ mutationFn: () => api<Draft>(`/children/${childId}/${MODES[mode].path}`, { method: "POST" }), onSuccess: setDraft });
+  const run = useMutation({ mutationFn: () => api<Draft>(`/children/${childId}/${MODES[mode].path}`, { method: "POST", long: true }), onSuccess: setDraft });
   const m = MODES[mode];
   return (
     <div className="space-y-4">
