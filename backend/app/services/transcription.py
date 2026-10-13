@@ -9,6 +9,11 @@ from pydantic import BaseModel, Field
 from ..config import get_settings
 
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+# Fallback only: route to providers with zero data retention that do not collect or train on data.
+OPENROUTER_PRIVACY = {"provider": {"zdr": True, "data_collection": "deny"}}
+FALLBACK_PROMPT = ("Transcribe this Korean speech verbatim in Korean. Output only the transcript text. "
+                   "Do not summarize, translate, correct, or add anything. If a part is inaudible, write [불명확].")
 MAX_UPLOAD_BYTES = 30 * 1024 * 1024  # Cloud Run rejects request bodies over 32 MiB
 MAX_SECONDS = 3 * 60 * 60
 ALLOWED_EXTENSIONS = {".m4a", ".mp3", ".wav", ".webm", ".ogg", ".flac", ".mp4", ".mpeg", ".mpga", ".aac"}
@@ -30,6 +35,33 @@ def make_stt_client():
         raise SttNotConfigured("GROQ_API_KEY / STT_MODEL 환경변수가 필요합니다")
     from openai import OpenAI  # Groq's speech-to-text API is OpenAI-compatible
     return OpenAI(api_key=s.groq_api_key, base_url=GROQ_BASE_URL)
+
+
+def make_fallback_stt_client():
+    """OpenRouter client for the fallback path, or None when the fallback is not configured."""
+    s = get_settings()
+    if not s.openrouter_api_key or not s.openrouter_stt_model:
+        return None
+    from openai import OpenAI
+    return OpenAI(api_key=s.openrouter_api_key, base_url=OPENROUTER_BASE_URL)
+
+
+def is_unavailable(error: Exception) -> bool:
+    """Rate limit, server error, timeout or connection failure: worth retrying on the fallback provider."""
+    import openai
+    if isinstance(error, (openai.RateLimitError, openai.APITimeoutError, openai.APIConnectionError)):
+        return True
+    return isinstance(error, openai.APIStatusError) and error.status_code >= 500
+
+
+def transcribe_fallback(client, model: str, audio: Path) -> str:
+    import base64
+    data = base64.b64encode(audio.read_bytes()).decode("ascii")
+    result = client.chat.completions.create(
+        model=model, temperature=0, extra_body=OPENROUTER_PRIVACY,
+        messages=[{"role": "user", "content": [{"type": "text", "text": FALLBACK_PROMPT},
+                                               {"type": "input_audio", "input_audio": {"data": data, "format": "ogg"}}]}])
+    return (result.choices[0].message.content or "").strip()
 
 
 def _require(tool: str) -> str:

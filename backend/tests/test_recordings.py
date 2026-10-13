@@ -97,3 +97,73 @@ def test_missing_stt_configuration_is_reported(client, child, monkeypatch):
     finally:
         app.dependency_overrides.pop(get_llm_client, None)
     assert r.status_code == 503 and "GROQ_API_KEY" in r.json()["detail"]
+
+
+def _rate_limited():
+    import httpx, openai
+    return openai.RateLimitError("rate limit", response=httpx.Response(429, request=httpx.Request("POST", "https://api.groq.com")), body=None)
+
+
+class LimitedStt(FakeStt):
+    def __init__(self, error):
+        super().__init__("")
+        self.error = error
+
+    def create(self, **kw):
+        self.calls.append(kw)
+        raise self.error
+
+
+class FakeOpenRouter:
+    def __init__(self, text="녹음 예비 경로 받아쓰기 결과입니다."):
+        self.text, self.calls = text, []
+        self.chat = NS(completions=self)
+
+    def create(self, **kw):
+        self.calls.append(kw)
+        return NS(choices=[NS(message=NS(content=self.text))])
+
+
+@needs_ffmpeg
+def test_groq_rate_limit_falls_back_to_openrouter_with_zdr(client, child, monkeypatch):
+    from app.routers.recordings import get_fallback_stt_client
+    monkeypatch.setattr(transcription, "get_settings", lambda: NS(groq_api_key="g", stt_model="whisper-large-v3-turbo",
+                                                                  openrouter_api_key="o", openrouter_stt_model="audio-model"))
+    import app.routers.recordings as rec
+    monkeypatch.setattr(rec, "get_settings", lambda: NS(stt_model="whisper-large-v3-turbo", openrouter_stt_model="audio-model", openai_model="m"))
+    groq, router, llm = LimitedStt(_rate_limited()), FakeOpenRouter(), FakeLlm()
+    app.dependency_overrides.update({get_stt_client: lambda: groq, get_fallback_stt_client: lambda: router, get_llm_client: lambda: llm})
+    try:
+        r = _upload(client, child)
+    finally:
+        for dep in (get_stt_client, get_fallback_stt_client, get_llm_client):
+            app.dependency_overrides.pop(dep, None)
+    assert r.status_code == 201, r.text
+    p = r.json()["payload"]
+    assert (p["stt_provider"], p["stt_model"]) == ("openrouter", "audio-model") and p["transcript"].startswith("녹음 예비")
+    call = router.calls[0]
+    assert call["extra_body"] == {"provider": {"zdr": True, "data_collection": "deny"}}  # privacy-restricted routing
+    assert call["messages"][0]["content"][1]["type"] == "input_audio"
+
+
+@needs_ffmpeg
+def test_rate_limit_without_fallback_is_a_clear_503(client, child):
+    from app.routers.recordings import get_fallback_stt_client
+    app.dependency_overrides.update({get_stt_client: lambda: LimitedStt(_rate_limited()), get_fallback_stt_client: lambda: None,
+                                     get_llm_client: lambda: FakeLlm()})
+    try:
+        r = _upload(client, child)
+    finally:
+        for dep in (get_stt_client, get_fallback_stt_client, get_llm_client):
+            app.dependency_overrides.pop(dep, None)
+    assert r.status_code == 503 and "한도" in r.json()["detail"]
+
+
+def test_only_limits_and_outages_trigger_fallback():
+    import httpx, openai
+    req = httpx.Request("POST", "https://x")
+    assert transcription.is_unavailable(_rate_limited())
+    assert transcription.is_unavailable(openai.InternalServerError("down", response=httpx.Response(503, request=req), body=None))
+    assert transcription.is_unavailable(openai.APITimeoutError(request=req))
+    assert not transcription.is_unavailable(openai.BadRequestError("bad audio", response=httpx.Response(400, request=req), body=None))
+    assert not transcription.is_unavailable(openai.AuthenticationError("bad key", response=httpx.Response(401, request=req), body=None))

@@ -9,6 +9,7 @@ type Payload = {
   date: string; start: string | null; end: string | null; minutes: number | null; counselor: string;
   summary: string; session_summary: string; topics: string[]; parent_concerns: string[]; guidance_given: string;
   home_activities: string[]; follow_up: string; participants: string[]; transcript: string; duration_seconds: number;
+  stt_provider?: string;
 };
 type Draft = { id: string; kind: string; status: string; payload: Payload; created_at?: string };
 
@@ -83,6 +84,7 @@ function DraftEditor({ draft }: { draft: Draft }) {
     <Card title={`상담 기록 초안 · ${p.date}`} className="border-amber-300" action={<Badge tone="amber">미승인 초안</Badge>}>
       <div className="space-y-3">
         <Notice>AI가 녹음에서 만든 초안입니다. 아래 녹취록과 대조해 틀린 내용을 고친 뒤 승인하세요. 승인 전에는 아동 기록에 저장되지 않습니다.</Notice>
+        {p.stt_provider === "openrouter" && <Notice>기본 받아쓰기 서비스가 한도를 넘어 <b>예비 경로(범용 AI 모델)</b>로 받아썼습니다. 빠지거나 바뀐 말이 있을 수 있으니 녹취록을 특히 꼼꼼히 확인하세요.</Notice>}
         {TEXT_FIELDS.map(([k, label]) => (
           <Label key={k} label={label}><Textarea value={(p[k] as string) ?? ""} onChange={(e) => setP({ ...p, [k]: e.target.value })} /></Label>))}
         <div className="grid gap-2 md:grid-cols-2">

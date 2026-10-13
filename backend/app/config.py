@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     openai_model: str = ""  # must be set to a model the account supports
     groq_api_key: str = ""  # speech-to-text; from Secret Manager in production
     stt_model: str = ""  # e.g. whisper-large-v3-turbo; must be a model the Groq account supports
+    openrouter_api_key: str = ""  # speech-to-text fallback when Groq is rate-limited or down
+    openrouter_stt_model: str = ""  # an audio-input model on OpenRouter; must be verified for the account
     openai_embedding_model: str = ""
     openai_allow_reference_embedding_upload: bool = False
     cors_origins: str = "http://localhost:5173"

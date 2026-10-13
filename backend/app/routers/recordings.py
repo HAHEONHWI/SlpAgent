@@ -22,6 +22,10 @@ def get_stt_client():
         raise HTTPException(503, str(e))
 
 
+def get_fallback_stt_client():
+    return transcription.make_fallback_stt_client()
+
+
 def get_llm_client():
     try:
         return agent.make_client()
@@ -35,7 +39,7 @@ async def consultation_from_recording(
         start: str | None = Form(default=None, pattern=r"^\d{2}:\d{2}$"), end: str | None = Form(default=None, pattern=r"^\d{2}:\d{2}$"),
         counselor: str = Form(..., min_length=1, max_length=100),
         p: Principal = Depends(require_write), repo=Depends(get_repo),
-        stt=Depends(get_stt_client), llm=Depends(get_llm_client)):
+        stt=Depends(get_stt_client), fallback=Depends(get_fallback_stt_client), llm=Depends(get_llm_client)):
     child = child_or_404(repo, p, child_id)
     if (start is None) != (end is None):
         raise HTTPException(422, "start and end must both be given or both be empty")
@@ -58,7 +62,21 @@ async def consultation_from_recording(
             if seconds > transcription.MAX_SECONDS:
                 raise HTTPException(413, "녹음은 3시간 이하만 처리할 수 있습니다.")
             transcription.normalize(src, norm)
-            transcript = transcription.transcribe(stt, settings.stt_model, norm)
+            stt_provider, stt_model = "groq", settings.stt_model
+            try:
+                transcript = transcription.transcribe(stt, settings.stt_model, norm)
+            except Exception as e:  # Groq over its limit or down -> OpenRouter fallback, if configured
+                if not transcription.is_unavailable(e):
+                    raise
+                if fallback is None:
+                    raise HTTPException(503, "받아쓰기 서비스가 한도를 넘었거나 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.")
+                stt_provider, stt_model = "openrouter", settings.openrouter_stt_model
+                try:
+                    transcript = transcription.transcribe_fallback(fallback, stt_model, norm)
+                except Exception as e2:
+                    if transcription.is_unavailable(e2):
+                        raise HTTPException(503, "받아쓰기 서비스(기본·예비)를 모두 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.")
+                    raise
         except transcription.AudioError as e:
             raise HTTPException(415, str(e))
         except transcription.SttNotConfigured as e:
@@ -73,9 +91,9 @@ async def consultation_from_recording(
         raise HTTPException(502, str(e))
     payload = {"date": consult_date.isoformat(), "start": start, "end": end, "minutes": minutes, "counselor": counselor,
                **summary, "transcript": transcript, "duration_seconds": round(seconds),
-               "stt_model": settings.stt_model, "llm_model": settings.openai_model}
+               "stt_provider": stt_provider, "stt_model": stt_model, "llm_model": settings.openai_model}
     draft = repo.create("ai_analyses", p.org_id, {"kind": "consultation_recording", "child_id": child_id, "payload": payload,
                                                   "status": "draft", "requested_by": p.uid})
-    audit(repo, p, "transcribe_consultation", "ai_analyses", draft["id"], child_id, via_ai=True)
+    audit(repo, p, f"transcribe_consultation:{stt_provider}", "ai_analyses", draft["id"], child_id, via_ai=True)
     return {"id": draft["id"], "kind": "consultation_recording", "status": "draft", "payload": payload,
             "notice": "AI가 만든 미승인 초안입니다. 녹취록과 대조해 고친 뒤 승인하면 상담 기록으로 저장됩니다."}
