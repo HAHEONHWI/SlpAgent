@@ -47,32 +47,42 @@ export async function readRows(file: File): Promise<unknown[][]> {
   return (await readSheet(file)) as unknown[][];
 }
 
-export function toChildren(rows: unknown[][], existingCodes: string[]): { rows: ImportRow[]; missing: string[] } {
+export type Field = "name" | "birth" | "code" | "therapist" | "sex";
+export type Mapping = Record<Field, number>; // column index, -1 = not used
+export const FIELD_LABEL: Record<Field, string> = { name: "이름", birth: "생년월일", code: "아이코드", therapist: "담당 치료사", sex: "성별" };
+
+/** Find the header row and guess which column holds what; the user can correct the guess. */
+export function detect(rows: unknown[][]): { headerAt: number; head: string[]; map: Mapping } | null {
   const headerAt = rows.slice(0, 10).findIndex((r) => r.some((c) => COLUMNS.name.test(String(c ?? "").trim())));
-  if (headerAt < 0) return { rows: [], missing: ["대상자명(이름)"] };
+  if (headerAt < 0) return null;
   const head = rows[headerAt].map((c) => String(c ?? "").trim());
-  const col = (re: RegExp, skip: number[] = []) => head.findIndex((h, i) => !skip.includes(i) && re.test(h));
-  const name = col(COLUMNS.name), birth = col(COLUMNS.birth), therapist = col(COLUMNS.therapist), sex = col(COLUMNS.sex);
-  const code = col(COLUMNS.code, [name, birth, therapist]);
-  const missing = [birth < 0 && "생년월일"].filter(Boolean) as string[];
-  if (missing.length) return { rows: [], missing };
-  const used = new Set(existingCodes.map((c) => c.toLowerCase()));
+  const taken: number[] = [];
+  const col = (re: RegExp) => { const i = head.findIndex((h, j) => !taken.includes(j) && re.test(h)); if (i >= 0) taken.push(i); return i; };
+  // most specific first, so "아이코드" is never mistaken for the name or birth column and vice versa
+  const name = col(COLUMNS.name), birth = col(COLUMNS.birth), therapist = col(COLUMNS.therapist), sex = col(COLUMNS.sex), code = col(COLUMNS.code);
+  return { headerAt, head, map: { name, birth, code, therapist, sex } };
+}
+
+export function toChildren(rows: unknown[][], headerAt: number, map: Mapping, existingCodes: string[]): ImportRow[] {
+  const used = new Set(existingCodes.map((c) => c.trim().toLowerCase()));
   let auto = 1;
-  const nextCode = () => { while (used.has(`c-${String(auto).padStart(3, "0")}`)) auto++; return `C-${String(auto++).padStart(3, "0")}`; };
+  // Placeholder codes start with "임시" so they are never confused with the clinic's own codes (D-01, B-01, ...).
+  const nextCode = () => { while (used.has(`임시-${String(auto).padStart(3, "0")}`)) auto++; return `임시-${String(auto++).padStart(3, "0")}`; };
+  const cell = (r: unknown[], i: number) => (i >= 0 ? String(r[i] ?? "").trim() : "");
   const out: ImportRow[] = [];
   rows.slice(headerAt + 1).forEach((r, i) => {
-    const display_name = String(r[name] ?? "").trim();
+    const display_name = cell(r, map.name);
     if (!display_name) return; // blank line
-    const b = parseBirth(r[birth]);
-    let alias = code >= 0 ? String(r[code] ?? "").trim() : "";
+    const b = parseBirth(map.birth >= 0 ? r[map.birth] : "");
+    let alias = cell(r, map.code);
     if (!alias) alias = nextCode();
     used.add(alias.toLowerCase());
-    const t = therapist >= 0 ? String(r[therapist] ?? "").trim() : "";
+    const t = cell(r, map.therapist);
     out.push({
       line: headerAt + i + 2, alias: alias.slice(0, 40), display_name: display_name.slice(0, 40), birth_date: b.birth ?? "",
-      sex: b.sex ?? (sex >= 0 ? sexOf(r[sex]) : null), therapist: t ? t.slice(0, 20) : null,
+      sex: b.sex ?? (map.sex >= 0 ? sexOf(r[map.sex]) : null), therapist: t ? t.slice(0, 20) : null,
       error: !b.birth ? "생년월일을 읽지 못했어요" : b.birth > new Date().toISOString().slice(0, 10) ? "생년월일이 미래예요" : null,
     });
   });
-  return { rows: out, missing: [] };
+  return out;
 }
