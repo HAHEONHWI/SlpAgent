@@ -3,6 +3,7 @@ import { AlertCircle, MailCheck } from "lucide-react";
 import { AuthError, DEV_LOGIN, FIREBASE_ENABLED, useAuth } from "../lib/auth";
 import { PRIVACY_POLICY_VERSION } from "../lib/privacy";
 import BrandLogo from "../components/BrandLogo";
+import Footer from "../components/Footer";
 import { Button, Card, Input, Label, Notice, Select } from "../components/ui";
 
 export const PENDING_SIGNUP = "pendingSignup";
@@ -93,7 +94,7 @@ export default function Login() {
           </div>
         )}
       </Card>
-      <a href="/privacy" className="mt-3 block text-center text-xs text-slate-500 underline">개인정보처리방침</a>
+      <Footer className="mt-4" />
     </div>
   );
 }

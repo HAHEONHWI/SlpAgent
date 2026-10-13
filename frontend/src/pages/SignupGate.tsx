@@ -5,6 +5,7 @@ import { useAuth } from "../lib/auth";
 import type { Me } from "../lib/me";
 import { errText } from "../lib/hooks";
 import BrandLogo from "../components/BrandLogo";
+import Footer from "../components/Footer";
 import { Badge, Button, Card, Input, Label, Notice } from "../components/ui";
 import { PENDING_SIGNUP } from "./Login";
 import { PRIVACY_POLICY_VERSION } from "../lib/privacy";
@@ -63,6 +64,7 @@ export default function SignupGate({ me }: { me: Me }) {
         )}
       </Card>
       <div className="mt-4 w-full max-w-md"><Withdraw /></div>
+      <Footer className="mt-4" />
     </div>
   );
 }

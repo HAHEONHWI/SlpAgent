@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ShieldCheck } from "lucide-react";
 import { api } from "../lib/api";
+import Footer from "../components/Footer";
 import { useAuth } from "../lib/auth";
 import { useMe } from "../lib/me";
 import { errText } from "../lib/hooks";
@@ -52,6 +53,7 @@ export default function Platform() {
         {tab === "accounts" && <Accounts orgs={orgs.data ?? []} />}
         {tab === "stt" && <SttAdmin />}
       </main>
+      <Footer className="py-6" />
     </div>
   );
 }

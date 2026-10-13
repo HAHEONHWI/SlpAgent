@@ -1,6 +1,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import policy from "../content/privacy-policy.md?raw";
+import Footer from "../components/Footer";
 
 /** Public page (no sign-in required). Source: src/content/privacy-policy.md */
 export default function Privacy() {
@@ -16,6 +17,7 @@ export default function Privacy() {
         <article className="policy-markdown rounded-2xl border border-slate-200 bg-white p-6 md:p-10">
           <ReactMarkdown skipHtml remarkPlugins={[remarkGfm]}>{policy}</ReactMarkdown>
         </article>
+        <Footer className="mt-6" privacyLink={false} />
       </main>
     </div>
   );

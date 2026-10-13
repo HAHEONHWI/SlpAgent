@@ -5,6 +5,7 @@ import { useChild } from "../lib/child";
 import { useMe } from "../lib/me";
 import { ageLabel } from "../lib/api";
 import BrandLogo from "./BrandLogo";
+import Footer from "./Footer";
 import ChildPicker from "./ChildPicker";
 import { Button, Select } from "./ui";
 
@@ -46,7 +47,10 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
-        <a href="/privacy" target="_blank" rel="noopener" className="border-t border-slate-100 px-4 py-3 text-xs text-slate-500 hover:text-slate-800">개인정보처리방침</a>
+        <div className="border-t border-slate-100 px-4 py-3 text-left text-xs text-slate-500">
+          <a href="/privacy" target="_blank" rel="noopener" className="hover:text-slate-800">개인정보처리방침</a>
+          <p className="mt-1 text-[11px] text-slate-400">© {new Date().getFullYear()} SLP AI</p>
+        </div>
       </aside>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-10 flex print:hidden shrink-0 items-center gap-2 border-b border-slate-200 bg-white/90 px-2 py-2.5 backdrop-blur sm:gap-3 sm:px-4">
@@ -72,6 +76,7 @@ export default function Layout() {
           ? "flex min-h-0 flex-1 flex-col overflow-hidden p-2 sm:p-3"
           : "mx-auto min-h-0 w-full max-w-6xl flex-1 overflow-y-auto p-4 md:p-6 print:max-w-none print:overflow-visible print:p-0"}>
           <Outlet />
+          {!isAiRoute && <Footer className="mt-10 pb-2" />}
         </main>
       </div>
     </div>
