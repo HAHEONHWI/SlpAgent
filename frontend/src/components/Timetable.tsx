@@ -18,6 +18,8 @@ const DAY = ["", "월", "화", "수", "목", "금", "토", "일"];
 const PALETTE = ["#2563eb", "#9f1239", "#7e22ce", "#ea580c", "#15803d", "#0f766e", "#be185d", "#a16207", "#1e40af", "#4d7c0f"];
 const HATCH = { backgroundImage: "repeating-linear-gradient(135deg, #cbd5e1 0 1px, transparent 1px 7px)", backgroundColor: "#e2e8f0" };
 const WEEKEND = { backgroundColor: "#d4d4d8" }; // Saturday/Sunday columns are shaded like the paper sheet
+const EVENING = { backgroundColor: "#919191" }; // 7:00 and later are shaded like the paper sheet
+const isEvening = (slot: string) => slot >= "19:00";
 const iso = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const monday = (s: string) => { const d = new Date(s + "T00:00:00"); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d; };
 const plus = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
@@ -57,13 +59,13 @@ export default function Timetable() {
 
   const block = (slot: string, last: boolean) => cfg.teachers.map((t, i) => (
     <tr key={slot + t.id} className={i === cfg.teachers.length - 1 && !last ? "border-b-2 border-slate-400" : ""}>
-      {i === 0 && <th rowSpan={cfg.teachers.length} className="border border-slate-300 bg-white px-1 text-center text-sm font-semibold tabular-nums">{hm(slot)}</th>}
+      {i === 0 && <th rowSpan={cfg.teachers.length} style={isEvening(slot) ? EVENING : undefined} className="border border-slate-300 bg-white px-1 text-center text-sm font-semibold tabular-nums">{hm(slot)}</th>}
       <td className="border border-slate-300 px-1 text-center text-xs font-bold" style={{ color: t.color, backgroundColor: t.color + "1a" }} title={t.name}>{t.short}</td>
       {cfg.days.map((day) => {
         const off = isClosed(day, slot, t.id);
         const items = byCell.get(`${day}|${slot}|${t.id}`) ?? [];
         return (
-          <td key={day} style={off ? HATCH : day >= 6 ? WEEKEND : undefined}
+          <td key={day} style={off ? HATCH : isEvening(slot) ? EVENING : day >= 6 ? WEEKEND : undefined}
             className={`h-7 border border-slate-300 px-1 text-center text-[13px] leading-tight ${edit ? "cursor-pointer hover:outline hover:outline-2 hover:outline-indigo-400" : ""}`}
             onClick={edit ? () => setCell({ day, slot, teacher: t }) : undefined}>
             {items.map((e) => (
