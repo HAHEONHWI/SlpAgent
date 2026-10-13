@@ -13,6 +13,13 @@ export default function Children() {
   const qc = useQueryClient();
   const role = useMe().data?.role, canWrite = role === "admin" || role === "therapist";
   const [importing, setImporting] = useState(false);
+  const therapists = useQuery({ queryKey: ["org", "therapists"], queryFn: () => api<string[]>("/org/therapists") }).data ?? [];
+  const sorted = [...children].sort((a, b) => a.alias.localeCompare(b.alias, "ko", { numeric: true }) || a.display_name.localeCompare(b.display_name, "ko"));
+  const assign = useMutation({
+    mutationFn: ({ id, therapist }: { id: string; therapist: string | null }) => api(`/children/${id}/therapist`, { method: "PUT", json: { therapist } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["children"] }),
+  });
+  const choices = (current?: string | null) => (current && !therapists.includes(current) ? [...therapists, current] : therapists);
   const [del, setDel] = useState<{ id: string; display_name: string; alias: string } | null>(null);
   const trash = useMutation({
     mutationFn: (id: string) => api(`/children/${id}/archive`, { method: "POST" }),
@@ -33,7 +40,8 @@ export default function Children() {
             <Label label="이름"><Input value={f.display_name} onChange={(e) => setF({ ...f, display_name: e.target.value })} required /></Label>
             <Label label="생년월일"><Input type="date" value={f.birth_date} onChange={(e) => setF({ ...f, birth_date: e.target.value })} required /></Label>
             <Label label="성별"><Select value={f.sex} onChange={(e) => setF({ ...f, sex: e.target.value })}><option value="">미입력</option><option>남</option><option>여</option></Select></Label>
-            <Label label="담당 치료사 (선택)"><Input value={f.therapist} maxLength={20} onChange={(e) => setF({ ...f, therapist: e.target.value })} /></Label>
+            <Label label="담당 치료사"><Select value={f.therapist} onChange={(e) => setF({ ...f, therapist: e.target.value })}>
+              <option value="">선택 안 함</option>{therapists.map((t) => <option key={t}>{t}</option>)}</Select></Label>
             {create.error && <Notice tone="red">{errText(create.error)}</Notice>}
             <Button disabled={create.isPending}>등록</Button>
           </form>
@@ -42,8 +50,12 @@ export default function Children() {
           action={canWrite && <Button variant="outline" onClick={() => setImporting(!importing)}><FileSpreadsheet size={14} />엑셀로 등록</Button>}>
           {children.length === 0 ? <Empty>등록된 아동이 없습니다.</Empty> : (
             <Table head={["가명", "이름", "생년월일", "성별", "월령", "담당", ""]}>
-              {children.map((c) => (
-                <tr key={c.id}><Td>{c.alias}</Td><Td>{c.display_name}</Td><Td>{c.birth_date}</Td><Td>{(c as any).sex ?? "-"}</Td><Td>{(c as any).age_months ?? "-"}</Td><Td>{(c as any).therapist ?? "-"}</Td>
+              {sorted.map((c) => (
+                <tr key={c.id}><Td>{c.alias}</Td><Td>{c.display_name}</Td><Td>{c.birth_date}</Td><Td>{(c as any).sex ?? "-"}</Td><Td>{(c as any).age_months ?? "-"}</Td><Td>{canWrite
+                  ? <Select aria-label={`${c.display_name} 담당 치료사`} className="w-28 py-1" value={(c as any).therapist ?? ""} disabled={assign.isPending}
+                      onChange={(e) => assign.mutate({ id: c.id, therapist: e.target.value || null })}>
+                      <option value="">-</option>{choices((c as any).therapist).map((t) => <option key={t}>{t}</option>)}</Select>
+                  : (c as any).therapist ?? "-"}</Td>
                   <Td><div className="flex gap-1">
                     <Button variant={c.id === childId ? "primary" : "outline"} onClick={() => setChildId(c.id)}>{c.id === childId ? "선택됨" : "선택"}</Button>
                     {canWrite && <Button variant="ghost" className="text-red-600" aria-label={`${c.display_name} 삭제`} onClick={() => { trash.reset(); setDel(c); }}><Trash2 size={14} /></Button>}

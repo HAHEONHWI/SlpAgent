@@ -110,3 +110,12 @@ def test_child_bulk_import_skips_duplicates(client, child):
     assert (made["sex"], made["therapist"], made["age_months"] > 0) == ("남", "김치료", True)
     assert client.post("/children/import", headers=H(), json={"rows": rows}).json()["created"] == 0  # re-upload is harmless
     assert client.post("/children/import", headers=H(), json={"rows": [{"alias": "x", "display_name": "y", "birth_date": "2022-13-01"}]}).status_code == 422
+
+
+def test_therapist_choices_and_assignment(client, child):
+    client.put("/timetable/config", headers=H(role="admin"), json={"teachers": [{"id": "t", "name": "박선생", "short": "하", "color": "#2563eb"}]})
+    assert "박선생" in client.get("/org/therapists", headers=H()).json()
+    r = client.put(f"/children/{child['id']}/therapist", headers=H(), json={"therapist": "박선생"})
+    assert r.json()["therapist"] == "박선생"
+    assert client.put(f"/children/{child['id']}/therapist", headers=H(role="assistant"), json={"therapist": None}).status_code == 403
+    assert client.put(f"/children/{child['id']}/therapist", headers=H("orgB"), json={"therapist": None}).status_code == 404

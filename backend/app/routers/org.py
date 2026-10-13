@@ -46,3 +46,15 @@ def put_org(body: OrgSettings, p: Principal = Depends(current_principal), repo=D
         doc = repo.create("organizations", p.org_id, data, doc_id=p.org_id)
     audit(repo, p, "update", "organizations", p.org_id)
     return doc
+
+
+@router.get("/therapists")
+def therapists(p: Principal = Depends(current_principal), repo=Depends(get_repo)):
+    """Names a child's 담당 치료사 can be chosen from: therapist/admin accounts plus the timetable's teachers
+    (some teachers have no account)."""
+    names = {u.get("name", "").strip() for u in repo.list("users", p.org_id) if u.get("role") in ("admin", "therapist")}
+    try:
+        names |= {t["name"].strip() for t in repo.get("timetable_config", p.org_id, "default").get("teachers", [])}
+    except NotFound:
+        pass
+    return sorted(n for n in names if n)

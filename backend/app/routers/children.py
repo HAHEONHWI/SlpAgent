@@ -83,6 +83,18 @@ def get_child(child_id: str, p: Principal = Depends(current_principal), repo=Dep
     return {**c, "age_months": age_months(c["birth_date"])}
 
 
+class TherapistIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    therapist: str | None = Field(default=None, max_length=20)
+
+
+@router.put("/{child_id}/therapist")
+def set_therapist(child_id: str, body: TherapistIn, p: Principal = Depends(require_write), repo=Depends(get_repo)):
+    child_or_404(repo, p, child_id)
+    audit(repo, p, "update", "children", child_id, child_id)
+    return repo.update("children", p.org_id, child_id, {"therapist": (body.therapist or "").strip() or None})
+
+
 @router.post("/{child_id}/archive")
 def archive(child_id: str, p: Principal = Depends(require_write), repo=Depends(get_repo)):
     child = child_or_404(repo, p, child_id)
