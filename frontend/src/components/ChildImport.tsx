@@ -14,11 +14,27 @@ export default function ChildImport({ onClose }: { onClose: () => void }) {
   const { children } = useChild();
   const [sheet, setSheet] = useState<{ raw: unknown[][]; headerAt: number; head: string[] } | null>(null);
   const [map, setMap] = useState<Mapping | null>(null), [problem, setProblem] = useState(""), [fileName, setFileName] = useState("");
-  const rows = sheet && map && map.name >= 0 && map.birth >= 0 ? toChildren(sheet.raw, sheet.headerAt, map, children.map((c) => c.alias)) : null;
-  const known = new Set(children.map((c) => c.alias.toLowerCase()));
+  const [codes, setCodes] = useState<Record<number, string>>({}); // codes the user edited in the preview, by line
+  const parsed = sheet && map && map.name >= 0 && map.birth >= 0 ? toChildren(sheet.raw, sheet.headerAt, map, children.map((c) => c.alias)) : null;
+  const rows = parsed?.map((r) => (codes[r.line] !== undefined ? { ...r, alias: codes[r.line].trim() } : r)) ?? null;
+  const byCode = new Map(children.map((c) => [c.alias.trim().toLowerCase(), c]));
   const people = new Set(children.map((c) => `${c.display_name.trim()}|${c.birth_date}`));
-  const dup = (r: ImportRow) => known.has(r.alias.toLowerCase()) || people.has(`${r.display_name}|${r.birth_date}`);
-  const ready = (rows ?? []).filter((r) => !r.error && !dup(r));
+  const inFile = new Map<string, ImportRow[]>();
+  for (const r of rows ?? []) inFile.set(r.alias.toLowerCase(), [...(inFile.get(r.alias.toLowerCase()) ?? []), r]);
+  /** Why a row cannot be registered as is: null = new child. */
+  const status = (r: ImportRow): { tone: "red" | "slate" | "green"; text: string } => {
+    if (r.error) return { tone: "red", text: r.error };
+    if (people.has(`${r.display_name}|${r.birth_date}`)) return { tone: "slate", text: "이미 등록됨" };
+    if (!r.alias) return { tone: "red", text: "아이코드를 입력하세요" };
+    const owner = byCode.get(r.alias.toLowerCase());
+    if (owner) return { tone: "red", text: `코드 중복 · 이미 사용 중 (${owner.display_name})` };
+    const twins = (inFile.get(r.alias.toLowerCase()) ?? []).filter((x) => x.line !== r.line);
+    if (twins.length) return { tone: "red", text: `코드 중복 (${twins.map((x) => x.display_name).join(", ")})` };
+    return { tone: "green", text: "새로 등록" };
+  };
+  const ready = (rows ?? []).filter((r) => status(r).tone === "green");
+  const dup = (r: ImportRow) => status(r).text === "이미 등록됨";
+  const fix = (rows ?? []).filter((r) => status(r).tone === "red");
   const send = useMutation({
     mutationFn: () => api<{ created: number; skipped: { display_name: string; reason: string }[] }>("/children/import", { method: "POST",
       json: { rows: ready.map(({ alias, display_name, birth_date, sex, therapist }) => ({ alias, display_name, birth_date, sex, therapist })) } }),
@@ -26,7 +42,7 @@ export default function ChildImport({ onClose }: { onClose: () => void }) {
   });
   const pick = async (file?: File) => {
     if (!file) return;
-    setProblem(""); setSheet(null); setMap(null); send.reset(); setFileName(file.name);
+    setProblem(""); setSheet(null); setMap(null); setCodes({}); send.reset(); setFileName(file.name);
     try {
       const raw = await readRows(file);
       const found = detect(raw);
@@ -61,14 +77,18 @@ export default function ChildImport({ onClose }: { onClose: () => void }) {
         {rows && !rows.length && !send.data && <Notice tone="red">등록할 아동이 없어요.</Notice>}
         {rows && rows.length > 0 && !send.data && (<>
           <p className="text-sm">모두 {rows.length}명 · <b className="text-indigo-700">새로 등록 {ready.length}명</b>
-            {rows.some(dup) && <> · 이미 있음 {rows.filter(dup).length}명</>}{rows.some((r) => r.error) && <> · <span className="text-red-600">확인 필요 {rows.filter((r) => r.error).length}명</span></>}</p>
+            {rows.some(dup) && <> · 이미 있음 {rows.filter(dup).length}명</>}{fix.length > 0 && <> · <span className="text-red-600">확인 필요 {fix.length}명</span></>}</p>
+          {fix.some((r) => status(r).text.startsWith("코드 중복")) && <Notice>같은 아이코드를 쓰는 아이가 있어요. 빨간 줄의 아이코드 칸을 눌러 다른 코드로 고치면 함께 등록돼요.</Notice>}
           <div className="max-h-96 overflow-y-auto">
             <Table head={["줄", "아이코드", "이름", "생년월일", "성별", "담당", ""]}>
-              {rows.map((r) => (
-                <tr key={r.line} className={r.error ? "bg-red-50" : dup(r) ? "text-slate-400" : ""}>
-                  <Td className="text-xs text-slate-400">{r.line}</Td><Td>{r.alias}</Td><Td>{r.display_name}</Td><Td>{r.birth_date || "-"}</Td><Td>{r.sex ?? "-"}</Td><Td>{r.therapist ?? "-"}</Td>
-                  <Td>{r.error ? <Badge tone="red">{r.error}</Badge> : dup(r) ? <Badge>이미 등록됨</Badge> : <Badge tone="green">새로 등록</Badge>}</Td>
-                </tr>))}
+              {rows.map((r) => { const st = status(r); return (
+                <tr key={r.line} className={st.tone === "red" ? "bg-red-50" : st.tone === "slate" ? "text-slate-400" : ""}>
+                  <Td className="text-xs text-slate-400">{r.line}</Td>
+                  <Td><input value={r.alias} maxLength={40} onChange={(e) => setCodes({ ...codes, [r.line]: e.target.value })} aria-label={`${r.display_name} 아이코드`}
+                    className={`w-20 rounded border px-1 py-0.5 text-sm ${st.tone === "red" && !r.error ? "border-red-400 bg-white" : "border-transparent bg-transparent hover:border-slate-300"}`} /></Td>
+                  <Td>{r.display_name}</Td><Td>{r.birth_date || "-"}</Td><Td>{r.sex ?? "-"}</Td><Td>{r.therapist ?? "-"}</Td>
+                  <Td><Badge tone={st.tone}>{st.text}</Badge></Td>
+                </tr>); })}
             </Table>
           </div>
           {send.error && <Notice tone="red">{errText(send.error)}</Notice>}
@@ -78,7 +98,7 @@ export default function ChildImport({ onClose }: { onClose: () => void }) {
           <div className="space-y-2">
             <p className="text-sm font-medium text-green-700">{send.data.created}명을 등록했어요.</p>
             {send.data.skipped.length > 0 && <Notice>건너뛴 {send.data.skipped.length}명: {send.data.skipped.map((s) => `${s.display_name}(${s.reason})`).join(", ")}</Notice>}
-            <Button variant="outline" onClick={() => { setSheet(null); setMap(null); setFileName(""); send.reset(); }}>다른 파일 올리기</Button>
+            <Button variant="outline" onClick={() => { setSheet(null); setMap(null); setCodes({}); setFileName(""); send.reset(); }}>다른 파일 올리기</Button>
           </div>)}
       </div>
     </Card>

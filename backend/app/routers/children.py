@@ -51,8 +51,9 @@ def import_children(body: ImportIn, p: Principal = Depends(require_write), repo=
         who = (d["display_name"], d["birth_date"])
         if d["alias"].lower() in codes or who in people:
             gone = any(c.get("archived") and (c["alias"].strip().lower() == d["alias"].lower() or (c["display_name"].strip(), c["birth_date"]) == who) for c in existing)
+            same_person = who in people
             skipped.append({"row": i, "alias": d["alias"], "display_name": d["display_name"],
-                            "reason": "삭제된 아동에 있음" if gone else "이미 등록됨"})
+                            "reason": "삭제된 아동에 있음" if gone else "이미 등록됨" if same_person else "아이코드 중복"})
             continue
         doc = repo.create("children", p.org_id, d)
         codes.add(d["alias"].lower())
