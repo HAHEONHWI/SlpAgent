@@ -3,10 +3,11 @@
 ## 현재 상태 (2026-10-12)
 - macOS Vision이 이미지 전용 PDF 7개, 총 81페이지를 OCR했다. 텍스트 검출 80/81이며 모든 페이지 `needs_review=true`; HTML 대조 리포트와 원본 페이지 이미지는 무시 대상 `extracted/ocr/`에 있다.
 - 텍스트 자료 문항 은행: PRES 90/92, SELSI 112/112, EASIC 144/144, KOSECT 57/57. 모든 문항은 검수 전이며 규준표는 미제공이다. PRES 누락 2건과 EASIC 원문 번호 중복은 자동 수정하지 않았다.
-- RAG는 org 격리, 문서·페이지·텍스트 인용, `needs_ocr`/`needs_review` 제외, bigram 폴백, 권한 확인 전송 opt-in 임베딩을 구현했다. AI 본문 호출에는 지식 원문을 전달하지 않는다.
+- RAG는 org 격리, 문서·페이지·텍스트 인용, `needs_ocr`/`needs_review` 제외, bigram 폴백, 권한 확인 전송 opt-in 임베딩을 구현했다. AI 대화에는 검수된 허가 자료의 제한된 발췌만 낮은 권한의 user 참고 입력으로 전달한다.
+- AI 대화는 언어치료 지식 모드가 기본이다. 임상 모드는 별도로 선택하며, 초안 도구는 메시지별 허가와 쓰기 역할을 확인한다. 구조적 도구 차단·참고자료 권한 분리·직접 규칙 우회 요청 차단을 구현했다. 실제 모델의 공격 저항성은 별도 평가가 필요하다.
 - 통합·행동·활동 AI 분석은 근거 스키마 검증 후 `ai_analyses` 초안으로 저장한다. 실제 OpenAI 호출은 하지 않았다.
 - DOCX/PDF 5종 생성과 비공개 저장·승인·서명 URL 경로를 구현했다. HWPX 샘플에는 치환 토큰이 없고 한컴오피스 검증도 없어 미검증이다.
-- Cloud Run/Hosting 설정, 인덱스, 비밀값 변수화, 클레임·보존 스크립트와 운영 문서를 추가했다. 배포, Firebase/GCP 인증, 실제 키 설정은 하지 않았다.
+- Cloud Run/Hosting 설정, 인덱스, 비밀값 변수화, 클레임·보존 스크립트와 운영 문서를 추가했다. 운영 서비스는 배포 완료(사용자 확인); 배포 revision·URL·실환경 검증 기록은 이 문서에 없다.
 - pytest 34개 통과, `pip-audit` 알려진 취약점 없음, Python 컴파일과 JSON/YAML 파싱 통과. PDF 합성 미리보기 A4 세로 1페이지와 포함 폰트를 확인했다.
 - Docker 이미지 빌드는 daemon 연결 실패(`Cannot connect to the Docker daemon`)로 미검증이다.
 - `frontend/`는 다른 담당 작업으로 수정하지 않았다.
@@ -41,5 +42,5 @@ frontend/                                    다른 담당자 소유
 | 채팅·통합/행동/활동 AI | fake client 기반 초안·근거 테스트; 실제 모델 호출 미검증 |
 | 문서 생성 | DOCX/PDF 5종 구현; HWPX 미검증; 레이아웃 검수 결과 `docs/documents.md` |
 | 보안·운영 | Principal 경로 검사, 제한, admin 감사 API, CI/pip-audit, Cloud Run 설정·절차 추가 |
-| 배포 | 미배포. 프로젝트 ID, 실제 Secret, 서비스 계정, 도메인은 운영자가 입력 |
+| 배포 | 배포 완료(사용자 확인). 배포 revision·URL·실환경 검증 상태는 저장소 문서에 미기록 |
 | 프론트엔드 | 다른 담당자 작업 중 |

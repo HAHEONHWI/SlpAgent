@@ -36,7 +36,7 @@ function Inner({ childId }: { childId: string }) {
         </form>
       </Card>
       <div className="space-y-3 lg:col-span-2">
-        <Notice>기록문 초안은 AI 채팅(아동 선택)에서 요청하면 승인 대기 초안으로 생성됩니다. 관찰되지 않은 내용은 포함되지 않아야 하니 승인 전 확인하세요.</Notice>
+        <Notice>기록문 초안은 AI 대화(아동 선택)에서 요청하면 승인 대기 초안으로 생성됩니다. 관찰되지 않은 내용은 포함되지 않아야 하니 승인 전 확인하세요.</Notice>
         {!list.data?.length ? <Card><Empty>회기 기록이 없습니다.</Empty></Card> : [...list.data].reverse().map((s) => (
           <Card key={s.id} title={`${s.date} ${s.start}–${s.end} (${s.minutes}분)`} action={<Badge tone={s.status === "completed" ? "green" : "slate"}>{s.status}</Badge>}>
             <ul className="text-sm">{s.activities.map((a: any, i: number) => { const st = s.activity_accuracy[i]; return <li key={i}>{a.name}: {a.correct}/{a.trials} ({st.accuracy_pct ?? "-"}%){a.prompt_level && ` · 촉진: ${a.prompt_level}`}</li>; })}</ul>

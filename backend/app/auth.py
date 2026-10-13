@@ -3,6 +3,7 @@ from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from .config import get_settings
+from .repo.provider import get_repo
 
 Role = Literal["admin", "therapist", "assistant"]
 ROLES = ("admin", "therapist", "assistant")
@@ -70,11 +71,34 @@ def current_identity(cred: HTTPAuthorizationCredentials | None = Depends(bearer)
     return _verify_firebase(cred.credentials)
 
 
-def current_principal(identity: Identity = Depends(current_identity)) -> Principal:
+def effective_identity(identity: Identity, repo) -> Identity:
+    """Apply the server-side access record (set by site admins) over token claims, so org/role changes and
+    suspensions take effect on the next request instead of waiting for the ID token to refresh."""
+    from .repo.base import NotFound
+    try:
+        access = repo.get("account_access", "_platform", identity.uid)
+    except NotFound:
+        return identity
+    if access.get("disabled"):
+        raise HTTPException(403, "account suspended")
+    if "org_id" in access:
+        identity = identity.model_copy(update={"org_id": access.get("org_id"), "role": access.get("role")})
+    return identity
+
+
+def current_principal(identity: Identity = Depends(current_identity), repo=Depends(get_repo)) -> Principal:
+    from .repo.base import NotFound
+    identity = effective_identity(identity, repo)
     if not identity.org_id or identity.role not in ROLES:
         raise HTTPException(403, "account has no organization role (signup pending approval)")
     if identity.org_id.startswith("_"):  # reserved namespaces such as "_platform" are never organizations
         raise HTTPException(403, "invalid organization")
+    try:
+        org = repo.get("organizations", identity.org_id, identity.org_id)
+    except NotFound:
+        org = None
+    if org and org.get("status") == "merged":
+        raise HTTPException(403, "organization merged; sign in again")
     return Principal(uid=identity.uid, org_id=identity.org_id, role=identity.role)
 
 

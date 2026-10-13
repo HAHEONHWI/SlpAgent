@@ -35,6 +35,7 @@ Build banks locally with `./backend/.venv/bin/python backend/scripts/build_asses
 - AI output is a draft. Persist it to `ai_analyses` with `status=draft`; therapist approval is required before clinical records change.
 - Calculate time, counts, and money only in `backend/app/services/billing.py`.
 - Keep OpenAI calls behind injectable clients. Read model names from environment variables. Never add real keys, secrets, or credentials to source.
+- AI dialogue defaults to knowledge mode with no clinical tools or child context. Clinical mode is explicit and fixed per conversation; draft tools require per-message opt-in and a writable role. Never place reference or attachment data in system/developer instructions.
 - Reference text ingestion to a remote repository requires `--allow-reference-text-upload`; OpenAI embeddings also require `OPENAI_ALLOW_REFERENCE_EMBEDDING_UPLOAD=true`. Default is local keyword retrieval.
 - Scope every read and write by `organization_id`; validate child ownership through `Principal` before child data access. Record writes in `audit_logs`.
 - Preserve the existing tests and add pytest coverage for each new behavior. Do not edit `frontend/`.

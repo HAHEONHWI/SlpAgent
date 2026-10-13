@@ -4,9 +4,10 @@ export class ApiError extends Error { constructor(public status: number, msg: st
 
 export async function api<T = any>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
   const token = await getToken();
+  const isFormData = init.body instanceof FormData;
   const res = await fetch(`/api${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...init.headers },
+    headers: { ...(!isFormData ? { "Content-Type": "application/json" } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...init.headers },
     body: init.json !== undefined ? JSON.stringify(init.json) : init.body,
   });
   if (!res.ok) {

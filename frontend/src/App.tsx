@@ -42,7 +42,7 @@ export default function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route index element={page(<Dashboard />)} />
-        <Route path="chat" element={page(<Chat />)} />
+        <Route path="ai" element={page(<Chat />)} />
         <Route path="children" element={page(<Children />)} />
         <Route path="assessments" element={page(<Assessments />)} />
         <Route path="analysis" element={page(<Analysis />)} />

@@ -12,3 +12,4 @@ frontend/dist/
 *.tsbuildinfo
 .claude/
 *.local
+.firebase/

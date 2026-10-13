@@ -17,7 +17,9 @@ def repo():
 
 @pytest.fixture
 def client(repo):
-    return TestClient(app)
+    app.middleware_stack = app.build_middleware_stack()
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 def H(org="orgA", role="therapist", uid="u1"):

@@ -37,3 +37,17 @@ class MemoryRepo:
         if not d or d["organization_id"] != org_id:
             raise NotFound(doc_id)
         del self.db[col][doc_id]
+
+    def organization_documents(self, org_id):
+        return [(col, copy.deepcopy(doc)) for col, rows in self.db.items()
+                for doc in rows.values() if doc["organization_id"] == org_id]
+
+    def commit_organization_merge(self, source, target, token, writes):
+        from ..services.organization_merge import build_merge
+        from fastapi import HTTPException
+        if build_merge(self, source, target)[0]["preview_token"] != token:
+            raise HTTPException(409, "merge preview expired; preview again")
+        updated = copy.deepcopy(self.db)
+        for col, doc_id, doc in writes:
+            updated[col][doc_id] = copy.deepcopy(doc)
+        self.db = updated

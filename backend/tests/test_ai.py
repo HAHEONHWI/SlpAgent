@@ -2,7 +2,7 @@ import json
 from types import SimpleNamespace as NS
 from app.auth import Principal
 from app.services import agent
-from app.services.ai_tools import ToolRunner
+from app.services.ai_tools import READ, WRITE, ToolRunner
 from tests.conftest import H
 
 
@@ -30,7 +30,9 @@ def _setup(client, child):
 def test_write_tool_creates_unapproved_draft_only(client, repo, child):
     P = Principal(uid="u1", org_id="orgA", role="therapist")
     fc = FakeClient([("generate_treatment_plan", {"goals": [{"kind": "short", "text": "t", "measure": "m", "criterion": "c", "basis": "SELSI 2026-09-01"}], "rationale": "r"})])
-    res = agent.run_chat(fc, "m", [{"role": "user", "content": "계획"}], ToolRunner(repo, P, child["id"]))
+    res = agent.run_chat(fc, "m", [{"role": "user", "content": "계획"}],
+                         ToolRunner(repo, P, child["id"], allowed_tools=frozenset(READ | WRITE)),
+                         allow_tools=True, mode="clinical")
     assert res["text"] == "최종 답변" and len(res["proposals"]) == 1
     assert repo.list("treatment_plans", "orgA") == []  # nothing saved
     pid = res["proposals"][0]
@@ -58,15 +60,15 @@ def test_chat_endpoint_and_conversation_child_locked(client, repo, child, monkey
     from app.routers.chat import get_client
     fc = FakeClient([("get_child_profile", {})])
     app.dependency_overrides[get_client] = lambda: fc
-    r = client.post("/chat", headers=H(), json={"message": "테스트아동의 보호자 010-0000-0000 test@example.com 상담", "child_id": child["id"]}).json()
+    r = client.post("/ai/dialogue", headers=H(), json={"message": "테스트아동의 보호자 010-0000-0000 test@example.com 상담", "child_id": child["id"], "mode": "clinical"}).json()
     assert r["text"] == "최종 답변"
     sent = json.dumps(fc.seen[0], ensure_ascii=False, default=lambda value: vars(value))
     assert "테스트아동" not in sent and "010-0000-0000" not in sent and "test@example.com" not in sent
     assert "[개인정보]" in sent and "[이메일]" in sent
     out = [i for i in fc.seen[1]["input"] if isinstance(i, dict) and i.get("type") == "function_call_output"]
     assert json.loads(out[0]["output"])["alias"] == "A-01"
-    assert client.post("/chat", headers=H("orgB"), json={"message": "x", "conversation_id": r["conversation_id"]}).status_code == 404
-    assert client.post("/chat", headers=H("orgB"), json={"message": "x", "child_id": child["id"]}).status_code == 404
+    assert client.post("/ai/dialogue", headers=H("orgB"), json={"message": "x", "conversation_id": r["conversation_id"]}).status_code == 404
+    assert client.post("/ai/dialogue", headers=H("orgB"), json={"message": "x", "child_id": child["id"], "mode": "clinical"}).status_code == 404
 
 
 def test_knowledge_search_cites_page_and_skips_ocr_pages(repo):

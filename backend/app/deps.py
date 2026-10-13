@@ -1,17 +1,7 @@
-from functools import lru_cache
 from fastapi import Depends
 from .auth import Principal, current_principal
-from .config import get_settings
 from .repo.base import NotFound, Repo
-
-
-@lru_cache
-def get_repo() -> Repo:
-    if get_settings().storage_backend == "memory":
-        from .repo.memory import MemoryRepo
-        return MemoryRepo()
-    from .repo.firestore import FirestoreRepo
-    return FirestoreRepo()
+from .repo.provider import get_repo  # re-exported: the single repository dependency
 
 
 def audit(repo: Repo, p: Principal, action: str, col: str, doc_id: str, child_id: str | None = None, via_ai: bool = False):

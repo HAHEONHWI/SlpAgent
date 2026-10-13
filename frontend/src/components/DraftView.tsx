@@ -35,7 +35,7 @@ export function DraftView({ draft, sections, onDone }: { draft: Draft; sections:
   const reject = useMutation({ mutationFn: () => api(`/proposals/${draft.id}/reject`, { method: "POST" }), onSuccess: done });
   return (
     <div className="space-y-4">
-      <Notice>AI가 만든 <b>미승인 초안</b>입니다. 진단이 아니며, 근거를 원자료와 대조한 뒤 승인하세요. 수정이 필요하면 AI 채팅의 승인 대기 목록에서 내용을 고칠 수 있습니다.</Notice>
+      <Notice>AI가 만든 <b>미승인 초안</b>입니다. 진단이 아니며, 근거를 원자료와 대조한 뒤 승인하세요. 수정이 필요하면 AI 대화의 승인 대기 목록에서 내용을 고칠 수 있습니다.</Notice>
       {sections.map(([key, label]) => {
         const v = draft.payload[key];
         if (v === undefined) return null;

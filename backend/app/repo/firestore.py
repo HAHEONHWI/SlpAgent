@@ -39,3 +39,39 @@ class FirestoreRepo:
     def delete(self, col, org_id, doc_id):
         self.get(col, org_id, doc_id)
         self.c.collection(col).document(doc_id).delete()
+
+    def organization_documents(self, org_id):
+        return [(col.id, snap.to_dict()) for col in self.c.collections()
+                for snap in col.where("organization_id", "==", org_id).stream()]
+
+    def commit_organization_merge(self, source, target, token, writes):
+        from google.cloud import firestore
+        from ..services.organization_merge import build_merge
+        from fastapi import HTTPException
+
+        class TransactionView:
+            def get(view, col, org_id, doc_id):
+                snap = self.c.collection(col).document(doc_id).get(transaction=view.transaction)
+                if not snap.exists or snap.to_dict().get("organization_id") != org_id:
+                    raise NotFound(doc_id)
+                return snap.to_dict()
+
+            def list(view, col, org_id, **eq):
+                query = self.c.collection(col).where("organization_id", "==", org_id)
+                for key, value in eq.items():
+                    query = query.where(key, "==", value)
+                return [snap.to_dict() for snap in query.stream(transaction=view.transaction)]
+
+            def organization_documents(view, org_id):
+                return [(col.id, doc) for col in self.c.collections() for doc in view.list(col.id, org_id)]
+
+        @firestore.transactional
+        def apply(transaction):
+            view = TransactionView()
+            view.transaction = transaction
+            if build_merge(view, source, target)[0]["preview_token"] != token:
+                raise HTTPException(409, "merge preview expired; preview again")
+            for col, doc_id, doc in writes:
+                transaction.set(self.c.collection(col).document(doc_id), doc)
+
+        apply(self.c.transaction())

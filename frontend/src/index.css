@@ -1,3 +1,74 @@
 @import "tailwindcss";
-@theme { --font-sans: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif; }
-body { @apply bg-slate-50 text-slate-900 antialiased; }
+
+@theme {
+  --font-sans: "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+
+  --color-slate-50: #faf7f2;
+  --color-slate-100: #f3eee6;
+  --color-slate-200: #ece5da;
+  --color-slate-300: #ddd3c5;
+  --color-slate-400: #9c9183;
+  --color-slate-500: #6b6359;
+  --color-slate-600: #61574c;
+  --color-slate-700: #4b4339;
+  --color-slate-800: #352f29;
+  --color-slate-900: #2b2722;
+  --color-slate-950: #201c18;
+
+  --color-indigo-50: #eff7f2;
+  --color-indigo-100: #dcece2;
+  --color-indigo-200: #c1ddce;
+  --color-indigo-300: #9bc8b0;
+  --color-indigo-400: #6eae91;
+  --color-indigo-500: #4b9879;
+  --color-indigo-600: #2f7f6c;
+  --color-indigo-700: #286b5c;
+  --color-indigo-800: #225849;
+  --color-indigo-900: #194438;
+
+  --color-amber-50: #fff8ec;
+  --color-amber-100: #fff0d8;
+  --color-amber-200: #f4dfb7;
+  --color-amber-700: #96652b;
+  --color-amber-800: #79501f;
+  --color-amber-900: #5b3b18;
+
+  --color-green-100: #e4f3e9;
+  --color-green-700: #34734c;
+  --color-green-800: #285c3d;
+
+  --color-red-50: #fff2ef;
+  --color-red-100: #ffe3dc;
+  --color-red-200: #f5c9be;
+  --color-red-600: #b94d3f;
+  --color-red-700: #983c32;
+  --color-red-800: #78342d;
+
+  --radius-sm: 0.5rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.5rem;
+  --shadow-sm: 0 2px 8px rgb(73 57 38 / 6%), 0 1px 2px rgb(73 57 38 / 4%);
+  --shadow-md: 0 12px 32px rgb(73 57 38 / 9%), 0 2px 8px rgb(73 57 38 / 5%);
+}
+
+:root {
+  color-scheme: light;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+  min-width: 320px;
+  margin: 0;
+}
+
+::selection {
+  background: var(--color-indigo-200);
+  color: var(--color-slate-900);
+}
+
+.chat-markdown > :first-child { margin-top: 0; }
+.chat-markdown > :last-child { margin-bottom: 0; }

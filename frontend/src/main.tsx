@@ -1,3 +1,8 @@
+if (import.meta.env.DEV) {
+  void import("react-grab");
+  void import("react-scan");
+}
+
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";

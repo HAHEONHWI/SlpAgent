@@ -53,7 +53,7 @@ export default function DocumentExport({ childId, month }: { childId: string; mo
           <Badge tone={d.status === "approved" ? "green" : "amber"}>{d.status === "approved" ? "승인됨" : "초안"}</Badge>
           {d.hwpx_validation && <Badge tone="red">한컴 호환 미검증</Badge>}
           {d.created_at && <span className="text-xs text-slate-400">{d.created_at.slice(0, 16).replace("T", " ")}</span>}
-          {!d.format ? <span className="ml-auto text-xs text-slate-400">파일 없음 (AI 채팅에서 승인된 기록)</span> : live(d)
+          {!d.format ? <span className="ml-auto text-xs text-slate-400">파일 없음 (AI 대화에서 승인된 기록)</span> : live(d)
             ? <a className="ml-auto inline-flex items-center gap-1 text-indigo-600" href={href(d.download_url!)}><Download size={14} />다운로드</a>
             : <button className="ml-auto inline-flex items-center gap-1 text-indigo-600 disabled:opacity-50" disabled={link.isPending} onClick={() => link.mutate(d.id)}><Download size={14} />{link.isPending && link.variables === d.id ? "링크 생성 중…" : "다운로드"}</button>}
           {d.status === "draft" && <Button variant="outline" onClick={() => approve.mutate(d.id)} disabled={approve.isPending}>검토 완료 · 승인</Button>}

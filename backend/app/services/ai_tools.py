@@ -4,7 +4,10 @@ from ..auth import Principal
 from ..deps import audit
 from ..repo.base import NotFound
 from ..routers.children import age_months
+from ..routers.plans import Goal, PlanIn
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from . import knowledge
+from .privacy import sanitize_external_value
 
 READ = {"get_child_profile", "get_assessment_history", "get_assessment_responses", "get_treatment_goals",
         "get_session_history", "get_behavior_observations", "get_vocabulary_progress", "search_clinical_knowledge"}
@@ -35,26 +38,54 @@ SPECS = [
 OPENAI_TOOLS = [{"type": "function", "name": n, "description": d, "parameters": p, "strict": False} for n, d, p in SPECS]
 
 
+class DraftGoal(Goal):
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+    basis: str
+
+
+class PlanDraft(PlanIn):
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+    goals: list[DraftGoal] = Field(min_length=1, max_length=30)
+    rationale: str = Field(max_length=12_000)
+
+
+class TextDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+    text: str = Field(min_length=1, max_length=12_000)
+
+
+class SessionDraft(TextDraft):
+    session_id: str = Field(min_length=1, max_length=200)
+
+
 class ToolRunner:
-    def __init__(self, repo, p: Principal, child_id: str | None):
+    def __init__(self, repo, p: Principal, child_id: str | None,
+                 allowed_tools: frozenset[str] | None = None,
+                 sensitive_values: tuple[str | None, ...] = ()):
         self.repo, self.p, self.child_id = repo, p, child_id
+        self.allowed_tools = frozenset(READ) if allowed_tools is None else allowed_tools
+        self.sensitive_values = sensitive_values
 
     def _need_child(self):
         if not self.child_id:
-            raise ValueError("이 도구는 아동을 선택한 채팅에서만 사용할 수 있습니다")
+            raise ValueError("이 도구는 아동을 선택한 AI 대화에서만 사용할 수 있습니다")
         return self.child_id
 
     def run(self, name: str, args: dict) -> dict:
         if name not in READ | WRITE:
             return {"error": f"unknown tool {name}"}
+        if name not in self.allowed_tools or (name in WRITE and not self.p.can_write):
+            return {"error": "tool is not permitted for this request"}
         try:
             out = getattr(self, name)(**args)
         except NotFound:
             return {"error": "not found"}
+        except ValidationError:
+            return {"error": "invalid tool arguments"}
         except (ValueError, TypeError, KeyError) as e:
             return {"error": str(e)}
         audit(self.repo, self.p, f"ai_tool:{name}", "ai_tools", name, self.child_id, via_ai=True)
-        return out
+        return sanitize_external_value(out, list(self.sensitive_values))
 
     def _rows(self, col):
         return sorted(self.repo.list(col, self.p.org_id, child_id=self._need_child()), key=lambda d: d.get("created_at", ""))
@@ -106,15 +137,15 @@ class ToolRunner:
         return {"proposal_id": d["id"], "status": "draft", "message": "저장되지 않았습니다. 치료사가 검토·승인해야 반영됩니다."}
 
     def generate_treatment_plan(self, goals, rationale):
-        if not goals:
-            raise ValueError("goals required")
-        return self._draft("treatment_plan", {"goals": goals, "rationale": rationale})
+        payload = PlanDraft.model_validate({"goals": goals, "rationale": rationale}).model_dump()
+        return self._draft("treatment_plan", payload)
 
     def generate_session_note(self, session_id, text):
-        s = self.repo.get("therapy_sessions", self.p.org_id, session_id)
+        payload = SessionDraft.model_validate({"session_id": session_id, "text": text})
+        s = self.repo.get("therapy_sessions", self.p.org_id, payload.session_id)
         if s["child_id"] != self._need_child():
             raise ValueError("session belongs to another child")
-        return self._draft("session_note", {"session_id": session_id, "text": text})
+        return self._draft("session_note", payload.model_dump())
 
     def draft_parent_guidance(self, text):
-        return self._draft("parent_guidance", {"text": text})
+        return self._draft("parent_guidance", TextDraft.model_validate({"text": text}).model_dump())

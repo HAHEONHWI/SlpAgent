@@ -4,7 +4,7 @@ import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAt
 
 // Minimal shadcn/ui-style primitives (hand-written; the shadcn CLI was not run).
 export function Button({ variant = "primary", className, ...p }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "outline" | "danger" | "ghost" }) {
-  return <button {...p} className={clsx("inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition disabled:opacity-50 disabled:pointer-events-none",
+  return <button {...p} className={clsx("inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 active:scale-[.98]",
     { primary: "bg-indigo-600 text-white hover:bg-indigo-700", outline: "border border-slate-300 bg-white hover:bg-slate-50", danger: "bg-red-600 text-white hover:bg-red-700", ghost: "hover:bg-slate-100" }[variant], className)} />;
 }
 const field = "w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";

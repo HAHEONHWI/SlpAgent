@@ -5,12 +5,13 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
-from ..auth import Identity, current_identity, require_site_admin
+from pydantic import BaseModel, Field, ConfigDict, model_validator
+from ..auth import Identity, Role, current_identity, effective_identity, require_site_admin
 from ..deps import get_repo
 from ..repo.base import NotFound
-from ..services.accounts import PLATFORM, get_claims_setter
+from ..services.accounts import PLATFORM, get_claims_setter, get_account_directory
 from ..services.assessment_defs import DEFS, licensed_codes
+from ..services.organization_merge import MergeIn, build_merge, merge_organizations
 
 router = APIRouter(tags=["platform"])
 
@@ -28,6 +29,141 @@ class RejectIn(BaseModel):
     reason: str = Field(min_length=1, max_length=500)
 
 
+class AccountAccessIn(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    org_id: str | None
+    role: Role | None
+
+    @model_validator(mode="after")
+    def paired(self):
+        if (self.org_id is None) != (self.role is None):
+            raise ValueError("organization and role must both be set or both be null")
+        return self
+
+
+class OrgNameIn(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    name: str = Field(min_length=1, max_length=80, pattern=r"\S")
+
+
+def _norm(name: str) -> str:
+    return "".join((name or "").split()).lower()
+
+
+def _active_registry(repo) -> list[dict]:
+    return [r for r in repo.list("organization_registry", PLATFORM) if r.get("status", "active") == "active"]
+
+
+def _active_org(repo, org_id: str):
+    try:
+        org = repo.get("organizations", org_id, org_id)
+        repo.get("organization_registry", PLATFORM, org_id)
+    except NotFound:
+        raise HTTPException(404, "organization not found")
+    if org.get("status", "active") != "active":
+        raise HTTPException(409, "organization is not active")
+    return org
+
+
+@router.get("/platform/accounts")
+def accounts(admin: Identity = Depends(require_site_admin), repo=Depends(get_repo),
+             directory=Depends(get_account_directory)):
+    names = {r["org_id"]: r["name"] for r in repo.list("organization_registry", PLATFORM)}
+    rows = []
+    for account in directory.list():
+        row = account.model_dump()
+        try:
+            access = repo.get("account_access", PLATFORM, account.uid)
+            if "org_id" in access:
+                row.update(org_id=access.get("org_id"), role=access.get("role"))
+            row["disabled"] = bool(access.get("disabled")) or row["disabled"]
+        except NotFound:
+            access = None
+        row["org_name"] = names.get(row["org_id"])
+        rows.append(row)
+    return sorted(rows, key=lambda r: (r["org_name"] or "", r["email"] or r["uid"]))
+
+
+@router.put("/platform/accounts/{uid}/access")
+def account_access(uid: str, body: AccountAccessIn, admin: Identity = Depends(require_site_admin),
+                   repo=Depends(get_repo), directory=Depends(get_account_directory),
+                   set_claims=Depends(get_claims_setter)):
+    account = next((a for a in accounts(admin, repo, directory) if a["uid"] == uid), None)
+    if account is None:
+        raise HTTPException(404, "account not found")
+    if body.org_id:
+        _active_org(repo, body.org_id)
+    old_org = account["org_id"]
+    if old_org and account["role"] == "admin" and (body.org_id != old_org or body.role != "admin"):
+        admins = repo.list("users", old_org, role="admin")
+        if not any(u["uid"] != uid for u in admins):
+            raise HTTPException(409, "cannot remove the last organization admin")
+    patch = body.model_dump()
+    try:
+        repo.update("account_access", PLATFORM, uid, patch)
+    except NotFound:
+        repo.create("account_access", PLATFORM, patch, doc_id=uid)
+    if old_org and old_org != body.org_id:
+        try:
+            repo.delete("users", old_org, uid)
+        except NotFound:
+            old_org = None
+    if body.org_id:
+        data = {"uid": uid, "email": account["email"], "name": account["name"], "role": body.role}
+        try:
+            repo.update("users", body.org_id, uid, data)
+        except NotFound:
+            repo.create("users", body.org_id, data, doc_id=uid)
+    repo.create("audit_logs", PLATFORM, {"actor": admin.uid, "role": "site_admin", "action": "set_account_access",
+                                         "collection": "account_access", "doc_id": uid, "detail": patch})
+    set_claims(uid, patch)
+    return {"uid": uid, **patch, "reauthentication_required": True}
+
+
+class AccountStatusIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    disabled: bool
+
+
+@router.put("/platform/accounts/{uid}/status")
+def account_status(uid: str, body: AccountStatusIn, admin: Identity = Depends(require_site_admin),
+                   repo=Depends(get_repo), directory=Depends(get_account_directory)):
+    if uid == admin.uid:
+        raise HTTPException(409, "you cannot suspend your own account")
+    if not any(a.uid == uid for a in directory.list()):
+        raise HTTPException(404, "account not found")
+    try:
+        repo.update("account_access", PLATFORM, uid, {"disabled": body.disabled})
+    except NotFound:
+        repo.create("account_access", PLATFORM, {"disabled": body.disabled}, doc_id=uid)
+    directory.set_disabled(uid, body.disabled)  # also blocks sign-in and revokes sessions in Firebase
+    repo.create("audit_logs", PLATFORM, {"actor": admin.uid, "role": "site_admin",
+                                         "action": "suspend_account" if body.disabled else "reactivate_account",
+                                         "collection": "account_access", "doc_id": uid})
+    return {"uid": uid, "disabled": body.disabled}
+
+
+@router.put("/platform/organizations/{org_id}")
+def rename_org(org_id: str, body: OrgNameIn, admin: Identity = Depends(require_site_admin), repo=Depends(get_repo)):
+    _active_org(repo, org_id)
+    name = body.name.strip()
+    repo.update("organizations", org_id, org_id, {"name": name})
+    repo.update("organization_registry", PLATFORM, org_id, {"name": name})
+    repo.create("audit_logs", PLATFORM, {"actor": admin.uid, "role": "site_admin", "action": "rename_organization",
+                                         "collection": "organizations", "doc_id": org_id, "detail": name})
+    return {"org_id": org_id, "name": name}
+
+
+@router.post("/platform/organizations/{org_id}/merge-preview")
+def preview_merge(org_id: str, body: MergeIn, admin: Identity = Depends(require_site_admin), repo=Depends(get_repo)):
+    return build_merge(repo, org_id, body.target_org_id)[0]
+
+
+@router.post("/platform/organizations/{org_id}/merge")
+def apply_merge(org_id: str, body: MergeIn, admin: Identity = Depends(require_site_admin), repo=Depends(get_repo)):
+    return merge_organizations(repo, org_id, body, admin.uid)
+
+
 def _platform_audit(repo, actor: Identity, action: str, target: str):
     repo.create("audit_logs", PLATFORM, {"actor": actor.uid, "role": "site_admin" if actor.site_admin else None,
                                          "action": action, "collection": "signup_requests", "doc_id": target,
@@ -43,7 +179,11 @@ def _request(repo, uid: str) -> dict | None:
 
 @router.get("/me")
 def me(identity: Identity = Depends(current_identity), repo=Depends(get_repo)):
-    """Lets the client route a signed-in account: site admin, approved member, pending, or rejected."""
+    """Lets the client route a signed-in account: site admin, approved member, pending, rejected, suspended."""
+    try:
+        identity = effective_identity(identity, repo)
+    except HTTPException:
+        return {**identity.model_dump(), "status": "suspended", "signup": None, "org_name": None}
     out = identity.model_dump()
     if identity.org_id:
         try:
@@ -77,29 +217,49 @@ def signup(body: SignupIn, identity: Identity = Depends(current_identity), repo=
 def list_signups(status: Literal["pending", "approved", "rejected"] | None = None,
                  admin: Identity = Depends(require_site_admin), repo=Depends(get_repo)):
     rows = repo.list("signup_requests", PLATFORM, **({"status": status} if status else {}))
+    by_name = {}
+    for org in _active_registry(repo):
+        by_name.setdefault(_norm(org["name"]), org["org_id"])
+    for r in rows:  # same-name org already exists -> suggest joining it instead of creating a duplicate
+        r["suggested_org_id"] = by_name.get(_norm(r.get("org_name", "")))
     return sorted(rows, key=lambda r: r.get("created_at", ""), reverse=True)
 
 
+class ApproveIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    org_id: str | None = None  # join this existing organization; omit to create a new one
+    role: Role | None = None   # role when joining; a new organization's applicant is always its admin
+
+
 @router.post("/platform/signups/{uid}/approve")
-def approve_signup(uid: str, admin: Identity = Depends(require_site_admin), repo=Depends(get_repo),
-                   set_claims=Depends(get_claims_setter)):
+def approve_signup(uid: str, body: ApproveIn | None = None, admin: Identity = Depends(require_site_admin),
+                   repo=Depends(get_repo), set_claims=Depends(get_claims_setter)):
+    body = body or ApproveIn()
     req = _request(repo, uid)
     if not req:
         raise HTTPException(404, "signup request not found")
     if req["status"] != "pending":
         raise HTTPException(409, f"signup is {req['status']}")
-    org_id = uuid.uuid4().hex
-    repo.create("organizations", org_id, {"name": req["org_name"], "status": "active", "behavior_scale": None,
-                                          "unit_price": None, "voucher_minutes": None}, doc_id=org_id)
-    repo.create("organization_registry", PLATFORM, {"org_id": org_id, "name": req["org_name"],
-                                                    "owner_uid": uid, "status": "active"}, doc_id=org_id)
+    if body.org_id:
+        org_id, role = body.org_id, body.role or "therapist"
+        _active_org(repo, org_id)
+    else:
+        org_id, role = uuid.uuid4().hex, "admin"
+        repo.create("organizations", org_id, {"name": req["org_name"], "status": "active", "behavior_scale": None,
+                                              "unit_price": None, "voucher_minutes": None}, doc_id=org_id)
+        repo.create("organization_registry", PLATFORM, {"org_id": org_id, "name": req["org_name"],
+                                                        "owner_uid": uid, "status": "active"}, doc_id=org_id)
     repo.create("users", org_id, {"uid": uid, "email": req.get("email"), "name": req["therapist_name"],
-                                  "role": "admin"}, doc_id=uid)
-    # The applicant becomes the org's admin (admins can also write clinical records like therapists).
-    set_claims(uid, {"org_id": org_id, "role": "admin"})
+                                  "role": role}, doc_id=uid)
+    access = {"org_id": org_id, "role": role}
+    try:
+        repo.update("account_access", PLATFORM, uid, access)
+    except NotFound:
+        repo.create("account_access", PLATFORM, access, doc_id=uid)
+    set_claims(uid, access)
     repo.update("signup_requests", PLATFORM, uid, {"status": "approved", "org_id": org_id, "decided_by": admin.uid})
     _platform_audit(repo, admin, "approve", uid)
-    return {"uid": uid, "org_id": org_id, "status": "approved"}
+    return {"uid": uid, "org_id": org_id, "role": role, "joined_existing": bool(body.org_id), "status": "approved"}
 
 
 @router.post("/platform/signups/{uid}/reject")
@@ -126,7 +286,7 @@ def _org_stats(repo, org_id: str, since: str) -> dict:
 @router.get("/platform/organizations")
 def organizations(admin: Identity = Depends(require_site_admin), repo=Depends(get_repo)):
     since = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
-    rows = repo.list("organization_registry", PLATFORM)
+    rows = _active_registry(repo)  # merged organizations are kept for audit but not listed
     return sorted(({"org_id": r["org_id"], "name": r["name"], "status": r.get("status"), "created_at": r.get("created_at"),
                     "licensed_assessments": sorted(licensed_codes(repo, r["org_id"])),
                     **_org_stats(repo, r["org_id"], since)} for r in rows), key=lambda r: r["created_at"] or "", reverse=True)
@@ -153,7 +313,7 @@ def set_licenses(org_id: str, body: LicensesIn, admin: Identity = Depends(requir
 @router.get("/platform/summary")
 def summary(admin: Identity = Depends(require_site_admin), repo=Depends(get_repo)):
     since = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
-    orgs = repo.list("organization_registry", PLATFORM)
+    orgs = _active_registry(repo)
     signups = repo.list("signup_requests", PLATFORM)
     stats = [_org_stats(repo, o["org_id"], since) for o in orgs]
     return {"organizations": len(orgs), "users": sum(s["users"] for s in stats), "children": sum(s["children"] for s in stats),

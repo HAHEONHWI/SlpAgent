@@ -33,7 +33,7 @@ function Inner({ childId }: { childId: string }) {
         </form>
       </Card>
       <div className="space-y-3 lg:col-span-2">
-        <Notice>상담 기록은 치료사가 직접 작성합니다. AI 보호자 안내문 초안은 AI 채팅(아동 선택)에서 요청할 수 있으며, 승인 대기 목록에서 검토·승인한 뒤에만 기록됩니다.</Notice>
+        <Notice>상담 기록은 치료사가 직접 작성합니다. AI 보호자 안내문 초안은 AI 대화(아동 선택)에서 요청할 수 있으며, 승인 대기 목록에서 검토·승인한 뒤에만 기록됩니다.</Notice>
         {records.error ? <ErrorNotice error={records.error} /> : !records.data?.length ? <Card><Empty>{records.isLoading ? "불러오는 중…" : "상담 기록이 없습니다."}</Empty></Card>
           : [...records.data].reverse().map((c) => (
             <Card key={c.id} title={`${c.date}${c.start && c.end ? ` ${c.start}–${c.end}` : ""}${c.minutes != null ? ` (${c.minutes}분)` : ""}`} action={<span className="text-xs text-slate-500">상담자: {c.counselor}</span>}>
