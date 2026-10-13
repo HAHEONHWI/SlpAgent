@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "./lib/auth";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
@@ -25,6 +25,7 @@ const Attendance = lazy(() => import("./pages/Attendance"));
 const Knowledge = lazy(() => import("./pages/Knowledge"));
 const Analysis = lazy(() => import("./pages/Analysis"));
 const Activities = lazy(() => import("./pages/Activities"));
+const Privacy = lazy(() => import("./pages/Privacy"));
 const Platform = lazy(() => import("./pages/Platform"));
 
 const page = (el: React.ReactNode) => <Suspense fallback={<p className="text-sm text-slate-400">불러오는 중…</p>}>{el}</Suspense>;
@@ -32,6 +33,8 @@ const page = (el: React.ReactNode) => <Suspense fallback={<p className="text-sm 
 export default function App() {
   const { ready, signedIn, logout } = useAuth();
   const me = useMe();
+  const { pathname } = useLocation();
+  if (pathname === "/privacy") return page(<Privacy />); // public: readable before sign-in or signup
   if (!ready) return null;
   if (!signedIn) return <Login />;
   if (me.isLoading) return <p className="p-6 text-sm text-slate-400">계정 확인 중…</p>;

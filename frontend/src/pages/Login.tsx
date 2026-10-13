@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { DEV_LOGIN, FIREBASE_ENABLED, useAuth } from "../lib/auth";
+import { PRIVACY_POLICY_VERSION } from "../lib/privacy";
 import BrandLogo from "../components/BrandLogo";
 import { Button, Card, Input, Label, Notice, Select } from "../components/ui";
 
@@ -9,6 +10,7 @@ export default function Login() {
   const { login, signup, devLogin } = useAuth();
   const [tab, setTab] = useState<"login" | "signup">("login");
   const [f, setF] = useState({ email: "", password: "", password2: "", org_name: "", therapist_name: "" });
+  const [agree, setAgree] = useState(false);
   const [err, setErr] = useState(""), [busy, setBusy] = useState(false);
   const [org, setOrg] = useState("demo"), [role, setRole] = useState("therapist");
   const set = (k: keyof typeof f) => (e: any) => setF({ ...f, [k]: e.target.value });
@@ -16,8 +18,9 @@ export default function Login() {
 
   const doSignup = () => run(async () => {
     if (f.password !== f.password2) throw new Error("비밀번호가 서로 다릅니다.");
+    if (!agree) throw new Error("개인정보 수집·이용에 동의해야 가입할 수 있습니다.");
     // The signup request is sent after sign-in by the approval gate, which survives this screen unmounting.
-    sessionStorage.setItem(PENDING_SIGNUP, JSON.stringify({ org_name: f.org_name.trim(), therapist_name: f.therapist_name.trim() }));
+    sessionStorage.setItem(PENDING_SIGNUP, JSON.stringify({ org_name: f.org_name.trim(), therapist_name: f.therapist_name.trim(), privacy_policy_version: PRIVACY_POLICY_VERSION }));
     if (FIREBASE_ENABLED) await signup(f.email.trim(), f.password);
     else devLogin("-", "none", f.email.split("@")[0] || "new-user");
   });
@@ -44,6 +47,10 @@ export default function Login() {
             <Label label="비밀번호 확인"><Input type="password" minLength={6} value={f.password2} onChange={set("password2")} required autoComplete="new-password" /></Label>
             <Label label="기관명"><Input value={f.org_name} onChange={set("org_name")} maxLength={80} required /></Label>
             <Label label="치료사(본인) 이름"><Input value={f.therapist_name} onChange={set("therapist_name")} maxLength={40} required /></Label>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" className="mt-1" checked={agree} onChange={(e) => setAgree(e.target.checked)} required />
+              <span>(필수) <a href="/privacy" target="_blank" rel="noopener" className="text-indigo-700 underline">개인정보처리방침</a>을 확인했으며 개인정보 수집·이용에 동의합니다. AI 기능 사용 시 입력 내용이 OpenAI(미국)로 전송될 수 있습니다.</span>
+            </label>
             <Notice>가입 후 사이트 관리자가 승인해야 사용할 수 있습니다.</Notice>
             {err && <Notice tone="red">{err}</Notice>}
             <Button className="w-full" disabled={busy}>가입 신청</Button>
@@ -59,6 +66,7 @@ export default function Login() {
           </div>
         )}
       </Card>
+      <a href="/privacy" className="mt-3 block text-center text-xs text-slate-500 underline">개인정보처리방침</a>
     </div>
   );
 }

@@ -29,6 +29,27 @@ app.add_middleware(RateLimitMiddleware, limit=get_settings().rate_limit_requests
                    window_seconds=get_settings().rate_limit_window_seconds)
 app.add_middleware(CORSMiddleware, allow_origins=get_settings().cors_origins.split(","),
                    allow_methods=["*"], allow_headers=["*"])
+class NoStoreApiResponses:
+    """API responses are per-user and must never be cached by the Firebase Hosting CDN (it would otherwise
+    cache e.g. 404s for 10 minutes across deploys). Endpoints that set Cache-Control keep their own value."""
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+
+        async def send_with_header(message):
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers", []))
+                if not any(k.lower() == b"cache-control" for k, _ in headers):
+                    headers.append((b"cache-control", b"no-store"))
+                message = {**message, "headers": headers}
+            await send(message)
+        await self.app(scope, receive, send_with_header)
+
+
+app.add_middleware(NoStoreApiResponses)
 app.add_middleware(StripApiPrefix)  # added last = outermost, so rate limiting and CORS see the real path
 for r in (children.router, records.router, plans.router, proposals.router, ai_dialogue.router, org.router,
           schedules.router, knowledge.router, analysis.router, documents.router, consultations.router, admin.router, platform.router, attendance.router):

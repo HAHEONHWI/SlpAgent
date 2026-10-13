@@ -118,3 +118,9 @@ def test_api_prefix_from_hosting_rewrite_is_stripped(client):
     assert client.get("/api/healthz").json() == {"ok": True}
     assert client.get("/api/children", headers=H()).status_code == 200
     assert client.get("/healthz").json() == {"ok": True}
+
+
+def test_api_responses_are_never_cacheable(client):
+    assert client.get("/api/healthz").headers["cache-control"] == "no-store"
+    assert client.get("/api/nope").headers["cache-control"] == "no-store"  # 404s too (CDN cached them)
+    assert client.get("/api/children", headers=H()).headers["cache-control"] == "no-store"

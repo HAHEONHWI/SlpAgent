@@ -34,7 +34,7 @@ export default function Platform() {
     <div className="min-h-screen">
       <header className="flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-2.5">
         <ShieldCheck size={18} className="text-indigo-600" /><span className="font-bold text-indigo-700">SLP Agent 사이트 관리</span>
-        <span className="ml-auto text-sm text-slate-500">{label}</span><Button variant="ghost" onClick={logout}>로그아웃</Button>
+        <a href="/privacy" target="_blank" rel="noopener" className="ml-auto text-xs text-slate-500 underline">개인정보처리방침</a><span className="text-sm text-slate-500">{label}</span><Button variant="ghost" onClick={logout}>로그아웃</Button>
       </header>
       <main className="mx-auto max-w-6xl space-y-5 p-4 md:p-6">
         <PageTitle title="전체 관리자 대시보드" sub="기관별 집계만 표시합니다. 아동 개인정보와 치료 기록은 사이트 관리자에게 보이지 않습니다." />

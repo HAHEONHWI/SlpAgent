@@ -23,9 +23,9 @@ def test_signup_waits_for_site_admin_approval(client, repo):
     assert me["status"] == "none" and me["org_id"] is None
     # pending account cannot touch clinical data
     assert client.get("/children", headers=NEW).status_code == 403
-    r = client.post("/signup", headers=NEW, json={"org_name": "히즈언어치료", "therapist_name": "김재활"})
+    r = client.post("/signup", headers=NEW, json={"org_name": "히즈언어치료", "therapist_name": "김재활", "privacy_policy_version": "2026-10-13"})
     assert r.status_code == 201
-    assert client.post("/signup", headers=NEW, json={"org_name": "x", "therapist_name": "y"}).status_code == 409
+    assert client.post("/signup", headers=NEW, json={"org_name": "x", "therapist_name": "y", "privacy_policy_version": "2026-10-13"}).status_code == 409
     assert client.get("/me", headers=NEW).json()["status"] == "pending"
 
     # only site admins can see or decide signups
@@ -49,17 +49,17 @@ def test_signup_waits_for_site_admin_approval(client, repo):
 
 
 def test_reject_then_reapply(client):
-    client.post("/signup", headers=NEW, json={"org_name": "A", "therapist_name": "B"})
+    client.post("/signup", headers=NEW, json={"org_name": "A", "therapist_name": "B", "privacy_policy_version": "2026-10-13"})
     assert client.post("/platform/signups/newbie/reject", headers=SITE, json={"reason": "기관 확인 불가"}).status_code == 200
     me = client.get("/me", headers=NEW).json()
     assert me["status"] == "rejected" and me["signup"]["reason"] == "기관 확인 불가"
-    assert client.post("/signup", headers=NEW, json={"org_name": "A2", "therapist_name": "B"}).status_code == 201
+    assert client.post("/signup", headers=NEW, json={"org_name": "A2", "therapist_name": "B", "privacy_policy_version": "2026-10-13"}).status_code == 201
     assert client.get("/me", headers=NEW).json()["status"] == "pending"
 
 
 def test_site_admin_sees_counts_not_clinical_records(client, child):
     rec = Recorder(); _with_claims(rec)
-    client.post("/signup", headers=NEW, json={"org_name": "A", "therapist_name": "B"})
+    client.post("/signup", headers=NEW, json={"org_name": "A", "therapist_name": "B", "privacy_policy_version": "2026-10-13"})
     org = client.post("/platform/signups/newbie/approve", headers=SITE).json()["org_id"]
     client.post("/children", headers=H(org, "admin", "newbie"), json={"alias": "C-1", "display_name": "실명아동", "birth_date": "2022-01-01"})
     orgs = client.get("/platform/organizations", headers=SITE).json()
@@ -75,3 +75,11 @@ def test_site_admin_sees_counts_not_clinical_records(client, child):
 
 def test_reserved_platform_namespace_is_not_an_org(client):
     assert client.get("/children", headers=H("_platform", "admin", "x")).status_code == 403
+
+
+def test_signup_requires_and_records_privacy_consent(client, repo):
+    from app.services.accounts import PLATFORM
+    assert client.post("/signup", headers=NEW, json={"org_name": "A", "therapist_name": "B"}).status_code == 422
+    assert client.post("/signup", headers=NEW, json={"org_name": "A", "therapist_name": "B", "privacy_policy_version": "2026-10-13"}).status_code == 201
+    consent = repo.get("signup_requests", PLATFORM, "newbie")["privacy_consent"]
+    assert consent["version"] == "2026-10-13" and consent["agreed_at"]

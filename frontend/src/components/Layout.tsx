@@ -45,6 +45,7 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
+        <a href="/privacy" target="_blank" rel="noopener" className="border-t border-slate-100 px-4 py-3 text-xs text-slate-500 hover:text-slate-800">개인정보처리방침</a>
       </aside>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-10 flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white/90 px-2 py-2.5 backdrop-blur sm:gap-3 sm:px-4">

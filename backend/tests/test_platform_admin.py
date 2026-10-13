@@ -16,7 +16,7 @@ class Recorder:
 
 
 def _signup(client, uid, org_name, name="치료사"):
-    assert client.post("/signup", headers=H("-", "none", uid), json={"org_name": org_name, "therapist_name": name}).status_code == 201
+    assert client.post("/signup", headers=H("-", "none", uid), json={"org_name": org_name, "therapist_name": name, "privacy_policy_version": "2026-10-13"}).status_code == 201
 
 
 def _new_org(client, uid, org_name):

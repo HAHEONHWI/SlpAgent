@@ -7,6 +7,7 @@ import { errText } from "../lib/hooks";
 import BrandLogo from "../components/BrandLogo";
 import { Badge, Button, Card, Input, Label, Notice } from "../components/ui";
 import { PENDING_SIGNUP } from "./Login";
+import { PRIVACY_POLICY_VERSION } from "../lib/privacy";
 
 /** Shown to signed-in accounts that are not yet an approved organization member. */
 export default function SignupGate({ me }: { me: Me }) {
@@ -16,7 +17,7 @@ export default function SignupGate({ me }: { me: Me }) {
   const [f, setF] = useState({ org_name: stored?.org_name ?? me.signup?.org_name ?? "", therapist_name: stored?.therapist_name ?? me.signup?.therapist_name ?? "" });
   const recheck = async () => { await refresh(); await qc.invalidateQueries({ queryKey: ["me"] }); };
   const submit = useMutation({
-    mutationFn: (body: { org_name: string; therapist_name: string }) => api("/signup", { method: "POST", json: body }),
+    mutationFn: (body: { org_name: string; therapist_name: string; privacy_policy_version?: string }) => api("/signup", { method: "POST", json: body }),
     onSuccess: () => { sessionStorage.removeItem(PENDING_SIGNUP); qc.invalidateQueries({ queryKey: ["me"] }); },
   });
   // Finish a signup started on the login screen (the account now exists, the request does not yet).
@@ -47,10 +48,14 @@ export default function SignupGate({ me }: { me: Me }) {
           </div>
         )}
         {(me.status === "none" || me.status === "rejected") && (
-          <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); submit.mutate({ org_name: f.org_name.trim(), therapist_name: f.therapist_name.trim() }); }}>
+          <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); submit.mutate({ org_name: f.org_name.trim(), therapist_name: f.therapist_name.trim(), privacy_policy_version: PRIVACY_POLICY_VERSION }); }}>
             {me.status === "rejected" && <Notice tone="red">가입이 거절되었습니다. 사유: {me.signup?.reason}. 내용을 고쳐 다시 신청할 수 있습니다.</Notice>}
             <Label label="기관명"><Input value={f.org_name} onChange={(e) => setF({ ...f, org_name: e.target.value })} maxLength={80} required /></Label>
             <Label label="치료사(본인) 이름"><Input value={f.therapist_name} onChange={(e) => setF({ ...f, therapist_name: e.target.value })} maxLength={40} required /></Label>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" className="mt-1" required />
+              <span>(필수) <a href="/privacy" target="_blank" rel="noopener" className="text-indigo-700 underline">개인정보처리방침</a>에 동의합니다.</span>
+            </label>
             {submit.error && <Notice tone="red">{errText(submit.error)}</Notice>}
             <Button disabled={submit.isPending}>{submit.isPending ? "신청 중…" : "가입 신청"}</Button>
           </form>

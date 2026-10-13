@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 from ..auth import Identity, Role, current_identity, effective_identity, require_site_admin
 from ..deps import get_repo
-from ..repo.base import NotFound
+from ..repo.base import NotFound, now_iso
 from ..services.accounts import PLATFORM, get_claims_setter, get_account_directory
 from ..services.assessment_defs import DEFS, licensed_codes
 from ..services.organization_merge import MergeIn, build_merge, merge_organizations
@@ -19,6 +19,7 @@ router = APIRouter(tags=["platform"])
 class SignupIn(BaseModel):
     org_name: str = Field(min_length=1, max_length=80)
     therapist_name: str = Field(min_length=1, max_length=40)
+    privacy_policy_version: str = Field(min_length=1, max_length=20, description="version of the privacy policy the applicant agreed to")
 
 
 class LicensesIn(BaseModel):
@@ -202,7 +203,8 @@ def signup(body: SignupIn, identity: Identity = Depends(current_identity), repo=
     if identity.org_id or identity.site_admin:
         raise HTTPException(409, "account already belongs to an organization")
     data = {"uid": identity.uid, "email": identity.email, "org_name": body.org_name.strip(),
-            "therapist_name": body.therapist_name.strip(), "status": "pending", "reason": None}
+            "therapist_name": body.therapist_name.strip(), "status": "pending", "reason": None,
+            "privacy_consent": {"version": body.privacy_policy_version, "agreed_at": now_iso()}}
     existing = _request(repo, identity.uid)
     if existing and existing["status"] == "pending":
         raise HTTPException(409, "signup already pending approval")
