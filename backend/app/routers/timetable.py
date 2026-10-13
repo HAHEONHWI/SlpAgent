@@ -126,7 +126,8 @@ def _validate_entry(repo, p: Principal, body: EntryIn, entry_id: str | None) -> 
 def get_timetable(p: Principal = Depends(current_principal), repo=Depends(get_repo)):
     cfg = _config(repo, p.org_id)
     am, pm = slots(cfg)
-    entries = sorted(repo.list("timetable_entries", p.org_id), key=lambda e: (e["slot"], e["day"], e.get("valid_from") or ""))
+    gone = {c["id"] for c in repo.list("children", p.org_id) if c.get("archived")}
+    entries = sorted([e for e in repo.list("timetable_entries", p.org_id) if e.get("child_id") not in gone], key=lambda e: (e["slot"], e["day"], e.get("valid_from") or ""))
     return {"config": cfg.model_dump(), "morning": am, "afternoon": pm, "entries": entries}
 
 
@@ -190,7 +191,8 @@ def generate(body: GenerateIn, p: Principal = Depends(require_write), repo=Depen
     cfg = _config(repo, p.org_id)
     am, pm = slots(cfg)
     names = {t.id: t.name for t in cfg.teachers}
-    entries = [e for e in repo.list("timetable_entries", p.org_id)]
+    gone = {c["id"] for c in repo.list("children", p.org_id) if c.get("archived")}
+    entries = [e for e in repo.list("timetable_entries", p.org_id) if e.get("child_id") not in gone]
     existing = [s for s in repo.list("schedules", p.org_id) if body.start.isoformat() <= s["date"] <= body.end.isoformat()]
     made = {(s.get("timetable_entry_id"), s["date"]) for s in existing if s.get("timetable_entry_id")}
     created, skipped, unlinked = 0, [], 0

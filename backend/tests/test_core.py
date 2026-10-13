@@ -71,3 +71,28 @@ def test_children_list_includes_current_age_months(client, child):
     from app.routers.children import age_months
     row = client.get("/children", headers=H()).json()[0]
     assert row["age_months"] == age_months("2022-03-15") and row["age_months"] > 0
+
+
+def test_child_trash_restore_and_admin_purge(client, child):
+    cid = child["id"]
+    future = client.post("/schedules", headers=H(), json={"child_id": cid, "date": "2099-01-05", "start": "10:00", "end": "10:40", "therapist": "김"}).json()
+    client.put("/timetable/config", headers=H(role="admin"), json={"teachers": [{"id": "t", "name": "김", "short": "김", "color": "#2563eb"}]})
+    client.post("/timetable/entries", headers=H(), json={"day": 1, "slot": "09:00", "teacher_id": "t", "child_id": cid})
+    assert client.post(f"/children/{cid}/archive", headers=H(role="assistant")).status_code == 403
+    assert client.post(f"/children/{cid}/purge", headers=H(role="admin"), json={"confirm_name": "테스트아동"}).status_code == 409  # trash first
+    assert client.post(f"/children/{cid}/archive", headers=H()).status_code == 200
+    assert all(c["id"] != cid for c in client.get("/children", headers=H()).json())
+    assert [c["id"] for c in client.get("/children/archived", headers=H()).json()] == [cid]
+    assert client.get("/children/archived", headers=H("orgB")).json() == []
+    assert client.get("/timetable", headers=H()).json()["entries"] == []  # hidden from the grid
+    assert next(s for s in client.get("/schedules", headers=H()).json() if s["id"] == future["id"])["status"] == "cancelled"
+    assert client.post(f"/children/{cid}/restore", headers=H()).json()["archived"] is False
+    assert len(client.get("/timetable", headers=H()).json()["entries"]) == 1
+    client.post(f"/children/{cid}/archive", headers=H())
+    assert client.post(f"/children/{cid}/purge", headers=H(), json={"confirm_name": "테스트아동"}).status_code == 403  # admin only
+    assert client.post(f"/children/{cid}/purge", headers=H(role="admin"), json={"confirm_name": "다른이름"}).status_code == 422
+    assert client.post(f"/children/{cid}/purge", headers=H("orgB", "admin"), json={"confirm_name": "테스트아동"}).status_code == 404
+    assert client.post(f"/children/{cid}/purge", headers=H(role="admin"), json={"confirm_name": "테스트아동"}).status_code == 200
+    assert client.get(f"/children/{cid}", headers=H()).status_code == 404
+    assert client.get("/children/archived", headers=H()).json() == []
+    assert all(s["child_id"] != cid for s in client.get("/schedules", headers=H()).json())
