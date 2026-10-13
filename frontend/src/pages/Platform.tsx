@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ShieldCheck } from "lucide-react";
 import { api } from "../lib/api";
@@ -116,6 +116,13 @@ function Orgs({ orgs }: { orgs: Org[] }) {
   const [rename, setRename] = useState<{ org: string; name: string } | null>(null);
   const [lic, setLic] = useState<{ org: string; codes: string[] } | null>(null);
   const [merge, setMerge] = useState<{ source: Org; target: string; preview?: Preview; confirm: string } | null>(null);
+  const mergePanel = useRef<HTMLDivElement>(null);
+  // The panel renders below the (possibly long) table: bring it into view and focus the target picker.
+  useEffect(() => {
+    if (!merge?.source) return;
+    mergePanel.current?.scrollIntoView({ block: "center" });
+    mergePanel.current?.querySelector("select")?.focus({ preventScroll: true });
+  }, [merge?.source?.org_id]); // eslint-disable-line react-hooks/exhaustive-deps
   const saveName = useMutation({ mutationFn: (r: { org: string; name: string }) => api(`/platform/organizations/${r.org}`, { method: "PUT", json: { name: r.name } }),
     onSuccess: () => { setRename(null); refresh(); } });
   const saveLic = useMutation({ mutationFn: (e: { org: string; codes: string[] }) => api(`/platform/organizations/${e.org}/licenses`, { method: "PUT", json: { codes: e.codes } }),
@@ -163,6 +170,7 @@ function Orgs({ orgs }: { orgs: Org[] }) {
       </Card>
 
       {merge && (
+        <div ref={mergePanel}>
         <Card title={`기관 병합: “${merge.source.name}”을 다른 기관으로`} className="border-amber-300">
           <div className="space-y-3">
             <Notice>병합하면 이 기관의 <b>모든 사용자·아동·기록·문서·대화</b>가 대상 기관으로 옮겨지고, 이 기관은 닫힙니다. <b>되돌릴 수 없습니다.</b> 기관 설정은 대상 기관 것이 유지되고, 사용 허가 검사는 대상 기관 기준입니다.</Notice>
@@ -183,18 +191,19 @@ function Orgs({ orgs }: { orgs: Org[] }) {
                     <div className="flex flex-wrap gap-1">{Object.entries(merge.preview.counts).map(([k, v]) => <Badge key={k}>{COL[k] ?? k} {v}</Badge>)}</div>
                   ) : <p className="text-slate-500">옮길 기록이 없습니다.</p>}
                 </div>
-                <label className="block text-sm">확인을 위해 원본 기관 ID <code className="rounded bg-slate-100 px-1 font-mono">{merge.source.org_id}</code> 를 입력하세요.
+                <label className="block text-sm">확인을 위해 병합될(사라질) 기관의 ID 앞 8자리 <code className="rounded bg-slate-100 px-1 font-mono">{merge.source.org_id.slice(0, 8)}</code> 를 입력하세요.
                   <Input className="mt-1 font-mono" value={merge.confirm} onChange={(e) => setMerge({ ...merge, confirm: e.target.value.trim() })} autoComplete="off" spellCheck={false} />
                 </label>
                 <div className="flex gap-2">
-                  <Button variant="danger" disabled={merge.confirm !== merge.source.org_id || apply.isPending}
-                    onClick={() => apply.mutate({ source: merge.source.org_id, target: merge.target, token: merge.preview!.preview_token, confirm: merge.confirm })}>
+                  <Button variant="danger" disabled={merge.confirm !== merge.source.org_id.slice(0, 8) || apply.isPending}
+                    onClick={() => apply.mutate({ source: merge.source.org_id, target: merge.target, token: merge.preview!.preview_token, confirm: merge.source.org_id })}>
                     {apply.isPending ? "병합 중…" : "병합 실행"}</Button>
                   <Button variant="ghost" onClick={() => setMerge(null)}>취소</Button>
                 </div>
               </>)}
           </div>
-        </Card>)}
+        </Card>
+        </div>)}
       {err && <Notice tone="red">{errText(err)}</Notice>}
     </div>
   );
