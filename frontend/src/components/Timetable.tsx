@@ -16,6 +16,7 @@ type Cell = { day: number; slot: string; teacher: Teacher };
 const DAY = ["", "월", "화", "수", "목", "금", "토", "일"];
 const PALETTE = ["#2563eb", "#9f1239", "#7e22ce", "#ea580c", "#15803d", "#0f766e", "#be185d", "#a16207", "#1e40af", "#4d7c0f"];
 const HATCH = { backgroundImage: "repeating-linear-gradient(135deg, #cbd5e1 0 1px, transparent 1px 7px)", backgroundColor: "#e2e8f0" };
+const WEEKEND = { backgroundColor: "#d4d4d8" }; // Saturday/Sunday columns are shaded like the paper sheet
 const iso = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const monday = (s: string) => { const d = new Date(s + "T00:00:00"); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d; };
 const plus = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
@@ -47,6 +48,10 @@ export default function Timetable() {
   if (!tt.data) return <Notice tone="red">{errText(tt.error)}</Notice>;
   const { config: cfg, morning, afternoon } = tt.data;
   const closed = new Set(cfg.closed);
+  // Text lines down the page: a row is as tall as its fullest cell (two children sharing a cell by period = 2 lines).
+  const printRows = [...morning, ...afternoon].reduce((n, slot) => n + cfg.teachers.reduce((m, t) =>
+    m + Math.max(1, ...cfg.days.map((d) => byCell.get(`${d}|${slot}|${t.id}`)?.length ?? 0)), 0), 0) + 2; // + header + lunch
+  const fontPt = Math.max(6, Math.min(12, Math.round((280 / printRows) * 2.83 * 0.6 * 10) / 10)); // row height (mm→pt) x 0.6
   const isClosed = (day: number, slot: string, t: string) => closed.has(`${day}|${slot}|*`) || closed.has(`${day}|${slot}|${t}`);
 
   const block = (slot: string, last: boolean) => cfg.teachers.map((t, i) => (
@@ -57,7 +62,7 @@ export default function Timetable() {
         const off = isClosed(day, slot, t.id);
         const items = byCell.get(`${day}|${slot}|${t.id}`) ?? [];
         return (
-          <td key={day} style={off ? HATCH : undefined}
+          <td key={day} style={off ? HATCH : day >= 6 ? WEEKEND : undefined}
             className={`h-7 border border-slate-300 px-1 text-center text-[13px] leading-tight ${edit ? "cursor-pointer hover:outline hover:outline-2 hover:outline-indigo-400" : ""}`}
             onClick={edit ? () => setCell({ day, slot, teacher: t }) : undefined}>
             {items.map((e) => (
@@ -86,12 +91,20 @@ export default function Timetable() {
       ) : (
         <>
           {edit && <p className="text-xs text-indigo-700 print:hidden">칸을 누르면 아동을 넣거나 뺄 수 있어요.</p>}
-          <div className="overflow-x-auto rounded-lg border border-slate-300 bg-white">
+          {/* Print: one A4 portrait page, the grid stretched to fill it; font scales with the number of rows. */}
+          <style>{`@media print {
+            @page { size: A4 portrait; margin: 8mm; }
+            html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .tt-sheet { height: 280mm; overflow: hidden !important; border-radius: 0; break-inside: avoid; }
+            .tt-sheet table { height: 100%; min-width: 0 !important; table-layout: fixed; font-size: ${fontPt}pt; }
+            .tt-sheet td, .tt-sheet th { height: auto !important; padding: 0 2px !important; font-size: inherit !important; line-height: 1.1 !important; }
+          }`}</style>
+          <div className="tt-sheet overflow-x-auto rounded-lg border border-slate-300 bg-white">
             <table className="w-full min-w-[720px] border-collapse">
               <thead>
                 <tr className="bg-yellow-100 text-sm">
                   <th className="w-16 border border-slate-300 py-1" /><th className="w-12 border border-slate-300 py-1">담당</th>
-                  {cfg.days.map((d) => <th key={d} className="border border-slate-300 py-1">{DAY[d]}</th>)}
+                  {cfg.days.map((d) => <th key={d} className="border border-slate-300 py-1" style={d >= 6 ? WEEKEND : undefined}>{DAY[d]}</th>)}
                 </tr>
               </thead>
               <tbody>
