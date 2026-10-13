@@ -54,7 +54,7 @@ export default function RecordingConsultation({ childId }: { childId: string }) 
             <Label label="종료 (선택)"><Input type="time" value={form.end} onChange={(e) => setForm({ ...form, end: e.target.value })} /></Label>
           </div>
           <Label label="상담자"><Input value={form.counselor} onChange={(e) => setForm({ ...form, counselor: e.target.value })} required /></Label>
-          <p className="text-xs text-slate-500">녹음은 Groq(미국)에서 받아쓰고 OpenAI(미국)에서 요약합니다. 원본 녹음은 서비스에 저장하지 않습니다. 보호자에게 녹음과 처리에 대한 동의를 받은 녹음만 올려 주세요.</p>
+          <p className="text-xs text-slate-500">녹음은 Groq(미국)에서 받아쓰고(장애 시 OpenRouter·Google, 데이터 비보관 조건) OpenAI(미국)에서 요약합니다. 원본 녹음은 서비스에 저장하지 않습니다. 보호자에게 녹음과 처리에 대한 동의를 받은 녹음만 올려 주세요.</p>
           {upload.error && <Notice tone="red">{errText(upload.error)}</Notice>}
           <Button disabled={!file || tooBig || upload.isPending}>{upload.isPending ? "받아쓰고 요약하는 중… (1분 이내)" : "받아쓰기 · 요약 초안 만들기"}</Button>
         </form>
