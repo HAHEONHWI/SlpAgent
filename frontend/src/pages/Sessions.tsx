@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { errText, useCreate, useRecords } from "../lib/hooks";
 import RequireChild from "../components/RequireChild";
+import RecordingConsultation from "../components/RecordingConsultation";
+import RecordingRecords from "../components/RecordingRecords";
 import { Badge, Button, Card, Empty, Input, Label, Notice, PageTitle } from "../components/ui";
 
 type A = { name: string; correct: string; trials: string; prompt_level: string };
@@ -36,6 +38,8 @@ function Inner({ childId }: { childId: string }) {
         </form>
       </Card>
       <div className="space-y-3 lg:col-span-2">
+        <RecordingConsultation childId={childId} defaultKind="session" />
+        <RecordingRecords childId={childId} kind="session" />
         <Notice>기록문 초안은 AI 대화(아동 선택)에서 요청하면 승인 대기 초안으로 생성됩니다. 관찰되지 않은 내용은 포함되지 않아야 하니 승인 전 확인하세요.</Notice>
         {!list.data?.length ? <Card><Empty>회기 기록이 없습니다.</Empty></Card> : [...list.data].reverse().map((s) => (
           <Card key={s.id} title={`${s.date} ${s.start}–${s.end} (${s.minutes}분)`} action={<Badge tone={s.status === "completed" ? "green" : "slate"}>{s.status}</Badge>}>

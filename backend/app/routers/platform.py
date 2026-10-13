@@ -330,7 +330,7 @@ class SttSettingsIn(BaseModel):
     fallback_enabled: bool
     monthly_fallback_cap_usd: float = Field(ge=0, le=10000)
     chunk_minutes: float = Field(ge=3, le=10)
-    retain_original_days: int = Field(ge=0, le=365)
+    retain_original_days: int = Field(ge=0, le=30)  # the bucket lifecycle deletes originals after 30 days regardless
 
 
 @router.get("/platform/stt/settings")

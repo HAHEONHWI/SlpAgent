@@ -79,6 +79,16 @@ def settings(**kw):
     return NS(**{**base, **kw})
 
 
+@pytest.fixture(autouse=True)
+def fixed_clock(monkeypatch):
+    """Quota windows depend on the time of day; pin it so results do not change near the top of the hour."""
+    from datetime import datetime, timezone
+    now = datetime(2026, 10, 13, 10, 0, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(jobs, "_now", lambda: now)
+    monkeypatch.setattr(budget, "_now", lambda: now)
+    return now
+
+
 @pytest.fixture
 def deps(repo, tmp_path):
     d = jobs.Deps(repo, LocalStore(str(tmp_path / "store")), RecordingQueue(), settings(), groq=FakeGroq(), fallback=None, llm=FakeLlm())
@@ -366,3 +376,14 @@ def test_site_admin_stt_settings_and_stats_contain_no_content(client, repo, chil
 
 def test_internal_step_requires_queue_configuration(client):
     assert client.post("/internal/stt/step", json={"org_id": "orgA", "job_id": "x", "step": 1}).status_code == 404
+
+
+def test_compact_sources_are_not_inflated():
+    phone = audio.Probe(duration=600, codec="aac", channels=1, sample_rate=44100, bit_rate=33_000, format_name="mov")
+    assert not audio.needs_reencode(phone, 48) and audio.chunk_kbps(phone, 48) == 40   # cut directly, 40 kbps chunks
+    wav = audio.Probe(duration=600, codec="pcm_s16le", channels=1, sample_rate=16000, bit_rate=256_000, format_name="wav")
+    assert audio.needs_reencode(wav, 48) and audio.chunk_kbps(wav, 48) == 48
+    stereo = audio.Probe(duration=600, codec="aac", channels=2, sample_rate=48000, bit_rate=128_000, format_name="mov")
+    assert audio.needs_reencode(stereo, 48)
+    tiny = audio.Probe(duration=600, codec="mp3", channels=1, sample_rate=8000, bit_rate=16_000, format_name="mp3")
+    assert audio.chunk_kbps(tiny, 48) == audio.MIN_KBPS  # floor protects recognition quality

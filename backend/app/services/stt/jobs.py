@@ -116,14 +116,14 @@ def prepare(d: Deps, org: str, job: dict) -> None:
         info = audio.probe(src)
         if info.duration > s.stt_max_minutes * 60:
             return _fail(d, org, jid, "too_long", f"녹음은 {s.stt_max_minutes}분 이하만 처리할 수 있습니다.")
-        kbps = s.stt_bitrate_kbps
+        kbps = audio.chunk_kbps(info, s.stt_bitrate_kbps)
         work = Path(tmp) / "work.mp3"
-        reencode = audio.needs_reencode(info, kbps)
+        reencode = audio.needs_reencode(info, s.stt_bitrate_kbps)
         if reencode:
             audio.compress(src, work, kbps)
         else:
-            work = src
-        src_size, work_size = src.stat().st_size, work.stat().st_size
+            work = src  # already compact: cut chunks straight from the original
+        src_size = src.stat().st_size
         cuts = audio.plan_cuts(info.duration, audio.silences(work), chunk_seconds)
         for i, (a, b) in enumerate(zip(cuts, cuts[1:])):
             start = max(0.0, a - s.stt_overlap_seconds) if i else 0.0  # overlap so no word is cut at a boundary
@@ -137,6 +137,7 @@ def prepare(d: Deps, org: str, job: dict) -> None:
                                               "start": start, "key": key, "size": part.stat().st_size, "kbps": kbps,
                                               "status": "pending", "attempts": 0, "next_try_at": None}, doc_id=f"{jid}-{i:03d}")
         part.unlink(missing_ok=True)
+    work_size = sum(c["size"] for c in d.repo.list("stt_chunks", org, job_id=jid))  # what is actually sent to STT
     _set(d, org, jid, status="transcribing", duration_seconds=round(info.duration, 1), original_size=src_size,
          compressed_size=work_size, reencoded=reencode, bitrate_kbps=kbps, chunk_count=len(cuts) - 1, chunks_done=0,
          source_format={"codec": info.codec, "channels": info.channels, "sample_rate": info.sample_rate, "bit_rate": info.bit_rate})

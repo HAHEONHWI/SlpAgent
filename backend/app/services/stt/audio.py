@@ -53,10 +53,22 @@ def probe(path: Path) -> Probe:
                  format_name=info["format"].get("format_name", ""))
 
 
+MIN_KBPS = 32  # below this, speech recognition starts to suffer
+
+
 def needs_reencode(p: Probe, target_kbps: int) -> bool:
-    """Skip re-encoding when the source is already a compact mono MP3 at <=16 kHz near the target bitrate."""
-    return not (p.codec == "mp3" and p.channels == 1 and p.sample_rate <= 16000
-                and p.bit_rate is not None and p.bit_rate <= (target_kbps + 16) * 1000)
+    """A full compressed copy is only worth making when the source is bigger than the target (stereo or a high
+    bitrate). Already-compact mono sources (e.g. 32 kbps phone AAC) are cut into chunks directly instead."""
+    return not (p.channels == 1 and p.bit_rate is not None and p.bit_rate <= (target_kbps + 16) * 1000)
+
+
+def chunk_kbps(p: Probe, target_kbps: int) -> int:
+    """Never encode chunks at a higher bitrate than the source carries (that only inflates them), but keep a floor
+    so recognition quality does not suffer."""
+    if p.bit_rate is None:
+        return target_kbps
+    source = -(-p.bit_rate // 8000) * 8  # round up to a multiple of 8 kbps
+    return max(MIN_KBPS, min(target_kbps, source))
 
 
 def compress(src: Path, dst: Path, kbps: int) -> None:

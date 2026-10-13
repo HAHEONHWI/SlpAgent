@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useCreate, useRecords } from "../lib/hooks";
 import RequireChild from "../components/RequireChild";
 import RecordingConsultation from "../components/RecordingConsultation";
+import RecordingRecords from "../components/RecordingRecords";
 import { Badge, Button, Card, Empty, ErrorNotice, Input, Label, Notice, PageTitle, Textarea } from "../components/ui";
 
 type Consultation = { id: string; date: string; start: string | null; end: string | null; minutes: number | null; counselor: string; participants: string[]; topics: string[]; summary: string; guidance_given: string | null; follow_up: string | null; created_at: string;
@@ -35,7 +36,8 @@ function Inner({ childId }: { childId: string }) {
         </form>
       </Card>
       <div className="space-y-3 lg:col-span-2">
-        <RecordingConsultation childId={childId} />
+        <RecordingConsultation childId={childId} defaultKind="consultation" />
+        <RecordingRecords childId={childId} kind="consultation" />
         <Notice>상담 기록은 치료사가 직접 쓰거나, 녹음 파일에서 만든 초안을 검토·승인해 저장합니다. AI 초안은 승인 전까지 기록되지 않습니다.</Notice>
         {records.error ? <ErrorNotice error={records.error} /> : !records.data?.length ? <Card><Empty>{records.isLoading ? "불러오는 중…" : "상담 기록이 없습니다."}</Empty></Card>
           : [...records.data].reverse().map((c) => (
