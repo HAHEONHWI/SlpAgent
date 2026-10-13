@@ -204,11 +204,12 @@ function Setup({ cfg, onDone }: { cfg: Config; onDone: () => void }) {
         </div>
         <div>
           <p className="mb-1 text-xs font-medium text-slate-600">담당 교사 (시간마다 이 순서로 줄이 생겨요)</p>
+          {c.teachers.length > 0 && <div className="mb-1 flex gap-2 text-[11px] text-slate-500"><span className="w-20 text-center">약칭 (표에 표시)</span><span className="w-40">이름</span><span>색</span></div>}
           <div className="space-y-2">
             {c.teachers.map((t, i) => (
               <div key={t.id} className="flex flex-wrap items-center gap-2">
-                <Input className="w-16 text-center font-bold" style={{ color: t.color }} value={t.short} maxLength={4} onChange={(e) => setT(i, { short: e.target.value })} aria-label="약칭" />
-                <Input className="w-32" value={t.name} maxLength={20} onChange={(e) => setT(i, { name: e.target.value })} aria-label="이름" />
+                <div className="w-20 shrink-0"><Input className="text-center font-bold" style={{ color: t.color }} value={t.short} maxLength={4} placeholder="약칭" onChange={(e) => setT(i, { short: e.target.value })} aria-label="약칭 (표에 표시)" /></div>
+                <div className="w-40 shrink-0"><Input value={t.name} maxLength={20} placeholder="이름" onChange={(e) => setT(i, { name: e.target.value })} onBlur={() => !t.short.trim() && t.name.trim() && setT(i, { short: t.name.trim().slice(0, 1) })} aria-label="이름" /></div>
                 <div className="flex gap-1">{PALETTE.map((p) => <button type="button" key={p} aria-label={`색 ${p}`} onClick={() => setT(i, { color: p })} className={`h-5 w-5 rounded-full ${t.color === p ? "ring-2 ring-slate-900 ring-offset-1" : ""}`} style={{ backgroundColor: p }} />)}</div>
                 <div className="ml-auto flex gap-1">
                   <Button type="button" variant="ghost" disabled={i === 0} onClick={() => move(i, -1)} aria-label="위로">↑</Button>
