@@ -5,3 +5,4 @@ app/data/assessments/
 tests/
 __pycache__/
 .pytest_cache/
+.venv312/

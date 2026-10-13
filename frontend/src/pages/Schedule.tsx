@@ -31,7 +31,7 @@ export default function Schedule() {
             <Button disabled={create.isPending}>등록</Button>
           </form>
         </Card>
-        <Card title="일정 목록" className="lg:col-span-2" action={<Input type="month" className="w-40" value={month} onChange={(e) => setMonth(e.target.value)} />}>
+        <Card title="일정 목록" className="lg:col-span-2" action={<div className="w-44 shrink-0"><Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} aria-label="월" /></div>}>
           {!list.data?.length ? <Empty>이 달에 등록된 일정이 없습니다.</Empty> : (
             <Table head={["날짜", "시간", "아동", "치료사", "상태", ""]}>
               {list.data.map((s) => (

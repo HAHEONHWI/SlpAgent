@@ -21,6 +21,7 @@ const Voucher = lazy(() => import("./pages/Voucher"));
 const Parents = lazy(() => import("./pages/Parents"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Schedule = lazy(() => import("./pages/Schedule"));
+const Attendance = lazy(() => import("./pages/Attendance"));
 const Knowledge = lazy(() => import("./pages/Knowledge"));
 const Analysis = lazy(() => import("./pages/Analysis"));
 const Activities = lazy(() => import("./pages/Activities"));
@@ -56,6 +57,7 @@ export default function App() {
         <Route path="voucher" element={page(<Voucher />)} />
         <Route path="knowledge" element={page(<Knowledge />)} />
         <Route path="schedule" element={page(<Schedule />)} />
+        <Route path="attendance" element={page(<Attendance />)} />
         <Route path="settings" element={page(<Settings />)} />
         <Route path="*" element={<Navigate to="/" />} />
       </Route>

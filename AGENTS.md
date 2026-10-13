@@ -39,6 +39,7 @@ Build banks locally with `./backend/.venv/bin/python backend/scripts/build_asses
 - Reference text ingestion to a remote repository requires `--allow-reference-text-upload`; OpenAI embeddings also require `OPENAI_ALLOW_REFERENCE_EMBEDDING_UPLOAD=true`. Default is local keyword retrieval.
 - Scope every read and write by `organization_id`; validate child ownership through `Principal` before child data access. Record writes in `audit_logs`.
 - Preserve the existing tests and add pytest coverage for each new behavior. Do not edit `frontend/`.
+- Production runs Python 3.12 (eager annotation evaluation); the local `.venv` may be newer. Before any deploy, run `cd backend && .venv312/bin/python -m pytest -q` (create with `uv venv --python 3.12 .venv312 && uv pip install --python .venv312/bin/python -r requirements.txt`).
 - Keep copyrighted source and extraction local. Do not commit, externally upload, or publicly serve `reference-docs/`, `extracted/`, or `backend/app/data/assessments/` (item banks contain licensed item text). Tests that need real banks must skip when they are absent; use synthetic fixtures otherwise.
 
 ## Git

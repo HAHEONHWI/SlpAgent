@@ -1,3 +1,6 @@
+# Postponed evaluation: the Protocol defines a method named `list`, which would otherwise shadow the builtin
+# in later annotations and crash at import on Python 3.12 (production).
+from __future__ import annotations
 from typing import Any, Protocol
 
 

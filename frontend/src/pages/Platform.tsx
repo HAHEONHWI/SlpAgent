@@ -212,7 +212,7 @@ function Accounts({ orgs }: { orgs: Org[] }) {
   const status = useMutation({ mutationFn: ({ uid, disabled }: { uid: string; disabled: boolean }) => api(`/platform/accounts/${uid}/status`, { method: "PUT", json: { disabled } }), onSuccess: refresh });
   const rows = (accounts.data ?? []).filter((a) => !q || `${a.email} ${a.name} ${a.org_name}`.toLowerCase().includes(q.toLowerCase()));
   return (
-    <Card title={`계정 (${accounts.data?.length ?? 0})`} action={<Input className="w-56" placeholder="이메일·이름·기관 검색" value={q} onChange={(e) => setQ(e.target.value)} />}>
+    <Card title={`계정 (${accounts.data?.length ?? 0})`} action={<div className="w-60 shrink-0"><Input placeholder="이메일·이름·기관 검색" value={q} onChange={(e) => setQ(e.target.value)} aria-label="계정 검색" /></div>}>
       {accounts.isLoading ? <p className="text-sm text-slate-400">불러오는 중…</p> : !rows.length ? <Empty>계정이 없습니다.</Empty> : (
         <Table head={["계정", "소속 기관", "역할", "상태", ""]}>
           {rows.map((a) => {

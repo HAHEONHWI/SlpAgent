@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { Bell, BookOpen, Brain, CalendarDays, ClipboardList, FileText, HeartHandshake, LayoutDashboard, LineChart, ListChecks, NotebookPen, Settings, Sparkles, Stethoscope, Users, Library, LogOut } from "lucide-react";
+import { Bell, BookOpen, Brain, CalendarDays, ClipboardList, FileText, HeartHandshake, LayoutDashboard, LineChart, ListChecks, NotebookPen, Settings, Sparkles, Stethoscope, Users, Library, LogOut , UserCheck } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useChild } from "../lib/child";
 import { useMe } from "../lib/me";
@@ -23,6 +23,7 @@ const MENU: { to: string; label: string; icon: typeof LayoutDashboard; soon?: bo
   { to: "/voucher", label: "바우처·문서 생성", icon: FileText },
   { to: "/knowledge", label: "AI 지식자료실", icon: Library },
   { to: "/schedule", label: "일정 관리", icon: CalendarDays },
+  { to: "/attendance", label: "출결 관리", icon: UserCheck },
   { to: "/settings", label: "기관 설정", icon: Settings },
 ];
 

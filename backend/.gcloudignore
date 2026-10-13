@@ -11,3 +11,4 @@ __pycache__/
 app/data/assessments/
 reference-docs/
 extracted/
+.venv312/
