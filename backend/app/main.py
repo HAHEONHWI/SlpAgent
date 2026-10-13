@@ -1,9 +1,10 @@
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from .auth import require_site_admin
 from .config import get_settings
 from .repo.base import NotFound
-from .routers import admin, analysis, attendance, recordings, chat as ai_dialogue, children, consultations, documents, knowledge, org, plans, platform, proposals, records, schedules, timetable
+from .routers import admin, analysis, attendance, recordings, chat as ai_dialogue, children, consultations, documents, knowledge, org, plans, platform, proposals, records, schedules, timetable, voucher_doc
 from .rate_limit import RateLimitMiddleware
 
 # API docs (Swagger UI /docs, /openapi.json) are for development; production does not expose them.
@@ -52,13 +53,19 @@ class NoStoreApiResponses:
 app.add_middleware(NoStoreApiResponses)
 app.add_middleware(StripApiPrefix)  # added last = outermost, so rate limiting and CORS see the real path
 for r in (children.router, records.router, plans.router, proposals.router, ai_dialogue.router, org.router,
-          schedules.router, knowledge.router, analysis.router, documents.router, consultations.router, admin.router, platform.router, attendance.router, recordings.router, timetable.router):
+          schedules.router, knowledge.router, analysis.router, documents.router, consultations.router, admin.router, platform.router, attendance.router, recordings.router, timetable.router, voucher_doc.router):
     app.include_router(r)
 
 
 @app.exception_handler(NotFound)
 async def _nf(_: Request, __):
     return JSONResponse({"detail": "not found"}, status_code=404)
+
+
+# Production has no public /docs or /openapi.json; site admins read the spec through the platform screen.
+@app.get("/platform/openapi.json", include_in_schema=False, dependencies=[Depends(require_site_admin)])
+def platform_openapi():
+    return app.openapi()
 
 
 @app.get("/healthz")

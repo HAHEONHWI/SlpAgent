@@ -57,3 +57,8 @@ Build banks locally with `./backend/.venv/bin/python backend/scripts/build_asses
 - Retention periods require organization and qualified privacy/legal review. Do not invent a statutory period. Explain that policy drafts are not legal advice and require expert review.
 - The retention script is dry-run by default and requires an explicit approved `--retention-days`; permanent deletion additionally requires `--apply`.
 - Keep data sent to OpenAI to the minimum necessary pseudonymous clinical context. Redact known child names/contact details and common phone/email patterns; ask users to pseudonymize other free text.
+
+## 바우처 기록지 HWPX
+
+- `backend/app/services/voucher_hwpx.py` fills `backend/app/data/hwpx/voucher_template.hwpx` (발달재활 서비스 제공 기록지, 3 pages) by editing section XML as text: keep ZIP entry order/compression, reuse each cell's own paragraph/run tags, drop `hp:linesegarray` on edited content. Never restructure the form; more than 5 visits repeat page 1 and the 별지 page per 5 visits, and the calendar is rebuilt from the template's own first/middle/last week rows at the original total height.
+- The stored template must stay blank (no child names, birth dates, notes, author metadata or preview image). Re-sanitize any new template before committing, and check output by opening it in 한글 when changing the filler.

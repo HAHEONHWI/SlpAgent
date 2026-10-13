@@ -1,0 +1,167 @@
+"""발달재활 서비스 제공 기록지 (HWPX) for a child and one or more months.
+
+GET  /children/{id}/voucher-visits?month=YYYY-MM -> the visits the form would contain, for review/editing.
+POST /children/{id}/voucher-hwpx                 -> one .hwpx (one month) or a .zip of "이름-n월.hwpx" files.
+Visits come from dated schedules that were not cancelled and not marked absent/excused; therapy session records
+without a schedule are added. Page-2 text is the approved session note, else the session's recording record."""
+import io
+import re
+import zipfile
+from datetime import date, datetime, timedelta
+from urllib.parse import quote
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
+from pydantic import BaseModel, ConfigDict, Field
+from ..auth import Principal, current_principal, require_write
+from ..deps import audit, child_or_404, get_repo
+from ..repo.base import NotFound
+from ..services import voucher_hwpx as vh
+
+router = APIRouter(tags=["voucher"])
+MONTH = r"^\d{4}-(0[1-9]|1[0-2])$"
+HHMM = r"^([01]\d|2[0-3]):[0-5]\d$"
+SKIP_ATTENDANCE = {"absent", "excused"}
+UNKNOWN = "확인되지 않음"
+
+
+def _plus(hhmm: str, minutes: int) -> str:
+    return (datetime.strptime(hhmm, "%H:%M") + timedelta(minutes=minutes)).strftime("%H:%M")
+
+
+def _org(repo, org_id: str) -> dict:
+    try:
+        return repo.get("organizations", org_id, org_id)
+    except NotFound:
+        return {}
+
+
+def _service_minutes(repo, org_id: str) -> int:
+    """One voucher slot = session + consultation (e.g. 40 + 10), from the weekly timetable settings."""
+    try:
+        cfg = repo.get("timetable_config", org_id, "default")
+        return int(cfg.get("session_minutes", 40)) + int(cfg.get("break_minutes", 10))
+    except NotFound:
+        return 50
+
+
+def _content(day: str, notes_by_date: dict[str, str], records_by_date: dict[str, dict]) -> tuple[str, str]:
+    if notes_by_date.get(day):
+        return notes_by_date[day], "session_note"
+    rec = records_by_date.get(day)
+    if rec:
+        sec = rec.get("sections") or {}
+        parts = [sec.get(k, "").strip() for k in ("activities", "child_responses", "spontaneous_speech")]
+        text = " ".join(p for p in parts if p and p != UNKNOWN)
+        if text:
+            return text, "recording"
+    return "", "none"
+
+
+def visits_for(repo, p: Principal, child_id: str, month: str, minutes: int) -> list[dict]:
+    marks = {m["schedule_id"]: m.get("status") for m in repo.list("attendance", p.org_id, child_id=child_id)}
+    sessions = [s for s in repo.list("therapy_sessions", p.org_id, child_id=child_id)
+                if s.get("date", "").startswith(month) and s.get("status", "completed") != "cancelled"]
+    notes = {n["session_id"]: n["text"] for n in repo.list("session_notes", p.org_id, child_id=child_id)
+             if n.get("status", "approved") == "approved"}
+    notes_by_date: dict[str, str] = {}
+    for s in sessions:
+        if notes.get(s["id"]):
+            notes_by_date[s["date"]] = notes[s["id"]]
+    records_by_date = {r["date"]: r for r in repo.list("recording_records", p.org_id, child_id=child_id)
+                       if (r.get("date") or "").startswith(month) and r.get("kind", "session") == "session"}
+    out = []
+    for s in repo.list("schedules", p.org_id, child_id=child_id):
+        if not s["date"].startswith(month) or s.get("status") == "cancelled" or marks.get(s["id"]) in SKIP_ATTENDANCE:
+            continue
+        text, source = _content(s["date"], notes_by_date, records_by_date)
+        out.append({"date": s["date"], "start": s["start"], "end": _plus(s["start"], minutes), "therapist": s.get("therapist", ""),
+                    "content": text, "content_source": source, "from": "schedule"})
+    seen = {(v["date"], v["start"]) for v in out}
+    for s in sessions:  # session records without a schedule entry
+        if (s["date"], s["start"]) in seen or any(v["date"] == s["date"] for v in out):
+            continue
+        text, source = _content(s["date"], notes_by_date, records_by_date)
+        out.append({"date": s["date"], "start": s["start"], "end": _plus(s["start"], minutes), "therapist": s.get("therapist", ""),
+                    "content": text, "content_source": source, "from": "session"})
+    return sorted(out, key=lambda v: (v["date"], v["start"]))
+
+
+@router.get("/children/{child_id}/voucher-visits")
+def voucher_visits(child_id: str, month: str, p: Principal = Depends(current_principal), repo=Depends(get_repo)):
+    if not re.match(MONTH, month):
+        raise HTTPException(422, "month must be YYYY-MM")
+    child_or_404(repo, p, child_id)
+    minutes = _service_minutes(repo, p.org_id)
+    org = _org(repo, p.org_id)
+    return {"month": month, "minutes": minutes, "unit_price": org.get("unit_price"),
+            "visits": visits_for(repo, p, child_id, month, minutes)}
+
+
+class VisitIn(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    date: date
+    start: str = Field(pattern=HHMM)
+    end: str = Field(pattern=HHMM)
+    therapist: str = Field(default="", max_length=20)
+    content: str = Field(default="", max_length=2000)
+
+
+class MonthIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    month: str = Field(pattern=MONTH)
+    visits: list[VisitIn] | None = Field(default=None, max_length=40, description="edited visits; omitted = from records")
+    written_on: date | None = None
+
+
+class VoucherHwpxIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    months: list[MonthIn] = Field(min_length=1, max_length=12)
+    unit_price: int | None = Field(default=None, ge=0)
+    copay: int | None = Field(default=None, ge=0)
+    phone: str | None = Field(default=None, max_length=30)
+
+
+def _content_disposition(name: str) -> str:
+    ascii_name = re.sub(r"[^A-Za-z0-9._-]", "_", name)
+    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(name)}"
+
+
+@router.post("/children/{child_id}/voucher-hwpx")
+def voucher_hwpx(child_id: str, body: VoucherHwpxIn, p: Principal = Depends(require_write), repo=Depends(get_repo)):
+    child = child_or_404(repo, p, child_id)
+    org = _org(repo, p.org_id)
+    minutes = _service_minutes(repo, p.org_id)
+    price = body.unit_price if body.unit_price is not None else org.get("unit_price")
+    birth = date.fromisoformat(child["birth_date"]) if child.get("birth_date") else None
+    files: list[tuple[str, bytes]] = []
+    for m in body.months:
+        year, mon = int(m.month[:4]), int(m.month[5:])
+        rows = ([v.model_dump(mode="json") for v in m.visits] if m.visits is not None
+                else visits_for(repo, p, child_id, m.month, minutes))
+        visits = [vh.Visit(day=date.fromisoformat(v["date"]) if isinstance(v["date"], str) else v["date"],
+                           start=v["start"], end=v["end"], therapist=v.get("therapist", ""), content=v.get("content", ""))
+                  for v in rows]
+        if any((v.day.year, v.day.month) != (year, mon) for v in visits):
+            raise HTTPException(422, f"{m.month}에 다른 달 날짜가 섞여 있습니다")
+        data = vh.VoucherInput(org_name=org.get("name", ""), child_name=child["display_name"], birth_date=birth, year=year,
+                               month=mon, visits=visits, written_on=m.written_on, unit_price=price, copay=body.copay,
+                               phone=body.phone)
+        try:
+            content = vh.render(data)
+        except vh.VoucherError as e:
+            raise HTTPException(500, f"양식 처리 실패: {e}")
+        files.append((vh.filename(child["display_name"], mon), content))
+    names = [n for n, _ in files]
+    if len(set(names)) != len(names):  # same month number in two years -> keep them apart
+        files = [(n.replace(".hwpx", f"({m.month[:4]}).hwpx"), c) for (n, c), m in zip(files, body.months)]
+    audit(repo, p, "export", "voucher_hwpx", ",".join(m.month for m in body.months), child_id)
+    if len(files) == 1:
+        name, content = files[0]
+        return Response(content, media_type="application/hwp+zip", headers={"Content-Disposition": _content_disposition(name)})
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for name, content in files:
+            z.writestr(name, content)
+    span = f"{body.months[0].month[5:].lstrip('0')}-{body.months[-1].month[5:].lstrip('0')}월"
+    return Response(buf.getvalue(), media_type="application/zip",
+                    headers={"Content-Disposition": _content_disposition(f"{child['display_name']}-{span}.zip")})

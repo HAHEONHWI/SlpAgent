@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import RequireChild from "../components/RequireChild";
 import DocumentExport from "../components/DocumentExport";
+import VoucherHwpx from "../components/VoucherHwpx";
 import { Card, Input, Label, PageTitle } from "../components/ui";
 
 function Inner({ childId }: { childId: string }) {
@@ -26,6 +27,7 @@ function Inner({ childId }: { childId: string }) {
           {d.amount_note && <p className="mt-2 text-xs text-amber-700">{d.amount_note}</p>}</>}
       </Card>
       <Card title="문서 출력"><DocumentExport childId={childId} month={month} /></Card>
+      <Card title="발달재활 서비스 제공 기록지 (HWPX)" className="lg:col-span-2"><VoucherHwpx childId={childId} month={month} /></Card>
     </div>
   );
 }

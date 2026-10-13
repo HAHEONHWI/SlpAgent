@@ -25,5 +25,24 @@ export async function api<T = any>(path: string, init: RequestInit & { json?: un
   return res.json();
 }
 
+/** POST that returns a file; saves it with the server's file name (Content-Disposition, UTF-8 aware). */
+export async function download(path: string, json: unknown, fallbackName: string): Promise<string> {
+  const token = await getToken();
+  const res = await fetch(`/api${path}`, { method: "POST", headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(json) });
+  if (!res.ok) {
+    let msg = res.statusText;
+    try { const d = await res.json(); msg = typeof d.detail === "string" ? d.detail : JSON.stringify(d.detail); } catch { /* keep statusText */ }
+    throw new ApiError(res.status, msg);
+  }
+  const cd = res.headers.get("Content-Disposition") ?? "";
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+  const name = star ? decodeURIComponent(star[1]) : /filename="([^"]+)"/.exec(cd)?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  const a = Object.assign(document.createElement("a"), { href: url, download: name });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return name;
+}
+
 export type Child = { id: string; alias: string; display_name: string; birth_date: string; sex?: string; age_months?: number };
 export const ageLabel = (m?: number) => (m == null ? "" : `${Math.floor(m / 12)}세 ${m % 12}개월`);
