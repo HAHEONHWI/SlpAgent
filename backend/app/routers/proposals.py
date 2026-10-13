@@ -71,6 +71,18 @@ def approve(pid: str, p: Principal = Depends(require_write), repo=Depends(get_re
         result = repo.create("parent_consultations", p.org_id, {**{k: d.get(k) for k in keys}, "child_id": child,
                                                                 "source": "recording_ai_approved", "created_by": p.uid})
         target = ("parent_consultations", result["id"])
+    elif kind == "recording_summary":  # 8-section draft from a long recording, as edited by the therapist
+        try:
+            t = repo.get("stt_transcripts", p.org_id, d["job_id"])
+            transcript = t.get("edited_text") or t.get("text")
+        except NotFound:
+            transcript = None
+        result = repo.create("recording_records", p.org_id, {
+            "child_id": child, "job_id": d.get("job_id"), "kind": d.get("kind", "session"), "date": d.get("date"),
+            "start": d.get("start"), "end": d.get("end"), "minutes": d.get("minutes"), "counselor": d.get("counselor"),
+            "sections": d.get("sections", {}), "transcript": transcript, "duration_seconds": d.get("duration_seconds"),
+            "source": "recording_ai_approved", "created_by": p.uid})
+        target = ("recording_records", result["id"])
     elif kind == "activity_plan":
         result = repo.create("therapy_activities", p.org_id, {"child_id": child, "payload": d,
                                                               "status": "approved", "approved_by": p.uid})

@@ -322,3 +322,78 @@ def summary(admin: Identity = Depends(require_site_admin), repo=Depends(get_repo
             "sessions_30d": sum(s["sessions_30d"] for s in stats),
             "pending_signups": sum(1 for s in signups if s["status"] == "pending"),
             "signups_30d": sum(1 for s in signups if s.get("created_at", "") >= since)}
+
+
+# ---------------------------------------------------------------- speech-to-text (site admin)
+class SttSettingsIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    fallback_enabled: bool
+    monthly_fallback_cap_usd: float = Field(ge=0, le=10000)
+    chunk_minutes: float = Field(ge=3, le=10)
+    retain_original_days: int = Field(ge=0, le=365)
+
+
+@router.get("/platform/stt/settings")
+def stt_settings(admin: Identity = Depends(require_site_admin), repo=Depends(get_repo)):
+    from ..config import get_settings
+    from ..services.stt import budget
+    s = get_settings()
+    return {**budget.platform_settings(repo), "groq_configured": bool(s.groq_api_key and s.stt_model), "stt_model": s.stt_model,
+            "fallback_configured": bool(s.openrouter_api_key and s.openrouter_stt_model), "fallback_model": s.openrouter_stt_model,
+            "groq_audio_seconds_per_hour": s.groq_audio_seconds_per_hour, "groq_audio_seconds_per_day": s.groq_audio_seconds_per_day,
+            "fallback_usd_per_hour": budget.fallback_rate_per_hour(repo, s)}
+
+
+@router.put("/platform/stt/settings")
+def put_stt_settings(body: SttSettingsIn, admin: Identity = Depends(require_site_admin), repo=Depends(get_repo)):
+    data = body.model_dump()
+    try:
+        repo.update("platform_settings", PLATFORM, "stt", data)
+    except NotFound:
+        repo.create("platform_settings", PLATFORM, data, doc_id="stt")
+    repo.create("audit_logs", PLATFORM, {"actor": admin.uid, "role": "site_admin", "action": "set_stt_settings",
+                                         "collection": "platform_settings", "doc_id": "stt", "detail": data})
+    return data
+
+
+@router.get("/platform/stt/stats")
+def stt_stats(admin: Identity = Depends(require_site_admin), repo=Depends(get_repo)):
+    """Operational numbers only: no file names, transcripts, or child information."""
+    from datetime import datetime as dt
+    from ..config import get_settings
+    from ..services.stt import budget
+    s = get_settings()
+    rows = [j for o in repo.list("organization_registry", PLATFORM) for j in repo.list("stt_jobs", o["org_id"])]
+    by_status: dict[str, int] = {}
+    for j in rows:
+        by_status[j["status"]] = by_status.get(j["status"], 0) + 1
+    finished = [j for j in rows if j.get("finished_at") and j.get("queued_at")]
+    durations = [(dt.fromisoformat(j["finished_at"]) - dt.fromisoformat(j["queued_at"])).total_seconds() for j in finished]
+    usage = budget.groq_usage(repo)
+    month = budget.fallback_month(repo)
+    platform = budget.platform_settings(repo)
+    warnings = []
+    if s.groq_audio_seconds_per_day and usage["day_seconds"] >= 0.8 * s.groq_audio_seconds_per_day:
+        warnings.append("Groq 일일 오디오 한도의 80% 이상을 사용했습니다.")
+    if s.groq_audio_seconds_per_hour and usage["hour_seconds"] >= 0.8 * s.groq_audio_seconds_per_hour:
+        warnings.append("Groq 시간당 오디오 한도의 80% 이상을 사용했습니다.")
+    waiting_quota = sum(1 for j in rows if j["status"] == "waiting" and j.get("wait_reason") == "groq_quota")
+    if waiting_quota:
+        warnings.append(f"무료 한도 때문에 대기 중인 작업이 {waiting_quota}건 있습니다. 요금제 상향이나 예비 경로 사용을 검토하세요.")
+    cap = float(platform.get("monthly_fallback_cap_usd") or 0)
+    if cap and month["cost_usd"] >= 0.8 * cap:
+        warnings.append("예비 받아쓰기 월 비용 상한의 80% 이상을 사용했습니다.")
+    return {
+        "jobs_total": len(rows), "by_status": by_status,
+        "audio_seconds_total": round(sum(j.get("duration_seconds") or 0 for j in rows), 1),
+        "original_bytes_total": sum(j.get("original_size") or 0 for j in rows),
+        "compressed_bytes_total": sum(j.get("compressed_size") or 0 for j in rows),
+        "avg_processing_seconds": round(sum(durations) / len(durations), 1) if durations else None,
+        "groq": {**usage, "hour_limit": s.groq_audio_seconds_per_hour, "day_limit": s.groq_audio_seconds_per_day},
+        "fallback": {**month, "cap_usd": cap, "enabled": platform.get("fallback_enabled")},
+        "failures": [{"job_id": j["id"][:8], "reason": (j.get("error") or {}).get("reason"), "status": j["status"],
+                      "chunks_failed": j.get("chunks_failed", 0), "at": (j.get("error") or {}).get("at")}
+                     for j in sorted(rows, key=lambda j: j.get("created_at", ""), reverse=True)
+                     if j["status"] == "failed" or j.get("chunks_failed")][:20],
+        "warnings": warnings,
+    }

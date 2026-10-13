@@ -10,6 +10,7 @@ CHILD_COLLECTIONS = (
     "assessments", "behavior_observations", "vocabulary_records", "therapy_sessions",
     "session_notes", "treatment_plans", "schedules", "parent_consultations", "ai_analyses",
     "clinical_analyses", "therapy_activities", "generated_documents",
+    "stt_jobs", "stt_chunks", "stt_transcripts", "recording_records", "attendance",
 )
 
 
