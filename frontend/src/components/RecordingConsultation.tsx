@@ -21,7 +21,7 @@ export const SECTIONS: [string, string][] = [["goals", "오늘의 치료 목표"
   ["parent_communication", "보호자 상담 및 전달 사항"], ["home_activities", "가정 연계 활동"], ["next_plan", "다음 회기 계획"]];
 const STATUS: Record<string, [string, "amber" | "green" | "red" | "slate" | "indigo"]> = {
   uploading: ["업로드 중", "slate"], queued: ["대기열", "slate"], transcribing: ["받아쓰는 중", "indigo"], waiting: ["대기 중", "amber"],
-  merging: ["합치는 중", "indigo"], summarizing: ["요약 중", "indigo"], draft_ready: ["검토 대기", "amber"], failed: ["실패", "red"], cancelled: ["취소됨", "slate"],
+  merging: ["합치는 중", "indigo"], summarizing: ["요약 중", "indigo"], draft_ready: ["검토 대기", "amber"], approved: ["기록 반영됨", "green"], rejected: ["반려됨", "slate"], failed: ["실패", "red"], cancelled: ["취소됨", "slate"],
 };
 const WAIT: Record<string, string> = {
   groq_quota: "무료 받아쓰기 한도에 도달해 다음 시간대에 이어서 처리합니다.", groq_rate_limited: "받아쓰기 요청이 많아 잠시 후 이어서 처리합니다.",
@@ -43,7 +43,7 @@ export default function RecordingConsultation({ childId, defaultKind = "consulta
   const jobs = useQuery({
     queryKey: ["recordings", childId],
     queryFn: () => api<Job[]>(`/children/${childId}/recordings`),
-    refetchInterval: (q) => ((q.state.data ?? []).some((j) => !["draft_ready", "failed", "cancelled"].includes(j.status)) ? 4000 : false),
+    refetchInterval: (q) => ((q.state.data ?? []).some((j) => !["draft_ready", "approved", "rejected", "failed", "cancelled"].includes(j.status)) ? 4000 : false),
     // Polling pauses while the tab is hidden; refresh as soon as the therapist returns to a long-running job.
     refetchOnWindowFocus: "always",
   });
@@ -103,7 +103,7 @@ function JobCard({ job, childId }: { job: Job; childId: string }) {
   const cancel = useMutation({ mutationFn: () => api(`/recordings/${job.id}/cancel`, { method: "POST" }), onSuccess: refresh });
   const retry = useMutation({ mutationFn: () => api(`/recordings/${job.id}/retry`, { method: "POST" }), onSuccess: refresh });
   const [label, tone] = STATUS[job.status] ?? [job.status, "slate"];
-  const active = !["draft_ready", "failed", "cancelled"].includes(job.status);
+  const active = !["draft_ready", "approved", "rejected", "failed", "cancelled"].includes(job.status);
   const pct = job.chunk_count ? Math.round(((job.chunks_done ?? 0) / job.chunk_count) * 100) : 0;
   return (
     <Card title={`${job.kind === "session" ? "회기" : "상담"} 녹음 · ${job.meta.date}`} action={<Badge tone={tone}>{label}</Badge>}>
@@ -122,6 +122,8 @@ function JobCard({ job, childId }: { job: Job; childId: string }) {
         </div>
         {(cancel.error || retry.error) && <Notice tone="red">{errText(cancel.error || retry.error)}</Notice>}
         {job.status === "draft_ready" && <Review job={job} childId={childId} />}
+        {job.status === "approved" && <p className="text-sm text-green-700">승인되어 {job.kind === "consultation" ? "‘부모 상담’" : "‘회기 기록’"} 화면의 녹음 기록에 저장되었어요.</p>}
+        {job.status === "rejected" && <p className="text-sm text-slate-500">반려된 초안이에요. 아동 기록에는 반영되지 않았어요.</p>}
       </div>
     </Card>
   );

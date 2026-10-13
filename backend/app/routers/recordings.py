@@ -219,7 +219,7 @@ def retry(job_id: str, p: Principal = Depends(require_write), repo=Depends(get_r
 @router.post("/recordings/{job_id}/cancel")
 def cancel(job_id: str, p: Principal = Depends(require_write), repo=Depends(get_repo), d: jobs.Deps = Depends(get_stt_deps)):
     job = _get_job(repo, p, job_id)
-    if job["status"] in ("draft_ready", "cancelled"):
+    if job["status"] in ("draft_ready", "approved", "rejected", "cancelled"):
         raise HTTPException(409, f"recording is {job['status']}")
     repo.update("stt_jobs", p.org_id, job_id, {"status": "cancelled", "cancelled_at": now_iso()})
     jobs.cleanup_files(d, p.org_id, repo.get("stt_jobs", p.org_id, job_id))

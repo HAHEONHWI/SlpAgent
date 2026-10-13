@@ -147,6 +147,9 @@ def test_five_minutes_end_to_end_with_resumed_upload(client, repo, child, deps, 
     assert client.post(f"/proposals/{draft['id']}/approve", headers=H()).json()["applied_to"] == "recording_records"
     rec = client.get(f"/children/{child['id']}/recording-records", headers=H()).json()[0]
     assert rec["sections"]["goals"] == "2음절 모방" and rec["transcript"].startswith("구간000")
+    settled = client.get(f"/recordings/{jid}", headers=H()).json()
+    assert settled["status"] == "approved"  # no longer shown as 검토 대기
+    assert client.post(f"/recordings/{jid}/cancel", headers=H()).status_code == 409
     # originals and chunks are gone after the job
     assert not list(Path(deps.store.root).rglob("*.mp3"))
 

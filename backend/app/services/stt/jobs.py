@@ -1,6 +1,6 @@
 """Recording job state machine. Each queued step does one bounded unit of work, then schedules the next.
 
-status: uploading -> queued -> transcribing (<-> waiting) -> merging -> summarizing -> draft_ready
+status: uploading -> queued -> transcribing (<-> waiting) -> merging -> summarizing -> draft_ready -> approved | rejected
         any -> failed / cancelled
 Chunk results live in stt_chunks (one doc per chunk) and the merged transcript in stt_transcripts, because a
 two-hour transcript with timestamps can approach Firestore's 1 MB per-document limit.
@@ -17,7 +17,7 @@ from ..privacy import sanitize_external_text
 from . import audio, budget, merge, providers
 
 log = logging.getLogger("slp.stt")
-TERMINAL = {"draft_ready", "failed", "cancelled"}
+TERMINAL = {"draft_ready", "approved", "rejected", "failed", "cancelled"}
 MAX_ATTEMPTS = 6
 FALLBACK_AFTER_UNAVAILABLE = 3   # Groq outages in a row before using the fallback (if allowed)
 FALLBACK_AFTER_WAIT_SECONDS = 300  # a Groq wait longer than this may use the fallback (if allowed)

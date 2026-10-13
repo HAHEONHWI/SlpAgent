@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from ..auth import Principal, current_principal, require_write
 from ..deps import audit, get_repo
-from ..repo.base import NotFound
+from ..repo.base import NotFound, now_iso
 from .plans import create_plan_version
 
 router = APIRouter(prefix="/proposals", tags=["proposals"])
@@ -40,7 +40,19 @@ def reject(pid: str, p: Principal = Depends(require_write), repo=Depends(get_rep
     if pr["status"] != "draft":
         raise HTTPException(409)
     audit(repo, p, "reject", "ai_analyses", pid, pr.get("child_id"))
+    if pr["kind"] == "recording_summary":
+        _settle_recording(repo, p, pr["payload"].get("job_id"), "rejected")
     return repo.update("ai_analyses", p.org_id, pid, {"status": "rejected"})
+
+
+def _settle_recording(repo, p: Principal, job_id: str | None, status: str, **extra):
+    """A recording job is finished once its draft is approved or rejected, so it no longer shows as 검토 대기."""
+    if not job_id:
+        return
+    try:
+        repo.update("stt_jobs", p.org_id, job_id, {"status": status, "settled_at": now_iso(), **extra})
+    except NotFound:
+        pass
 
 
 @router.post("/{pid}/approve")
@@ -83,6 +95,7 @@ def approve(pid: str, p: Principal = Depends(require_write), repo=Depends(get_re
             "sections": d.get("sections", {}), "transcript": transcript, "duration_seconds": d.get("duration_seconds"),
             "source": "recording_ai_approved", "created_by": p.uid})
         target = ("recording_records", result["id"])
+        _settle_recording(repo, p, d.get("job_id"), "approved", record_id=result["id"])
     elif kind == "activity_plan":
         result = repo.create("therapy_activities", p.org_id, {"child_id": child, "payload": d,
                                                               "status": "approved", "approved_by": p.uid})
