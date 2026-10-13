@@ -1,7 +1,8 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
 import { ChevronDown, Search, X } from "lucide-react";
 import clsx from "clsx";
 import { useChild } from "../lib/child";
+import { useMe } from "../lib/me";
 
 const CHO = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ";
 /** "가나다" -> "ㄱㄴㄷ" so typing initial consonants finds a child. */
@@ -29,15 +30,23 @@ export default function ChildPicker({ value, onChange, emptyLabel, placeholder =
   const id = useId();
   const selected = children.find((c) => c.id === value) ?? null;
 
+  const myName = (useMe().data?.name ?? "").trim();
   const options = useMemo(() => {
     const k = norm(q);
     const hits = !k ? children : children.filter((c) => {
       const name = norm(c.display_name), code = norm(c.alias);
       return name.includes(k) || code.includes(k) || initials(name).includes(k) || norm((c as any).therapist ?? "").includes(k);
     });
-    const rows: { id: string | null; label: string; sub?: string }[] = hits.map((c) => ({ id: c.id, label: c.display_name, sub: [c.alias, (c as any).therapist].filter(Boolean).join(" · ") }));
+    // My own children first, then grouped by teacher (가나다), children without a teacher last.
+    const teacher = (c: (typeof children)[number]) => ((c as any).therapist ?? "").trim();
+    const group = (c: (typeof children)[number]) => (myName && teacher(c) === myName ? "내 아동" : teacher(c) || "담당 없음");
+    const rank = (g: string) => (g === "내 아동" ? 0 : g === "담당 없음" ? 2 : 1);
+    const sorted = [...hits].sort((a, b) => rank(group(a)) - rank(group(b)) || group(a).localeCompare(group(b), "ko")
+      || a.display_name.localeCompare(b.display_name, "ko") || a.alias.localeCompare(b.alias));
+    const rows: { id: string | null; label: string; sub?: string; group?: string }[] =
+      sorted.map((c) => ({ id: c.id, label: c.display_name, sub: c.alias, group: group(c) }));
     return emptyLabel && !k ? [{ id: null, label: emptyLabel }, ...rows] : rows;
-  }, [children, q, emptyLabel]);
+  }, [children, q, emptyLabel, myName]);
 
   useEffect(() => {
     if (!open) return;
@@ -46,7 +55,7 @@ export default function ChildPicker({ value, onChange, emptyLabel, placeholder =
     return () => document.removeEventListener("mousedown", close);
   }, [open]);
   useEffect(() => { setHi(0); }, [q]);
-  useEffect(() => { list.current?.children[hi]?.scrollIntoView({ block: "nearest" }); }, [hi]);
+  useEffect(() => { list.current?.querySelectorAll('[role="option"]')[hi]?.scrollIntoView({ block: "nearest" }); }, [hi]);
 
   const pick = (v: string | null) => { onChange(v); setOpen(false); setQ(""); };
   const show = () => { setOpen(true); setQ(""); setTimeout(() => input.current?.focus(), 0); };
@@ -79,12 +88,14 @@ export default function ChildPicker({ value, onChange, emptyLabel, placeholder =
       {open && (
         <ul ref={list} id={id} role="listbox" className="absolute left-0 right-0 z-40 mt-1 max-h-72 min-w-56 overflow-y-auto rounded-md border border-slate-200 bg-white py-1 shadow-lg">
           {options.length === 0 && <li className="px-3 py-2 text-sm text-slate-400">‘{q}’에 맞는 아동이 없어요</li>}
-          {options.map((o, i) => (
-            <li key={o.id ?? "none"} role="option" aria-selected={o.id === value}
+          {options.map((o, i) => (<Fragment key={o.id ?? "none"}>
+            {o.group && o.group !== options[i - 1]?.group && (
+              <li role="presentation" className="sticky top-0 bg-slate-50 px-3 pb-0.5 pt-1.5 text-[11px] font-semibold text-slate-500">{o.group}</li>)}
+            <li role="option" aria-selected={o.id === value}
               onMouseDown={(e) => { e.preventDefault(); pick(o.id); }} onMouseEnter={() => setHi(i)}
               className={clsx("flex cursor-pointer items-baseline gap-2 px-3 py-1.5 text-sm", i === hi && "bg-indigo-50", o.id === value && "font-semibold text-indigo-800", o.id === null && "text-slate-500")}>
               <span className="truncate">{o.label}</span>{o.sub && <span className="truncate text-xs text-slate-500">{o.sub}</span>}
-            </li>))}
+            </li></Fragment>))}
         </ul>)}
     </div>
   );

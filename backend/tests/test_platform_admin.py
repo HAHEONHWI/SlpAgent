@@ -103,3 +103,13 @@ def test_account_deletion_by_site_admin_and_self(client, repo):
     assert all(r["uid"] != "applicant" for r in client.get("/platform/signups", headers=SITE).json())
     assert client.delete("/me", headers=H(org, "admin", "boss")).status_code == 409  # last admin must hand over
     assert client.delete("/me", headers=SITE).status_code == 409
+
+
+def test_account_list_and_me_show_the_person_name(client, repo):
+    app.dependency_overrides[get_claims_setter] = lambda: Recorder()
+    org = _new_org(client, "named", "이름기관")
+    _signup(client, "waiting", "다른기관", name="김대기")
+    rows = {a["uid"]: a for a in client.get("/platform/accounts", headers=SITE).json()}
+    assert rows["named"]["name"] == "치료사" and rows["waiting"]["name"] == "김대기"
+    assert client.get("/me", headers=H(org, "admin", "named")).json()["name"] == "치료사"
+    assert client.get("/me", headers=H("-", "none", "waiting")).json()["name"] == "김대기"

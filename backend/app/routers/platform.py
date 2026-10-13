@@ -70,9 +70,14 @@ def _active_org(repo, org_id: str):
 def accounts(admin: Identity = Depends(require_site_admin), repo=Depends(get_repo),
              directory=Depends(get_account_directory)):
     names = {r["org_id"]: r["name"] for r in repo.list("organization_registry", PLATFORM)}
+    # Firebase accounts have no display name; the person's name lives in the signup request / membership.
+    people = {r["uid"]: r.get("therapist_name") for r in repo.list("signup_requests", PLATFORM)}
+    for org_id in names:
+        people.update({u["uid"]: u.get("name") or people.get(u["uid"]) for u in repo.list("users", org_id)})
     rows = []
     for account in directory.list():
         row = account.model_dump()
+        row["name"] = row["name"] or people.get(account.uid)
         try:
             access = repo.get("account_access", PLATFORM, account.uid)
             if "org_id" in access:
@@ -222,12 +227,18 @@ def me(identity: Identity = Depends(current_identity), repo=Depends(get_repo)):
     except HTTPException:
         return {**identity.model_dump(), "status": "suspended", "signup": None, "org_name": None}
     out = identity.model_dump()
+    out["name"] = None
     if identity.org_id:
+        try:
+            out["name"] = repo.get("users", identity.org_id, identity.uid).get("name")
+        except NotFound:
+            pass
         try:
             out["org_name"] = repo.get("organizations", identity.org_id, identity.org_id).get("name")
         except NotFound:
             out["org_name"] = None
     req = _request(repo, identity.uid)
+    out["name"] = out["name"] or (req or {}).get("therapist_name")
     out["signup"] = {k: req.get(k) for k in ("status", "org_name", "therapist_name", "reason", "created_at", "org_id")} if req else None
     out["status"] = ("site_admin" if identity.site_admin else "active" if identity.org_id and identity.role
                      else (req or {}).get("status", "none"))

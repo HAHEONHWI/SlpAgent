@@ -18,7 +18,7 @@ const DAY = ["", "월", "화", "수", "목", "금", "토", "일"];
 const PALETTE = ["#2563eb", "#9f1239", "#7e22ce", "#ea580c", "#15803d", "#0f766e", "#be185d", "#a16207", "#1e40af", "#4d7c0f"];
 const HATCH = { backgroundImage: "repeating-linear-gradient(135deg, #cbd5e1 0 1px, transparent 1px 7px)", backgroundColor: "#e2e8f0" };
 // Weekend columns and 7:00-and-later rows share one shade, like the paper sheet.
-const WEEKEND = { backgroundColor: "#919191" };
+const WEEKEND = { backgroundColor: "#d4d4d8" };
 const EVENING = WEEKEND;
 const isEvening = (slot: string) => slot >= "19:00";
 const iso = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
