@@ -2,12 +2,14 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download } from "lucide-react";
 import { api } from "../lib/api";
+import VoucherHwpx from "./VoucherHwpx";
 import { errText } from "../lib/hooks";
 import { Badge, Button, Empty, ErrorNotice, Label, Notice, Select } from "./ui";
 
-const TYPES: Record<string, string> = { service_record: "서비스 제공기록지", schedule: "서비스 일정표", progress_report: "치료 경과보고서", assessment_summary: "평가 결과 요약서", parent_consultation: "보호자 상담기록" };
-// Listed-only types (no file; created by approving AI proposals in chat).
-const LABELS: Record<string, string> = { ...TYPES, parent_guidance: "보호자 안내문 (승인됨)" };
+// 바우처 서류 = the 발달재활 서비스 제공 기록지 HWPX (기록지·별지·일정표 in one file), filled from records.
+const TYPES: Record<string, string> = { voucher: "바우처 서류", progress_report: "치료 경과보고서", assessment_summary: "평가 결과 요약서", parent_consultation: "보호자 상담기록" };
+// Listed-only types: older voucher drafts and documents approved in AI chat.
+const LABELS: Record<string, string> = { ...TYPES, service_record: "서비스 제공기록지", schedule: "서비스 일정표", parent_guidance: "보호자 안내문 (승인됨)" };
 type Doc = { id: string; type: string; month: string | null; format: string | null; status: string; created_at?: string; approved_at?: string | null; download_url?: string; expires_at?: string; hwpx_validation?: string | null };
 type Link = { download_url: string; expires_at: string };
 
@@ -20,7 +22,8 @@ export const href = (u: string) => {
 
 export default function DocumentExport({ childId, month }: { childId: string; month: string }) {
   const qc = useQueryClient();
-  const [type, setType] = useState("service_record"), [format, setFormat] = useState("docx");
+  const [type, setType] = useState("voucher"), [format, setFormat] = useState("docx");
+  const voucher = type === "voucher";
   // Docs created/approved here carry a fresh signed URL; listed (past) docs request one on click.
   const [fresh, setFresh] = useState<Doc[]>([]);
   const key = ["documents", childId];
@@ -39,11 +42,15 @@ export default function DocumentExport({ childId, month }: { childId: string; mo
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-2">
         <Label label="문서 종류"><Select value={type} onChange={(e) => setType(e.target.value)}>{Object.entries(TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select></Label>
-        <Label label="형식"><Select value={format} onChange={(e) => setFormat(e.target.value)}><option value="docx">DOCX</option><option value="pdf">PDF</option><option value="hwpx">HWPX (호환성 미검증)</option></Select></Label>
+        <Label label="형식">{voucher
+          ? <Select value="hwpx" disabled><option value="hwpx">HWPX (한글)</option></Select>
+          : <Select value={format} onChange={(e) => setFormat(e.target.value)}><option value="docx">DOCX</option><option value="pdf">PDF</option></Select>}</Label>
       </div>
+      {voucher ? <VoucherHwpx childId={childId} month={month} /> : <>
       <Button onClick={() => create.mutate()} disabled={create.isPending}>{create.isPending ? "생성 중…" : `${month} 초안 생성`}</Button>
       {create.error && <Notice tone="red">{errText(create.error)}</Notice>}
-      <Notice>초안에는 "초안" 표시가 들어갑니다. 승인번호와 서명은 자동으로 채워지지 않으니 출력 후 수기로 기재하세요. 다운로드 링크는 짧은 시간 후 만료되며, 지난 문서는 다운로드할 때마다 새 링크를 받습니다.</Notice>
+      </>}
+      {!voucher && <Notice>초안에는 "초안" 표시가 들어갑니다. 승인번호와 서명은 자동으로 채워지지 않으니 출력 후 수기로 기재하세요. 다운로드 링크는 짧은 시간 후 만료되며, 지난 문서는 다운로드할 때마다 새 링크를 받습니다.</Notice>}
       <h3 className="pt-2 text-xs font-semibold text-slate-600">생성된 문서</h3>
       <ErrorNotice error={history.error} />
       {!docs.length && !history.isLoading && !history.error && <Empty>생성된 문서가 없습니다.</Empty>}
