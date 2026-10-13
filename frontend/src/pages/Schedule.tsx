@@ -3,9 +3,23 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useChild } from "../lib/child";
 import { errText } from "../lib/hooks";
+import Timetable from "../components/Timetable";
 import { Badge, Button, Card, Empty, Input, Label, Notice, PageTitle, Select, Table, Td } from "../components/ui";
 
 export default function Schedule() {
+  const [view, setView] = useState<"week" | "dated">("week");
+  return (
+    <>
+      <div className="print:hidden"><PageTitle title="일정 관리" sub="주간 시간표는 매주 반복되는 고정 시간표예요. 날짜별 일정은 출결에 쓰여요." /></div>
+      <div className="mb-4 inline-grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1 text-sm print:hidden">
+        {(["week", "dated"] as const).map((v) => <button key={v} onClick={() => setView(v)} className={`rounded-md px-4 py-1.5 ${view === v ? "bg-white font-semibold shadow-sm" : "text-slate-600"}`}>{v === "week" ? "주간 시간표" : "날짜별 일정"}</button>)}
+      </div>
+      {view === "week" ? <Timetable /> : <DatedSchedule />}
+    </>
+  );
+}
+
+function DatedSchedule() {
   const { children, childId } = useChild();
   const qc = useQueryClient();
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -18,7 +32,7 @@ export default function Schedule() {
   const set = (k: keyof typeof f) => (e: any) => setF({ ...f, [k]: e.target.value });
   return (
     <>
-      <PageTitle title="일정 관리" sub="같은 치료사 또는 같은 아동의 겹치는 시간은 등록되지 않습니다." />
+      <p className="mb-3 text-sm text-slate-500">같은 치료사 또는 같은 아동의 겹치는 시간은 등록되지 않습니다.</p>
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="일정 등록">
           <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); create.mutate(); }}>

@@ -34,8 +34,8 @@ export default function Layout() {
   const me = useMe().data;
   const { childId, child, children, setChildId } = useChild();
   return (
-    <div className="flex h-dvh overflow-hidden bg-slate-50">
-      <aside className="sticky top-0 hidden h-full w-60 shrink-0 flex-col border-r border-slate-200 bg-white md:flex">
+    <div className="flex h-dvh overflow-hidden bg-slate-50 print:block print:h-auto print:overflow-visible print:bg-white">
+      <aside className="sticky top-0 hidden print:!hidden h-full w-60 shrink-0 flex-col border-r border-slate-200 bg-white md:flex">
         <div className="px-4 py-3"><BrandLogo className="mx-auto w-40" /></div>
         <nav aria-label="주요 메뉴" className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-4">
           {MENU.map(({ to, label, icon: I, soon }) => (
@@ -48,7 +48,7 @@ export default function Layout() {
         <a href="/privacy" target="_blank" rel="noopener" className="border-t border-slate-100 px-4 py-3 text-xs text-slate-500 hover:text-slate-800">개인정보처리방침</a>
       </aside>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-10 flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white/90 px-2 py-2.5 backdrop-blur sm:gap-3 sm:px-4">
+        <header className="sticky top-0 z-10 flex print:hidden shrink-0 items-center gap-2 border-b border-slate-200 bg-white/90 px-2 py-2.5 backdrop-blur sm:gap-3 sm:px-4">
           <BrandLogo className="w-14 shrink-0 md:hidden" />
           <div className="w-[min(14rem,42vw)] sm:w-64"><Select value={childId ?? ""} onChange={(e) => setChildId(e.target.value || null)} aria-label="아동 선택">
             <option value="">아동 선택 안 함 (일반 모드)</option>
@@ -62,7 +62,7 @@ export default function Layout() {
             <Button variant="ghost" className="shrink-0 px-2 sm:px-3" onClick={logout}><LogOut size={14} /><span className="sr-only sm:not-sr-only">로그아웃</span></Button>
           </div>
         </header>
-        <nav aria-label="주요 메뉴" className="flex shrink-0 gap-1 overflow-x-auto border-b border-slate-200 bg-white px-2 py-1.5 md:hidden">
+        <nav aria-label="주요 메뉴" className="flex shrink-0 gap-1 overflow-x-auto print:hidden border-b border-slate-200 bg-white px-2 py-1.5 md:hidden">
           {MENU.map(({ to, label, icon: I }) => (
             <NavLink key={to} to={to} end={to === "/"} aria-label={label} title={label} className={({ isActive }) =>
               `inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-2 text-xs transition-colors ${isActive ? "bg-indigo-50 font-semibold text-indigo-800" : "text-slate-600 hover:bg-slate-100"}`}>
@@ -72,7 +72,7 @@ export default function Layout() {
         </nav>
         <main className={isAiRoute
           ? "flex min-h-0 flex-1 flex-col overflow-hidden p-2 sm:p-3"
-          : "mx-auto min-h-0 w-full max-w-6xl flex-1 overflow-y-auto p-4 md:p-6"}>
+          : "mx-auto min-h-0 w-full max-w-6xl flex-1 overflow-y-auto p-4 md:p-6 print:max-w-none print:overflow-visible print:p-0"}>
           <Outlet />
         </main>
       </div>
