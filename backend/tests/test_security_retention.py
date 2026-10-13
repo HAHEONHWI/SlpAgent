@@ -114,6 +114,25 @@ def test_swagger_authorize_scheme_and_docs_hidden_in_production(client, monkeypa
         importlib.reload(main)
 
 
+def test_openapi_spec_for_site_admins_only(client, monkeypatch):
+    assert client.get("/platform/openapi.json").status_code == 401
+    assert client.get("/platform/openapi.json", headers=H("orgA", "admin", "a1")).status_code == 403
+    spec = client.get("/api/platform/openapi.json", headers=H("-", "site_admin", "root")).json()
+    assert "/children" in spec["paths"] and "/platform/openapi.json" not in spec["paths"]
+    import importlib, app.config as config, app.main as main
+    monkeypatch.setenv("ENV", "production")
+    monkeypatch.setenv("AUTH_MODE", "firebase")
+    monkeypatch.setenv("STORAGE_BACKEND", "firestore")
+    config.get_settings.cache_clear()
+    try:
+        prod = importlib.reload(main).app
+        assert any(getattr(r, "path", None) == "/platform/openapi.json" for r in prod.routes)
+    finally:
+        monkeypatch.undo()
+        config.get_settings.cache_clear()
+        importlib.reload(main)
+
+
 def test_api_prefix_from_hosting_rewrite_is_stripped(client):
     assert client.get("/api/healthz").json() == {"ok": True}
     assert client.get("/api/children", headers=H()).status_code == 200
