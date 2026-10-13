@@ -81,3 +81,25 @@ def test_merge_moves_members_and_records_into_target(client, repo):
     assert [c["id"] for c in client.get("/children", headers=b).json()] == [child["id"]]
     assert [o["org_id"] for o in client.get("/platform/organizations", headers=SITE).json()] == [keep]
     assert client.get("/children", headers=H(dup, "admin", "b-old-token")).status_code == 403  # merged org is closed
+
+
+def test_account_deletion_by_site_admin_and_self(client, repo):
+    app.dependency_overrides[get_claims_setter] = lambda: Recorder()
+    org = _new_org(client, "boss", "삭제기관")
+    _signup(client, "member", "삭제기관")
+    client.post("/platform/signups/member/approve", headers=SITE, json={"org_id": org, "role": "therapist"})
+    member = H(org, "therapist", "member")
+    assert client.get("/children", headers=member).status_code == 200
+    assert client.delete("/platform/accounts/member", headers=H(org, "admin", "boss")).status_code == 403
+    assert client.delete("/platform/accounts/root", headers=SITE).status_code == 409  # not yourself
+    assert client.delete("/platform/accounts/boss", headers=SITE).status_code == 409  # last org admin
+    assert client.delete("/platform/accounts/member", headers=SITE).status_code == 200
+    assert client.get("/children", headers=member).status_code == 403  # old token is dead
+    assert all(a["uid"] != "member" for a in client.get("/platform/accounts", headers=SITE).json())
+    assert client.delete("/platform/accounts/member", headers=SITE).status_code == 404
+
+    _signup(client, "applicant", "새기관")
+    assert client.delete("/me", headers=H("-", "none", "applicant")).status_code == 200
+    assert all(r["uid"] != "applicant" for r in client.get("/platform/signups", headers=SITE).json())
+    assert client.delete("/me", headers=H(org, "admin", "boss")).status_code == 409  # last admin must hand over
+    assert client.delete("/me", headers=SITE).status_code == 409

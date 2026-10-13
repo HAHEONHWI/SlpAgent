@@ -5,7 +5,7 @@ import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useMe } from "../lib/me";
 import { errText } from "../lib/hooks";
-import { Badge, Button, Card, Empty, Input, Notice, PageTitle, Select, Table, Td } from "../components/ui";
+import { Badge, Button, Card, Empty, Input, Label, Notice, PageTitle, Select, Table, Td } from "../components/ui";
 import SttAdmin from "../components/SttAdmin";
 
 type Signup = { uid: string; email: string | null; org_name: string; therapist_name: string; status: string; reason: string | null; created_at: string; org_id?: string; suggested_org_id?: string | null };
@@ -221,6 +221,9 @@ function Accounts({ orgs }: { orgs: Org[] }) {
     onSuccess: (_, v) => { setEdit(({ [v.uid]: _drop, ...rest }) => rest); refresh(); },
   });
   const status = useMutation({ mutationFn: ({ uid, disabled }: { uid: string; disabled: boolean }) => api(`/platform/accounts/${uid}/status`, { method: "PUT", json: { disabled } }), onSuccess: refresh });
+  const [del, setDel] = useState<Account | null>(null), [typed, setTyped] = useState("");
+  const remove = useMutation({ mutationFn: (uid: string) => api(`/platform/accounts/${uid}`, { method: "DELETE" }), onSuccess: () => { setDel(null); setTyped(""); refresh(); } });
+  const delKey = del ? (del.email ?? del.uid) : "";
   const rows = (accounts.data ?? []).filter((a) => !q || `${a.email} ${a.name} ${a.org_name}`.toLowerCase().includes(q.toLowerCase()));
   return (
     <Card title={`계정 (${accounts.data?.length ?? 0})`} action={<div className="w-60 shrink-0"><Input placeholder="이메일·이름·기관 검색" value={q} onChange={(e) => setQ(e.target.value)} aria-label="계정 검색" /></div>}>
@@ -246,10 +249,22 @@ function Accounts({ orgs }: { orgs: Org[] }) {
                   {!self && (a.disabled
                     ? <Button variant="outline" onClick={() => status.mutate({ uid: a.uid, disabled: false })}>재개</Button>
                     : <Button variant="ghost" onClick={() => status.mutate({ uid: a.uid, disabled: true })}>정지</Button>)}
+                  {!self && !a.site_admin && <Button variant="ghost" className="text-red-600" onClick={() => { setDel(a); setTyped(""); remove.reset(); }}>삭제</Button>}
                 </div></Td>
               </tr>);
           })}
         </Table>)}
+      {del && (
+        <div role="dialog" aria-label="계정 삭제" className="mt-3 space-y-3 rounded-xl border border-red-200 bg-red-50 p-4">
+          <p className="text-sm font-semibold text-red-900">{delKey} 계정을 삭제할까요?</p>
+          <p className="text-sm text-red-800/90">로그인 계정과 기관 소속·가입 신청이 바로 지워지고 되돌릴 수 없어요. 이 사람이 작성한 아동·회기 기록은 기관에 그대로 남아요. 잠시 막기만 하려면 ‘정지’를 쓰세요.</p>
+          <Label label={`확인을 위해 ${delKey} 를 입력하세요`}><Input value={typed} onChange={(e) => setTyped(e.target.value)} autoFocus /></Label>
+          <div className="flex gap-2">
+            <Button variant="danger" disabled={typed.trim() !== delKey || remove.isPending} onClick={() => remove.mutate(del.uid)}>{remove.isPending ? "삭제 중…" : "영구 삭제"}</Button>
+            <Button variant="ghost" onClick={() => setDel(null)}>취소</Button>
+          </div>
+          {remove.error && <Notice tone="red">{/last organization admin/.test(errText(remove.error)) ? "이 기관의 마지막 관리자예요. 다른 계정을 관리자로 바꾼 뒤 삭제하세요." : errText(remove.error)}</Notice>}
+        </div>)}
       {(save.error || status.error) && <div className="mt-2"><Notice tone="red">{errText(save.error || status.error)}</Notice></div>}
       <p className="mt-2 text-xs text-slate-500">역할·소속 변경과 정지는 다음 요청부터 바로 적용됩니다. 기관의 마지막 관리자는 다른 역할로 바꿀 수 없습니다.</p>
     </Card>

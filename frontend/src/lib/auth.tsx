@@ -1,12 +1,13 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { initializeApp } from "firebase/app";
-import { createUserWithEmailAndPassword, getAuth, onIdTokenChanged, signInWithEmailAndPassword, signOut, type User } from "firebase/auth";
+import { createUserWithEmailAndPassword, EmailAuthProvider, getAuth, onIdTokenChanged, reauthenticateWithCredential, sendPasswordResetEmail, signInWithEmailAndPassword, signOut, updatePassword, type User } from "firebase/auth";
 
 const cfg = import.meta.env.VITE_FIREBASE_API_KEY
   ? { apiKey: import.meta.env.VITE_FIREBASE_API_KEY, authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN, projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID }
   : null;
 const fbAuth = cfg ? getAuth(initializeApp(cfg)) : null;
+if (fbAuth) fbAuth.languageCode = "ko"; // password-reset emails in Korean
 export const FIREBASE_ENABLED = !!fbAuth;
 // Dev-token login exists only in `vite dev` (stripped from production builds). With Firebase configured it is
 // offered only when VITE_DEV_LOGIN=1, for running against a backend in AUTH_MODE=dev.
@@ -21,6 +22,10 @@ type Ctx = {
   signup: (email: string, password: string) => Promise<void>;
   devLogin: (org: string, role: string, uid?: string) => void;
   refresh: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
+  /** Re-checks the signed-in user's password before a sensitive action (password change, withdrawal). */
+  confirmPassword: (password: string) => Promise<void>;
+  changePassword: (current: string, next: string) => Promise<void>;
   logout: () => void;
 };
 const C = createContext<Ctx>(null!);
@@ -42,10 +47,12 @@ const KO_ERRORS: Record<string, [string, string]> = {
   "auth/invalid-email": ["아이디 형식을 확인해 주세요", "아이디는 이메일 주소 형식이어야 해요. (예: name@example.com)"],
   "auth/email-already-in-use": ["이미 가입된 아이디예요", "로그인 탭에서 로그인하거나 다른 이메일로 가입해 주세요."],
   "auth/weak-password": ["비밀번호가 너무 짧아요", "비밀번호는 6자 이상으로 정해 주세요."],
+  "auth/requires-recent-login": ["다시 로그인해 주세요", "보안을 위해 로그아웃 후 다시 로그인한 다음 시도해 주세요."],
+  "auth/missing-email": ["이메일을 입력해 주세요", "가입할 때 쓴 아이디(이메일)를 입력해 주세요."],
   "auth/operation-not-allowed": ["지금은 로그인할 수 없어요", "서비스 설정 문제예요. 사이트 관리자에게 알려 주세요."],
 };
-const friendly = (e: any) => {
-  const [title, detail] = KO_ERRORS[e?.code] ?? ["로그인하지 못했어요", "잠시 후 다시 시도해 주세요. 문제가 계속되면 관리자에게 알려 주세요."];
+const friendly = (e: any, what = "로그인하지 못했어요") => {
+  const [title, detail] = KO_ERRORS[e?.code] ?? [what, "잠시 후 다시 시도해 주세요. 문제가 계속되면 관리자에게 알려 주세요."];
   return new AuthError(title, detail);
 };
 
@@ -77,6 +84,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const t = `dev:${org}:${role}:${uid}`; sessionStorage.setItem("devToken", t); setDev(t);
     },
     refresh: async () => { if (user) await user.getIdToken(true); },
+    resetPassword: async (email) => {
+      if (!fbAuth) throw new Error("Firebase 설정(VITE_FIREBASE_*)이 없습니다");
+      try { await sendPasswordResetEmail(fbAuth, email); }
+      catch (x: any) { if (x?.code !== "auth/user-not-found") throw friendly(x, "메일을 보내지 못했어요"); } // never reveal whether an account exists
+    },
+    confirmPassword: async (password) => {
+      if (dev || !user) return; // dev tokens have no password
+      try { await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email ?? "", password)); }
+      catch (x: any) {
+        if (["auth/invalid-credential", "auth/wrong-password", "auth/invalid-login-credentials"].includes(x?.code)) throw new AuthError("비밀번호가 맞지 않아요", "현재 비밀번호를 다시 확인해 주세요.");
+        throw friendly(x, "본인 확인에 실패했어요");
+      }
+    },
+    changePassword: async (current, next) => {
+      await value.confirmPassword(current);
+      if (!user) return;
+      try { await updatePassword(user, next); } catch (x) { throw friendly(x, "비밀번호를 바꾸지 못했어요"); }
+    },
     // Clear cached server data so nothing from this account is shown to the next one in this browser.
     logout: () => { sessionStorage.removeItem("devToken"); localStorage.removeItem("childId"); setDev(null); qc.clear(); if (fbAuth) signOut(fbAuth); },
   };

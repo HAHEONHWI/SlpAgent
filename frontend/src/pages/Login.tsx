@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, MailCheck } from "lucide-react";
 import { AuthError, DEV_LOGIN, FIREBASE_ENABLED, useAuth } from "../lib/auth";
 import { PRIVACY_POLICY_VERSION } from "../lib/privacy";
 import BrandLogo from "../components/BrandLogo";
@@ -8,8 +8,9 @@ import { Button, Card, Input, Label, Notice, Select } from "../components/ui";
 export const PENDING_SIGNUP = "pendingSignup";
 
 export default function Login() {
-  const { login, signup, devLogin } = useAuth();
-  const [tab, setTab] = useState<"login" | "signup">("login");
+  const { login, signup, devLogin, resetPassword } = useAuth();
+  const [tab, setTab] = useState<"login" | "signup" | "reset">("login");
+  const [sent, setSent] = useState("");
   const [f, setF] = useState({ email: "", password: "", password2: "", org_name: "", therapist_name: "" });
   const [agree, setAgree] = useState(false);
   const [err, setErr] = useState<{ title: string; detail: string } | null>(null), [busy, setBusy] = useState(false);
@@ -37,14 +38,34 @@ export default function Login() {
         <BrandLogo className="mx-auto mb-4 w-44" />
         <div className="mb-4 grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1 text-sm">
           {(["login", "signup"] as const).map((t) => (
-            <button key={t} onClick={() => { setTab(t); setErr(null); }} className={`rounded-md py-1.5 ${tab === t ? "bg-white font-semibold shadow-sm" : "text-slate-600"}`}>{t === "login" ? "로그인" : "회원가입"}</button>))}
+            <button key={t} onClick={() => { setTab(t); setErr(null); setSent(""); }} className={`rounded-md py-1.5 ${tab === t || (t === "login" && tab === "reset") ? "bg-white font-semibold shadow-sm" : "text-slate-600"}`}>{t === "login" ? "로그인" : "회원가입"}</button>))}
         </div>
-        {tab === "login" ? (
+        {tab === "reset" ? (
+          sent ? (
+            <div className="space-y-3">
+              <div role="status" className="flex gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900">
+                <MailCheck size={18} className="mt-0.5 shrink-0 text-emerald-600" aria-hidden />
+                <div><p className="text-sm font-semibold">메일을 확인해 주세요</p>
+                  <p className="mt-0.5 text-sm text-emerald-800/90"><b>{sent}</b>(으)로 가입된 계정이 있으면 비밀번호 재설정 링크를 보냈어요. 몇 분 안에 오지 않으면 스팸함도 확인해 주세요.</p></div>
+              </div>
+              <Button className="w-full" onClick={() => { setTab("login"); setSent(""); }}>로그인으로 돌아가기</Button>
+            </div>
+          ) : (
+            <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); run(async () => { await resetPassword(f.email.trim()); setSent(f.email.trim()); }); }}>
+              <div><p className="text-sm font-semibold text-slate-800">비밀번호 찾기</p>
+                <p className="mt-0.5 text-sm text-slate-500">가입한 아이디(이메일)를 입력하면 새 비밀번호를 정하는 링크를 메일로 보내 드려요.</p></div>
+              <Label label="아이디 (이메일)"><Input type="email" value={f.email} onChange={set("email")} required autoComplete="username" autoFocus /></Label>
+              {err && <LoginAlert {...err} />}
+              <Button className="w-full" disabled={busy || !FIREBASE_ENABLED}>{busy ? "보내는 중…" : "재설정 메일 보내기"}</Button>
+              <button type="button" className="w-full text-center text-sm text-slate-500 hover:text-slate-800" onClick={() => { setTab("login"); setErr(null); }}>로그인으로 돌아가기</button>
+            </form>)
+        ) : tab === "login" ? (
           <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); run(() => login(f.email.trim(), f.password)); }}>
             <Label label="아이디 (이메일)"><Input type="email" value={f.email} onChange={set("email")} required autoComplete="username" /></Label>
             <Label label="비밀번호"><Input type="password" value={f.password} onChange={set("password")} required autoComplete="current-password" /></Label>
             {err && <LoginAlert {...err} />}
             <Button className="w-full" disabled={busy || !FIREBASE_ENABLED}>로그인</Button>
+            <button type="button" className="w-full text-center text-sm text-slate-500 hover:text-slate-800" onClick={() => { setTab("reset"); setErr(null); }}>비밀번호를 잊으셨나요?</button>
           </form>
         ) : (
           <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); doSignup(); }}>
@@ -77,7 +98,7 @@ export default function Login() {
   );
 }
 
-function LoginAlert({ title, detail }: { title: string; detail: string }) {
+export function LoginAlert({ title, detail }: { title: string; detail: string }) {
   return (
     <div role="alert" className="flex gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-900">
       <AlertCircle size={18} className="mt-0.5 shrink-0 text-red-600" aria-hidden />

@@ -38,6 +38,16 @@ class AccountDirectory:
         if disabled:
             auth.revoke_refresh_tokens(uid)
 
+    def delete(self, uid: str) -> None:
+        import firebase_admin
+        from firebase_admin import auth
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app()
+        try:
+            auth.delete_user(uid)
+        except auth.UserNotFoundError:
+            pass
+
 
 class DevAccountDirectory:
     def __init__(self, repo):
@@ -56,6 +66,9 @@ class DevAccountDirectory:
 
     def set_disabled(self, uid: str, disabled: bool) -> None:
         """Dev accounts have no Firebase record; suspension is enforced by the access record alone."""
+
+    def delete(self, uid: str) -> None:
+        """Dev accounts have no Firebase record; the access tombstone blocks the token."""
 
 
 def get_account_directory(repo=Depends(get_repo)):

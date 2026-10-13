@@ -1,5 +1,5 @@
-import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { Bell, BookOpen, Brain, CalendarDays, ClipboardList, FileText, HeartHandshake, LayoutDashboard, LineChart, ListChecks, NotebookPen, Settings, Sparkles, Stethoscope, Users, Library, LogOut , UserCheck } from "lucide-react";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { Bell, BookOpen, Brain, CalendarDays, ClipboardList, FileText, HeartHandshake, LayoutDashboard, LineChart, ListChecks, NotebookPen, Settings, Sparkles, Stethoscope, Users, Library, LogOut, UserCheck, UserCog } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useChild } from "../lib/child";
 import { useMe } from "../lib/me";
@@ -58,7 +58,7 @@ export default function Layout() {
           <div className="ml-auto flex min-w-0 items-center gap-1.5 text-sm text-slate-500 sm:gap-3">
             <Bell size={16} className="hidden shrink-0 sm:block" />
             {me?.org_name && <span className="hidden max-w-40 truncate font-medium text-slate-700 xl:inline">{me.org_name}</span>}
-            <span className="hidden max-w-44 truncate lg:inline">{me?.email ?? label}</span>
+            <Link to="/account" title="내 계정" className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 hover:bg-slate-100 hover:text-slate-800"><UserCog size={15} /><span className="hidden max-w-44 truncate lg:inline">{me?.email ?? label}</span><span className="sr-only">내 계정</span></Link>
             <Button variant="ghost" className="shrink-0 px-2 sm:px-3" onClick={logout}><LogOut size={14} /><span className="sr-only sm:not-sr-only">로그아웃</span></Button>
           </div>
         </header>

@@ -144,6 +144,42 @@ def account_status(uid: str, body: AccountStatusIn, admin: Identity = Depends(re
     return {"uid": uid, "disabled": body.disabled}
 
 
+def _delete_account(repo, directory, uid: str, org_id: str | None, role: str | None, actor: str, action: str):
+    """Remove a sign-in account. Records the person wrote stay with the organization that owns them; the
+    account's sign-in, membership and pending signup request go. A tombstone keeps any still-valid ID token
+    from being used afterwards."""
+    if org_id and role == "admin" and not any(u["uid"] != uid for u in repo.list("users", org_id, role="admin")):
+        raise HTTPException(409, "cannot delete the last organization admin; make someone else admin first")
+    directory.delete(uid)
+    tomb = {"org_id": None, "role": None, "disabled": True, "deleted": True, "deleted_at": now_iso()}
+    try:
+        repo.update("account_access", PLATFORM, uid, tomb)
+    except NotFound:
+        repo.create("account_access", PLATFORM, tomb, doc_id=uid)
+    for collection, ns in (("users", org_id), ("signup_requests", PLATFORM)):
+        if ns:
+            try:
+                repo.delete(collection, ns, uid)
+            except NotFound:
+                pass
+    repo.create("audit_logs", PLATFORM, {"actor": actor, "role": "site_admin" if action == "delete_account" else None,
+                                         "action": action, "collection": "account_access", "doc_id": uid})
+
+
+@router.delete("/platform/accounts/{uid}")
+def delete_account(uid: str, admin: Identity = Depends(require_site_admin), repo=Depends(get_repo),
+                   directory=Depends(get_account_directory)):
+    if uid == admin.uid:
+        raise HTTPException(409, "you cannot delete your own account here")
+    account = next((a for a in accounts(admin, repo, directory) if a["uid"] == uid), None)
+    if account is None:
+        raise HTTPException(404, "account not found")
+    if account["site_admin"]:
+        raise HTTPException(409, "site admin accounts cannot be deleted here")
+    _delete_account(repo, directory, uid, account["org_id"], account["role"], admin.uid, "delete_account")
+    return {"uid": uid, "deleted": True}
+
+
 @router.put("/platform/organizations/{org_id}")
 def rename_org(org_id: str, body: OrgNameIn, admin: Identity = Depends(require_site_admin), repo=Depends(get_repo)):
     _active_org(repo, org_id)
@@ -196,6 +232,17 @@ def me(identity: Identity = Depends(current_identity), repo=Depends(get_repo)):
     out["status"] = ("site_admin" if identity.site_admin else "active" if identity.org_id and identity.role
                      else (req or {}).get("status", "none"))
     return out
+
+
+@router.delete("/me")
+def delete_me(identity: Identity = Depends(current_identity), repo=Depends(get_repo),
+              directory=Depends(get_account_directory)):
+    """회원 탈퇴. The client re-checks the password before calling this."""
+    if identity.site_admin:
+        raise HTTPException(409, "site admin accounts cannot be deleted here")
+    identity = effective_identity(identity, repo)  # suspended accounts cannot withdraw themselves
+    _delete_account(repo, directory, identity.uid, identity.org_id, identity.role, identity.uid, "withdraw_account")
+    return {"uid": identity.uid, "deleted": True}
 
 
 @router.post("/signup", status_code=201)

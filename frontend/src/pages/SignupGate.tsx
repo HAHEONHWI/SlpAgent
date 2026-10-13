@@ -8,6 +8,7 @@ import BrandLogo from "../components/BrandLogo";
 import { Badge, Button, Card, Input, Label, Notice } from "../components/ui";
 import { PENDING_SIGNUP } from "./Login";
 import { PRIVACY_POLICY_VERSION } from "../lib/privacy";
+import { Withdraw } from "./Account";
 
 /** Shown to signed-in accounts that are not yet an approved organization member. */
 export default function SignupGate({ me }: { me: Me }) {
@@ -61,6 +62,7 @@ export default function SignupGate({ me }: { me: Me }) {
           </form>
         )}
       </Card>
+      <div className="mt-4 w-full max-w-md"><Withdraw /></div>
     </div>
   );
 }
