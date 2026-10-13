@@ -5,6 +5,7 @@ import { useChild } from "../lib/child";
 import { useMe } from "../lib/me";
 import { ageLabel } from "../lib/api";
 import BrandLogo from "./BrandLogo";
+import ChildPicker from "./ChildPicker";
 import { Button, Select } from "./ui";
 
 const MENU: { to: string; label: string; icon: typeof LayoutDashboard; soon?: boolean }[] = [
@@ -50,10 +51,7 @@ export default function Layout() {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-10 flex print:hidden shrink-0 items-center gap-2 border-b border-slate-200 bg-white/90 px-2 py-2.5 backdrop-blur sm:gap-3 sm:px-4">
           <BrandLogo className="w-14 shrink-0 md:hidden" />
-          <div className="w-[min(14rem,42vw)] sm:w-64"><Select value={childId ?? ""} onChange={(e) => setChildId(e.target.value || null)} aria-label="아동 선택">
-            <option value="">아동 선택 안 함 (일반 모드)</option>
-            {children.map((c) => <option key={c.id} value={c.id}>{c.alias} · {c.display_name}</option>)}
-          </Select></div>
+          <ChildPicker className="w-[min(14rem,42vw)] sm:w-64" value={childId} onChange={setChildId} emptyLabel="아동 선택 안 함 (일반 모드)" aria-label="아동 선택" />
           {child && <span className="hidden text-sm text-slate-500 sm:inline">{ageLabel(child.age_months)}</span>}
           <div className="ml-auto flex min-w-0 items-center gap-1.5 text-sm text-slate-500 sm:gap-3">
             <Bell size={16} className="hidden shrink-0 sm:block" />

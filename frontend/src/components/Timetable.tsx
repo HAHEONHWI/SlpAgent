@@ -6,6 +6,7 @@ import { useChild } from "../lib/child";
 import { errText } from "../lib/hooks";
 import { useMe } from "../lib/me";
 import { Badge, Button, Card, Empty, Input, Label, Notice, Select } from "./ui";
+import ChildPicker from "./ChildPicker";
 
 type Teacher = { id: string; name: string; short: string; color: string };
 type Config = { session_minutes: number; break_minutes: number; morning_start: string; morning_count: number; afternoon_start: string; afternoon_count: number; days: number[]; teachers: Teacher[]; closed: string[] };
@@ -51,7 +52,7 @@ export default function Timetable() {
   // Text lines down the page: a row is as tall as its fullest cell (two children sharing a cell by period = 2 lines).
   const printRows = [...morning, ...afternoon].reduce((n, slot) => n + cfg.teachers.reduce((m, t) =>
     m + Math.max(1, ...cfg.days.map((d) => byCell.get(`${d}|${slot}|${t.id}`)?.length ?? 0)), 0), 0) + 2; // + header + lunch
-  const fontPt = Math.max(6, Math.min(12, Math.round((280 / printRows) * 2.83 * 0.6 * 10) / 10)); // row height (mm→pt) x 0.6
+  const fontPt = Math.max(6, Math.min(12, Math.round((274 / printRows) * 2.83 * 0.6 * 10) / 10)); // row height (mm→pt) x 0.6
   const isClosed = (day: number, slot: string, t: string) => closed.has(`${day}|${slot}|*`) || closed.has(`${day}|${slot}|${t}`);
 
   const block = (slot: string, last: boolean) => cfg.teachers.map((t, i) => (
@@ -94,8 +95,9 @@ export default function Timetable() {
           {/* Print: one A4 portrait page, the grid stretched to fill it; font scales with the number of rows. */}
           <style>{`@media print {
             @page { size: A4 portrait; margin: 8mm; }
-            html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            .tt-sheet { height: 280mm; overflow: hidden !important; border-radius: 0; break-inside: avoid; }
+            html, body { height: auto !important; margin: 0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            /* 281mm is printable on A4; keep a few mm spare and no margin below, or browsers start a 2nd page */
+            .tt-sheet { height: 274mm; margin: 0 !important; overflow: hidden !important; border-radius: 0; break-inside: avoid; break-after: avoid; }
             .tt-sheet table { height: 100%; min-width: 0 !important; table-layout: fixed; font-size: ${fontPt}pt; }
             .tt-sheet td, .tt-sheet th { height: auto !important; padding: 0 2px !important; font-size: inherit !important; line-height: 1.1 !important; }
           }`}</style>
@@ -168,7 +170,7 @@ function CellEditor({ cell, entries, cfg, isAdmin, closedHere, onClose, onSaved 
               {(["child", "label"] as const).map((m) => <button type="button" key={m} onClick={() => setF({ ...f, mode: m })} className={`rounded-md py-1 ${f.mode === m ? "bg-white font-semibold shadow-sm" : "text-slate-600"}`}>{m === "child" ? "등록된 아동" : "이름만 입력"}</button>)}
             </div>
             {f.mode === "child"
-              ? <Select value={f.child_id} onChange={set("child_id")} required aria-label="아동"><option value="">아동 선택</option>{children.map((c) => <option key={c.id} value={c.id}>{c.display_name} · {c.alias}</option>)}</Select>
+              ? <ChildPicker value={f.child_id || null} onChange={(id) => setF({ ...f, child_id: id ?? "" })} aria-label="아동" />
               : <Input value={f.label} onChange={set("label")} maxLength={30} required placeholder="아동 이름" aria-label="아동 이름" />}
             {f.mode === "label" && <p className="text-[11px] text-slate-500">이름만 넣은 칸은 시간표에만 보이고, 날짜별 일정·출결은 만들어지지 않아요.</p>}
             <Label label="메모 (예: 13, 10월-)"><Input value={f.note} onChange={set("note")} maxLength={60} /></Label>
@@ -178,7 +180,7 @@ function CellEditor({ cell, entries, cfg, isAdmin, closedHere, onClose, onSaved 
             </div>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={f.highlight} onChange={set("highlight")} />노란색으로 강조</label>
             <div className="flex gap-2">
-              <Button disabled={save.isPending}>{editing ? "저장" : "넣기"}</Button>
+              <Button disabled={save.isPending || (f.mode === "child" && !f.child_id)}>{editing ? "저장" : "넣기"}</Button>
               {editing && <Button type="button" variant="ghost" onClick={() => { setEditing(null); setF(blank); }}>취소</Button>}
             </div>
           </form>)}

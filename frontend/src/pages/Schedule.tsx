@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { useChild } from "../lib/child";
 import { errText } from "../lib/hooks";
 import Timetable from "../components/Timetable";
+import ChildPicker from "../components/ChildPicker";
 import { Badge, Button, Card, Empty, Input, Label, Notice, PageTitle, Select, Table, Td } from "../components/ui";
 
 export default function Schedule() {
@@ -36,13 +37,13 @@ function DatedSchedule() {
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="일정 등록">
           <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); create.mutate(); }}>
-            <Label label="아동"><Select value={f.child_id} onChange={set("child_id")} required><option value="">선택</option>{children.map((c) => <option key={c.id} value={c.id}>{c.alias} · {c.display_name}</option>)}</Select></Label>
+            <Label label="아동"><ChildPicker value={f.child_id || null} onChange={(id) => setF({ ...f, child_id: id ?? "" })} /></Label>
             <Label label="날짜"><Input type="date" value={f.date} onChange={set("date")} required /></Label>
             <div className="grid grid-cols-2 gap-2"><Label label="시작"><Input type="time" value={f.start} onChange={set("start")} required /></Label><Label label="종료"><Input type="time" value={f.end} onChange={set("end")} required /></Label></div>
             <Label label="치료사"><Input value={f.therapist} onChange={set("therapist")} required /></Label>
             <Label label="메모"><Input value={f.note} onChange={set("note")} /></Label>
             {create.error && <Notice tone="red">{errText(create.error)}</Notice>}
-            <Button disabled={create.isPending}>등록</Button>
+            <Button disabled={create.isPending || !f.child_id}>등록</Button>
           </form>
         </Card>
         <Card title="일정 목록" className="lg:col-span-2" action={<div className="w-44 shrink-0"><Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} aria-label="월" /></div>}>
