@@ -96,3 +96,17 @@ def test_child_trash_restore_and_admin_purge(client, child):
     assert client.get(f"/children/{cid}", headers=H()).status_code == 404
     assert client.get("/children/archived", headers=H()).json() == []
     assert all(s["child_id"] != cid for s in client.get("/schedules", headers=H()).json())
+
+
+def test_child_bulk_import_skips_duplicates(client, child):
+    rows = [{"alias": "D-01", "display_name": "가나다", "birth_date": "2021-04-05", "sex": "남", "therapist": "김치료"},
+            {"alias": "a-01", "display_name": "누구", "birth_date": "2020-01-01"},  # code already used (case-insensitive)
+            {"alias": "Z-09", "display_name": "테스트아동", "birth_date": "2022-03-15"},  # same person
+            {"alias": "D-01", "display_name": "다른", "birth_date": "2021-01-01"}]  # duplicate within the file
+    assert client.post("/children/import", headers=H(role="assistant"), json={"rows": rows}).status_code == 403
+    r = client.post("/children/import", headers=H(), json={"rows": rows}).json()
+    assert r["created"] == 1 and [s["row"] for s in r["skipped"]] == [1, 2, 3]
+    made = next(c for c in client.get("/children", headers=H()).json() if c["alias"] == "D-01")
+    assert (made["sex"], made["therapist"], made["age_months"] > 0) == ("남", "김치료", True)
+    assert client.post("/children/import", headers=H(), json={"rows": rows}).json()["created"] == 0  # re-upload is harmless
+    assert client.post("/children/import", headers=H(), json={"rows": [{"alias": "x", "display_name": "y", "birth_date": "2022-13-01"}]}).status_code == 422
