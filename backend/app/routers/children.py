@@ -5,6 +5,7 @@ from ..auth import Principal, current_principal, require_admin, require_write
 from ..config import get_settings
 from ..deps import audit, child_or_404, get_repo
 from ..services.child_purge import purge_child
+from .org import ensure_in_roster
 
 router = APIRouter(prefix="/children", tags=["children"])
 
@@ -28,6 +29,7 @@ def age_months(birth: str, on: date | None = None) -> int:
 def create_child(body: ChildIn, p: Principal = Depends(require_write), repo=Depends(get_repo)):
     doc = repo.create("children", p.org_id, {**body.model_dump(mode="json"), "archived": False})
     audit(repo, p, "create", "children", doc["id"], doc["id"])
+    ensure_in_roster(repo, p.org_id, [body.therapist])
     return doc
 
 
@@ -60,6 +62,7 @@ def import_children(body: ImportIn, p: Principal = Depends(require_write), repo=
         people.add(who)
         created.append(doc["id"])
     audit(repo, p, "import", "children", f"{len(created)} rows")
+    ensure_in_roster(repo, p.org_id, [r.therapist for r in body.rows])
     return {"created": len(created), "skipped": skipped}
 
 
@@ -92,6 +95,7 @@ class TherapistIn(BaseModel):
 def set_therapist(child_id: str, body: TherapistIn, p: Principal = Depends(require_write), repo=Depends(get_repo)):
     child_or_404(repo, p, child_id)
     audit(repo, p, "update", "children", child_id, child_id)
+    ensure_in_roster(repo, p.org_id, [body.therapist])
     return repo.update("children", p.org_id, child_id, {"therapist": (body.therapist or "").strip() or None})
 
 

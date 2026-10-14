@@ -17,7 +17,7 @@ export default function Children() {
   const sorted = [...children].sort((a, b) => a.alias.localeCompare(b.alias, "ko", { numeric: true }) || a.display_name.localeCompare(b.display_name, "ko"));
   const assign = useMutation({
     mutationFn: ({ id, therapist }: { id: string; therapist: string | null }) => api(`/children/${id}/therapist`, { method: "PUT", json: { therapist } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["children"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["children"] }); qc.invalidateQueries({ queryKey: ["org"] }); },
   });
   const choices = (current?: string | null) => (current && !therapists.includes(current) ? [...therapists, current] : therapists);
   const [del, setDel] = useState<{ id: string; display_name: string; alias: string } | null>(null);
@@ -28,7 +28,7 @@ export default function Children() {
   const [f, setF] = useState({ alias: "", display_name: "", birth_date: "", sex: "", therapist: "" });
   const create = useMutation({
     mutationFn: () => api("/children", { method: "POST", json: { ...f, sex: f.sex || null, therapist: f.therapist.trim() || null } }),
-    onSuccess: () => { setF({ alias: "", display_name: "", birth_date: "", sex: "", therapist: "" }); qc.invalidateQueries({ queryKey: ["children"] }); },
+    onSuccess: () => { setF({ alias: "", display_name: "", birth_date: "", sex: "", therapist: "" }); qc.invalidateQueries({ queryKey: ["children"] }); qc.invalidateQueries({ queryKey: ["org"] }); },
   });
   return (
     <>

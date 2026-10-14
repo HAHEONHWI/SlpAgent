@@ -30,7 +30,7 @@ export default function TherapistRoster() {
 
   return (
     <Card title="치료사 목록" className="mt-4 max-w-3xl">
-      <p className="mb-3 text-sm text-slate-600">아동의 담당 치료사와 주간 시간표 교사 이름은 이 목록에서 고릅니다. 계정을 연결하면 그 치료사가 로그인했을 때 맨 위 아동 선택에 ‘내 아동’이 먼저 보여요. 이름을 바꾸면 아동 담당과 시간표 이름도 함께 바뀝니다.</p>
+      <p className="mb-3 text-sm text-slate-600">아동의 담당 치료사와 주간 시간표 교사 이름은 이 목록에서 고릅니다. 계정을 연결하면 그 치료사가 로그인했을 때 맨 위 아동 선택에 ‘내 아동’이 먼저 보여요. 이름을 바꾸면 아동 담당과 시간표 이름도 함께 바뀝니다. 아동에게 배정된 치료사는 자동으로 이 목록에 들어와요.</p>
       {q.isLoading ? <p className="text-sm text-slate-400">불러오는 중…</p> : (
         <div className="space-y-2">
           {!rows.length && <Empty>아직 치료사 목록이 없어요.</Empty>}

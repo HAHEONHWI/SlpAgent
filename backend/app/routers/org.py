@@ -69,6 +69,30 @@ def roster(repo, org_id: str) -> list[dict]:
     return _org_doc(repo, org_id).get("therapists") or []
 
 
+def ensure_in_roster(repo, org_id: str, names) -> None:
+    """Every therapist assigned to a child is on the 치료사 목록. New names are appended (linked to a member account
+    with the same name when there is exactly one)."""
+    current = roster(repo, org_id)
+    have = {t["name"] for t in current}
+    new = [n.strip() for n in names if n and n.strip() and n.strip() not in have]
+    if not new:
+        return
+    import uuid
+    members = repo.list("users", org_id)
+    linked = {t.get("uid") for t in current if t.get("uid")}
+    added = []
+    for name in dict.fromkeys(new):
+        same = [u["uid"] for u in members if (u.get("name") or "").strip() == name and u["uid"] not in linked]
+        uid = same[0] if len(same) == 1 else None
+        if uid:
+            linked.add(uid)
+        added.append({"id": uuid.uuid4().hex[:12], "name": name, "uid": uid})
+    if _org_doc(repo, org_id):
+        repo.update("organizations", org_id, org_id, {"therapists": current + added})
+    else:
+        repo.create("organizations", org_id, {"name": "", "therapists": added}, doc_id=org_id)
+
+
 def _name_suggestions(repo, org_id: str) -> list[str]:
     """Names already in use before a roster exists: accounts, timetable teachers and children's 담당."""
     names = {u.get("name", "").strip() for u in repo.list("users", org_id) if u.get("role") in ("admin", "therapist")}
@@ -83,6 +107,7 @@ def _name_suggestions(repo, org_id: str) -> list[str]:
 @router.get("/roster")
 def get_roster(p: Principal = Depends(current_principal), repo=Depends(get_repo)):
     """치료사 목록 with the linked account. Members (to link) are listed for admins only."""
+    ensure_in_roster(repo, p.org_id, [c.get("therapist") for c in repo.list("children", p.org_id) if not c.get("archived")])
     members = repo.list("users", p.org_id)
     emails = {u["uid"]: u.get("email") for u in members}
     rows = [{**t, "email": emails.get(t.get("uid"))} for t in roster(repo, p.org_id)]
@@ -132,5 +157,6 @@ def put_roster(body: RosterIn, p: Principal = Depends(current_principal), repo=D
 @router.get("/therapists")
 def therapists(p: Principal = Depends(current_principal), repo=Depends(get_repo)):
     """Names a child's 담당 치료사 can be chosen from: the 치료사 목록 once it is set, before that the names in use."""
+    ensure_in_roster(repo, p.org_id, [c.get("therapist") for c in repo.list("children", p.org_id) if not c.get("archived")])
     names = [t["name"] for t in roster(repo, p.org_id)]
     return names or _name_suggestions(repo, p.org_id)

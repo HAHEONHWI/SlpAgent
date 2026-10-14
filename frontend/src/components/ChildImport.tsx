@@ -38,7 +38,7 @@ export default function ChildImport({ onClose }: { onClose: () => void }) {
   const send = useMutation({
     mutationFn: () => api<{ created: number; skipped: { display_name: string; reason: string }[] }>("/children/import", { method: "POST",
       json: { rows: ready.map(({ alias, display_name, birth_date, sex, therapist }) => ({ alias, display_name, birth_date, sex, therapist })) } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["children"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["children"] }); qc.invalidateQueries({ queryKey: ["org"] }); },
   });
   const pick = async (file?: File) => {
     if (!file) return;
