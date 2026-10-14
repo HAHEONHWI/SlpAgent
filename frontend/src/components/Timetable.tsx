@@ -120,7 +120,6 @@ export default function Timetable() {
               </tbody>
             </table>
           </div>
-          {canWrite && <Generate from={from} />}
         </>
       )}
       {cell && <CellEditor cell={cell} entries={byCell.get(`${cell.day}|${cell.slot}|${cell.teacher.id}`) ?? []} cfg={cfg} isAdmin={isAdmin}
@@ -243,32 +242,6 @@ function Setup({ cfg, onDone }: { cfg: Config; onDone: () => void }) {
         {save.error && <Notice tone="red">{errText(save.error)}</Notice>}
         <div className="flex gap-2"><Button disabled={save.isPending}>저장</Button><Button type="button" variant="ghost" onClick={onDone}>닫기</Button></div>
       </form>
-    </Card>
-  );
-}
-
-function Generate({ from }: { from: string }) {
-  const qc = useQueryClient();
-  const { children } = useChild();
-  const [r, setR] = useState({ start: from, end: iso(plus(new Date(from + "T00:00:00"), 27)) });
-  const run = useMutation({
-    mutationFn: () => api<{ created: number; skipped: { date: string; slot: string; child_id: string; reason: string }[]; unlinked: number }>("/timetable/generate", { method: "POST", json: r }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["schedules"] }),
-  });
-  return (
-    <Card title="날짜별 일정 만들기" className="print:hidden">
-      <p className="mb-3 text-sm text-slate-600">시간표대로 날짜별 일정을 만들어요. 출결은 이 일정에 체크해요. 이미 만든 일정은 다시 만들지 않고, 취소한 일정도 되살리지 않아요.</p>
-      <form className="flex flex-wrap items-end gap-2" onSubmit={(e) => { e.preventDefault(); run.mutate(); }}>
-        <Label label="시작일"><Input type="date" value={r.start} onChange={(e) => setR({ ...r, start: e.target.value })} required /></Label>
-        <Label label="종료일 (최대 63일)"><Input type="date" value={r.end} onChange={(e) => setR({ ...r, end: e.target.value })} required /></Label>
-        <Button disabled={run.isPending}>{run.isPending ? "만드는 중…" : "일정 만들기"}</Button>
-      </form>
-      {run.data && (
-        <div className="mt-3 space-y-1 text-sm">
-          <p className="text-green-700">일정 {run.data.created}건을 만들었어요.{run.data.unlinked > 0 && <span className="text-slate-500"> 이름만 입력한 칸 {run.data.unlinked}건은 아동 등록 후 연결하면 만들 수 있어요.</span>}</p>
-          {run.data.skipped.length > 0 && <Notice>겹쳐서 건너뛴 일정 {run.data.skipped.length}건: {run.data.skipped.slice(0, 5).map((s) => `${s.date} ${s.slot} ${children.find((c) => c.id === s.child_id)?.display_name ?? ""} – ${s.reason}`).join(" / ")}{run.data.skipped.length > 5 && " …"}</Notice>}
-        </div>)}
-      {run.error && <div className="mt-2"><Notice tone="red">{errText(run.error)}</Notice></div>}
     </Card>
   );
 }

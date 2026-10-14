@@ -31,6 +31,8 @@ def _data(repo, principal: Principal, child_id: str, month: str) -> dict:
     except NotFound:
         org = {}
     summary = billing.monthly_summary(sessions, org.get("unit_price"), org.get("voucher_minutes"))
+    from .timetable import sync_month
+    sync_month(repo, principal.org_id, month)
     schedules = [row for row in repo.list("schedules", principal.org_id, child_id=child_id)
                  if row["date"].startswith(month)]
     plans = repo.list("treatment_plans", principal.org_id, child_id=child_id)

@@ -140,6 +140,7 @@ def put_config(body: TimetableConfig, p: Principal = Depends(require_admin), rep
     except NotFound:
         repo.create("timetable_config", p.org_id, data, doc_id="default")
     audit(repo, p, "update", "timetable_config", "default")
+    prune_upcoming(repo, p.org_id)
     return get_timetable(p, repo)
 
 
@@ -162,6 +163,7 @@ def update_entry(eid: str, body: EntryIn, p: Principal = Depends(require_write),
     _entry(repo, p, eid)
     doc = repo.update("timetable_entries", p.org_id, eid, _validate_entry(repo, p, body, eid))
     audit(repo, p, "update", "timetable_entries", eid, body.child_id)
+    prune_upcoming(repo, p.org_id, {eid})
     return doc
 
 
@@ -170,6 +172,7 @@ def delete_entry(eid: str, p: Principal = Depends(require_write), repo=Depends(g
     e = _entry(repo, p, eid)
     repo.delete("timetable_entries", p.org_id, eid)
     audit(repo, p, "delete", "timetable_entries", eid, e.get("child_id"))
+    prune_upcoming(repo, p.org_id, {eid})
 
 
 class GenerateIn(BaseModel):
@@ -184,23 +187,27 @@ class GenerateIn(BaseModel):
         return self
 
 
-@router.post("/generate")
-def generate(body: GenerateIn, p: Principal = Depends(require_write), repo=Depends(get_repo)):
-    """Create dated schedules from the timetable. Idempotent: an entry never makes two schedules for one day,
-    and a schedule someone cancelled is not recreated. Conflicts with existing schedules are skipped and reported."""
-    cfg = _config(repo, p.org_id)
+def sync_schedules(repo, org_id: str, start: date, end: date) -> dict:
+    """Make sure every timetable class between start and end exists as a dated schedule. Idempotent (one schedule
+    per entry and day, fixed id), never recreates a schedule someone cancelled, and skips clashes with schedules
+    that were added by hand. An entry applies from its 시작일, or else from the start of the month it was added."""
+    entries_all = repo.list("timetable_entries", org_id)
+    if not entries_all:
+        return {"created": 0, "skipped": [], "unlinked": 0}
+    cfg = _config(repo, org_id)
     am, pm = slots(cfg)
     names = {t.id: t.name for t in cfg.teachers}
-    gone = {c["id"] for c in repo.list("children", p.org_id) if c.get("archived")}
-    entries = [e for e in repo.list("timetable_entries", p.org_id) if e.get("child_id") not in gone]
-    existing = [s for s in repo.list("schedules", p.org_id) if body.start.isoformat() <= s["date"] <= body.end.isoformat()]
+    gone = {c["id"] for c in repo.list("children", org_id) if c.get("archived")}
+    entries = [e for e in entries_all if e.get("child_id") not in gone]
+    existing = [s for s in repo.list("schedules", org_id) if start.isoformat() <= s["date"] <= end.isoformat()]
     made = {(s.get("timetable_entry_id"), s["date"]) for s in existing if s.get("timetable_entry_id")}
     created, skipped, unlinked = 0, [], 0
-    day = body.start
-    while day <= body.end:
+    day = start
+    while day <= end:
         iso = day.isoformat()
         for e in entries:
-            if e["day"] != day.isoweekday() or not (e.get("valid_from") or "0000") <= iso <= (e.get("valid_to") or "9999"):
+            since = e.get("valid_from") or ((e.get("created_at") or "")[:7] + "-01" if e.get("created_at") else "0000")
+            if e["day"] != day.isoweekday() or not since <= iso <= (e.get("valid_to") or "9999"):
                 continue
             if e["slot"] not in am + pm or e["teacher_id"] not in names or _is_closed(cfg, e["day"], e["slot"], e["teacher_id"]):
                 continue
@@ -210,7 +217,7 @@ def generate(body: GenerateIn, p: Principal = Depends(require_write), repo=Depen
             if (e["id"], iso) in made:
                 continue
             new = {"child_id": e["child_id"], "date": iso, "start": e["slot"], "end": _add(e["slot"], cfg.session_minutes),
-                   "therapist": names[e["teacher_id"]], "note": e.get("note"), "timetable_entry_id": e["id"]}
+                   "therapist": names[e["teacher_id"]], "note": e.get("note"), "timetable_entry_id": e["id"], "source": "timetable"}
             clash = next((s for s in existing if s["date"] == iso and s.get("status") == "scheduled"
                           and s["start"] < new["end"] and new["start"] < s["end"]
                           and (s["therapist"] == new["therapist"] or s["child_id"] == new["child_id"])), None)
@@ -218,10 +225,43 @@ def generate(body: GenerateIn, p: Principal = Depends(require_write), repo=Depen
                 skipped.append({"date": iso, "slot": e["slot"], "child_id": e["child_id"],
                                 "reason": f"기존 일정과 겹침 ({clash['start']}–{clash['end']} {clash['therapist']})"})
                 continue
-            doc = repo.create("schedules", p.org_id, {**new, "status": "scheduled"})
+            doc = repo.create("schedules", org_id, {**new, "status": "scheduled"}, doc_id=f"tt-{e['id']}-{iso}")
             existing.append(doc)
             made.add((e["id"], iso))
             created += 1
         day += timedelta(days=1)
-    audit(repo, p, "generate", "schedules", f"{body.start}..{body.end}")
     return {"created": created, "skipped": skipped, "unlinked": unlinked}
+
+
+def sync_month(repo, org_id: str, month: str) -> None:
+    """month = YYYY-MM; silently ignores anything else."""
+    try:
+        y, m = int(month[:4]), int(month[5:7])
+        first = date(y, m, 1)
+    except (ValueError, TypeError):
+        return
+    last = (date(y + (m == 12), m % 12 + 1, 1) - timedelta(days=1))
+    sync_schedules(repo, org_id, first, last)
+
+
+def prune_upcoming(repo, org_id: str, entry_ids: set[str] | None = None) -> int:
+    """After the timetable changes, drop upcoming classes it made that nobody has touched (still scheduled, no
+    attendance mark) so they are rebuilt from the new timetable. Past classes and marked ones stay as they are."""
+    today = date.today().isoformat()
+    marked = {m["schedule_id"] for m in repo.list("attendance", org_id)}
+    n = 0
+    for s in repo.list("schedules", org_id):
+        tid = s.get("timetable_entry_id")
+        if tid and (entry_ids is None or tid in entry_ids) and s["date"] >= today \
+                and s.get("status") == "scheduled" and s["id"] not in marked:
+            repo.delete("schedules", org_id, s["id"])
+            n += 1
+    return n
+
+
+@router.post("/generate")
+def generate(body: GenerateIn, p: Principal = Depends(require_write), repo=Depends(get_repo)):
+    """Kept for explicit use; schedules are also filled automatically whenever a month is viewed."""
+    out = sync_schedules(repo, p.org_id, body.start, body.end)
+    audit(repo, p, "generate", "schedules", f"{body.start}..{body.end}")
+    return out

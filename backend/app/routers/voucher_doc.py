@@ -58,6 +58,8 @@ def _content(day: str, notes_by_date: dict[str, str], records_by_date: dict[str,
 
 
 def visits_for(repo, p: Principal, child_id: str, month: str, minutes: int) -> list[dict]:
+    from .timetable import sync_month
+    sync_month(repo, p.org_id, month)  # classes follow the weekly timetable
     marks = {m["schedule_id"]: m.get("status") for m in repo.list("attendance", p.org_id, child_id=child_id)}
     sessions = [s for s in repo.list("therapy_sessions", p.org_id, child_id=child_id)
                 if s.get("date", "").startswith(month) and s.get("status", "completed") != "cancelled"]

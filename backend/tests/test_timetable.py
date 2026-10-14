@@ -55,3 +55,22 @@ def test_generate_creates_dated_schedules_once(client, child):
     assert client.post("/timetable/generate", headers=H(), json={"start": "2026-10-01", "end": "2026-10-31"}).json()["created"] == 0
     assert client.delete(f"/timetable/entries/{e['id']}", headers=H()).status_code == 204
     assert client.post("/timetable/generate", headers=H(), json={"start": "2026-10-01", "end": "2027-01-31"}).status_code == 422
+
+
+def test_dated_classes_follow_the_timetable_automatically(client, child):
+    client.put("/timetable/config", headers=ADMIN, json=CFG)
+    e = _entry(client, child_id=child["id"]).json()  # Mondays 09:00 with 어선생
+    rows = client.get("/schedules?month=2099-03", headers=H()).json()  # no "generate" needed
+    assert [(s["date"], s["start"], s["therapist"]) for s in rows] == [(d, "09:00", "어선생") for d in ("2099-03-02", "2099-03-09", "2099-03-16", "2099-03-23", "2099-03-30")]
+    assert len(client.get("/schedules?month=2099-03", headers=H()).json()) == 5  # idempotent
+    day = client.get("/attendance/day?on=2099-03-09", headers=H()).json()
+    assert len(day) == 1
+    client.put(f"/schedules/{day[0]['schedule_id']}/attendance", headers=H(), json={"status": "present"})
+    client.post(f"/schedules/{rows[1 + 1]['id']}/cancel", headers=H())  # 3/16 cancelled by hand
+    # move the class to Tuesday 09:50: untouched upcoming Monday classes go, marked/cancelled ones stay
+    client.put(f"/timetable/entries/{e['id']}", headers=H(), json={"day": 2, "slot": "09:50", "teacher_id": "sil", "child_id": child["id"]})
+    after = client.get("/schedules?month=2099-03", headers=H()).json()
+    kept = {(s["date"], s["status"]) for s in after if s["date"] in ("2099-03-09", "2099-03-16")}
+    assert kept == {("2099-03-09", "scheduled"), ("2099-03-16", "cancelled")}
+    assert {s["date"] for s in after if s["start"] == "09:50"} == {"2099-03-03", "2099-03-10", "2099-03-17", "2099-03-24", "2099-03-31"}
+    assert client.get("/schedules?month=2026-01", headers=H()).json() == []  # before the entry was added

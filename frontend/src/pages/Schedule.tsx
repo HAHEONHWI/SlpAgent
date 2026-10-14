@@ -11,7 +11,7 @@ export default function Schedule() {
   const [view, setView] = useState<"week" | "dated">("week");
   return (
     <>
-      <div className="print:hidden"><PageTitle title="일정 관리" sub="주간 시간표는 매주 반복되는 고정 시간표예요. 날짜별 일정은 출결에 쓰여요." /></div>
+      <div className="print:hidden"><PageTitle title="일정 관리" sub="주간 시간표대로 날짜별 일정이 자동으로 채워져요. 출결과 바우처 서류는 날짜별 일정을 씁니다." /></div>
       <div className="mb-4 inline-grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1 text-sm print:hidden">
         {(["week", "dated"] as const).map((v) => <button key={v} onClick={() => setView(v)} className={`rounded-md px-4 py-1.5 ${view === v ? "bg-white font-semibold shadow-sm" : "text-slate-600"}`}>{v === "week" ? "주간 시간표" : "날짜별 일정"}</button>)}
       </div>
@@ -33,7 +33,7 @@ function DatedSchedule() {
   const set = (k: keyof typeof f) => (e: any) => setF({ ...f, [k]: e.target.value });
   return (
     <>
-      <p className="mb-3 text-sm text-slate-500">같은 치료사 또는 같은 아동의 겹치는 시간은 등록되지 않습니다.</p>
+      <p className="mb-3 text-sm text-slate-500">주간 시간표에 있는 수업은 자동으로 들어와 있어요. 여기서는 보강처럼 하루짜리 수업을 추가하거나 수업을 취소할 수 있어요. 같은 치료사 또는 같은 아동의 겹치는 시간은 등록되지 않습니다.</p>
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="일정 등록">
           <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); create.mutate(); }}>

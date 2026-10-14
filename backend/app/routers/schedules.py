@@ -41,6 +41,9 @@ def create(body: ScheduleIn, p: Principal = Depends(require_write), repo=Depends
 
 @router.get("")
 def list_(month: str | None = None, child_id: str | None = None, p: Principal = Depends(current_principal), repo=Depends(get_repo)):
+    if month:
+        from .timetable import sync_month
+        sync_month(repo, p.org_id, month)  # dated classes follow the weekly timetable automatically
     rows = repo.list("schedules", p.org_id, **({"child_id": child_id} if child_id else {}))
     rows = [r for r in rows if not month or r["date"].startswith(month)]
     return sorted(rows, key=lambda r: (r["date"], r["start"]))

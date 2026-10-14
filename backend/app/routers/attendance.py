@@ -41,6 +41,8 @@ def mark(sid: str, body: AttendanceIn, p: Principal = Depends(require_write), re
 @router.get("/attendance/day")
 def day(on: date, p: Principal = Depends(current_principal), repo=Depends(get_repo)):
     """Roll call: that day's scheduled sessions with their attendance mark (or null)."""
+    from .timetable import sync_schedules
+    sync_schedules(repo, p.org_id, on, on)  # the day's classes come from the weekly timetable
     d = on.isoformat()
     marks = {m["schedule_id"]: m for m in repo.list("attendance", p.org_id, date=d)}
     rows = [s for s in repo.list("schedules", p.org_id, date=d) if s.get("status") != "cancelled"]
@@ -52,6 +54,8 @@ def day(on: date, p: Principal = Depends(current_principal), repo=Depends(get_re
 @router.get("/attendance/summary")
 def org_summary(month: str = Query(pattern=r"^\d{4}-\d{2}$"), p: Principal = Depends(current_principal), repo=Depends(get_repo)):
     """Per-child monthly summary for the whole organization."""
+    from .timetable import sync_month
+    sync_month(repo, p.org_id, month)
     marks = [m for m in repo.list("attendance", p.org_id) if m.get("date", "").startswith(month)]
     scheduled = [s for s in repo.list("schedules", p.org_id) if s.get("date", "").startswith(month) and s.get("status") != "cancelled"]
     by_child: dict[str, list[dict]] = {}
