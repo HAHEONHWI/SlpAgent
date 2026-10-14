@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
-import { Bell, Megaphone, Menu, X, BookOpen, Brain, CalendarDays, ClipboardList, FileText, HeartHandshake, LayoutDashboard, LineChart, ListChecks, NotebookPen, Settings, Sparkles, Stethoscope, Users, Library, LogOut, UserCheck, UserCog } from "lucide-react";
+import { Bell, History, Megaphone, Menu, X, BookOpen, Brain, CalendarDays, ClipboardList, FileText, HeartHandshake, LayoutDashboard, LineChart, ListChecks, NotebookPen, Settings, Sparkles, Stethoscope, Users, Library, LogOut, UserCheck, UserCog } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useChild } from "../lib/child";
 import { useMe } from "../lib/me";
@@ -22,6 +22,7 @@ const MENU: { to: string; label: string; icon: typeof LayoutDashboard; soon?: bo
   { to: "/plans", label: "치료계획", icon: ListChecks },
   { to: "/activities", label: "치료활동 생성", icon: Sparkles },
   { to: "/sessions", label: "회기별 치료기록", icon: NotebookPen },
+  { to: "/class-records", label: "수업 기록 조회", icon: History },
   { to: "/progress", label: "발달 진행도 분석", icon: LineChart },
   { to: "/parents", label: "보호자 상담", icon: HeartHandshake },
   { to: "/voucher", label: "바우처·문서 생성", icon: FileText },
