@@ -44,7 +44,7 @@ export default function ClassRecords() {
 
   return (
     <>
-      <PageTitle title="수업 기록 조회" sub="위에서 고른 아이(없으면 전체)의 달별 수업과 출결, 수업 기록(보호자 상담)·회기 기록·녹음 기록을 한 번에 봐요." />
+      <PageTitle title="수업 기록 조회" sub="위에서 고른 아이(없으면 전체)의 달별 수업과 출결, 수업 기록·활동 기록·녹음 기록을 한 번에 봐요." />
       <Card className="mb-4">
         <div className="grid gap-2 sm:grid-cols-[10rem_minmax(0,1fr)_10rem_auto] sm:items-end">
           <Label label="월"><Input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} /></Label>
@@ -76,7 +76,7 @@ export default function ClassRecords() {
                           {st ? <Badge tone={ST[st]?.[1]}>{ST[st]?.[0] ?? st}{r.state.auto && st === "present" ? " (자동)" : ""}</Badge> : <Badge>예정</Badge>}
                           <span className="ml-auto flex flex-wrap gap-1">
                             {r.consultations.length > 0 && <Badge tone="green">수업 기록</Badge>}
-                            {r.sessions.length > 0 && <Badge tone="green">회기 기록</Badge>}
+                            {r.sessions.length > 0 && <Badge tone="green">활동 기록</Badge>}
                             {r.sessions.some((s) => s.note) && <Badge tone="green">노트</Badge>}
                             {r.recordings.length > 0 && <Badge tone="green">녹음 기록</Badge>}
                             {!written(r) && happened(r) && r.date <= today() && <Badge tone="amber">기록 없음</Badge>}
@@ -87,7 +87,7 @@ export default function ClassRecords() {
                             {r.state.reason && <p className="text-slate-500">{r.state.reason}</p>}
                             {r.consultations.map((c) => (
                               <div key={c.id} className="rounded-md border border-slate-200 bg-white p-3">
-                                <p className="mb-1 text-xs font-semibold text-slate-500">수업 기록 (보호자 상담) · {c.counselor}{c.start && ` · ${c.start}${c.end ? `–${c.end}` : ""}`}</p>
+                                <p className="mb-1 text-xs font-semibold text-slate-500">수업 기록 · {c.counselor}{c.start && ` · ${c.start}${c.end ? `–${c.end}` : ""}`}</p>
                                 {c.topics?.length > 0 && <p className="mb-1 flex flex-wrap gap-1">{c.topics.map((t) => <Badge key={t}>{t}</Badge>)}</p>}
                                 {c.session_summary && <p className="whitespace-pre-wrap"><span className="text-slate-500">수업 </span>{c.session_summary}</p>}
                                 <p className="whitespace-pre-wrap">{c.summary}</p>
@@ -111,8 +111,7 @@ export default function ClassRecords() {
                               </div>))}
                             {!written(r) && <p className="text-slate-500">이 수업의 기록이 아직 없어요.</p>}
                             <div className="flex flex-wrap gap-2">
-                              <Button variant="outline" onClick={() => { setChildId(r.child_id); nav("/parents"); }}>{written(r) ? "보호자 상담 보기" : "보호자 상담 쓰기"}</Button>
-                              <Button variant="ghost" onClick={() => { setChildId(r.child_id); nav("/sessions"); }}>회기별 치료기록</Button>
+                              <Button variant="outline" onClick={() => { setChildId(r.child_id); nav("/sessions"); }}>{written(r) ? "수업 기록 보기" : "수업 기록 쓰기"}</Button>
                             </div>
                           </div>)}
                       </li>

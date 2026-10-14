@@ -122,7 +122,7 @@ function JobCard({ job, childId }: { job: Job; childId: string }) {
         </div>
         {(cancel.error || retry.error) && <Notice tone="red">{errText(cancel.error || retry.error)}</Notice>}
         {job.status === "draft_ready" && <Review job={job} childId={childId} />}
-        {job.status === "approved" && <p className="text-sm text-green-700">승인되어 {job.kind === "consultation" ? "‘부모 상담’" : "‘회기 기록’"} 화면의 녹음 기록에 저장되었어요.</p>}
+        {job.status === "approved" && <p className="text-sm text-green-700">승인되어 ‘수업 기록’ 화면의 녹음 기록에 저장되었어요.</p>}
         {job.status === "rejected" && <p className="text-sm text-slate-500">반려된 초안이에요. 아동 기록에는 반영되지 않았어요.</p>}
       </div>
     </Card>

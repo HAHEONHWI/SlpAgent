@@ -18,7 +18,6 @@ const Plans = lazy(() => import("./pages/Plans"));
 const Sessions = lazy(() => import("./pages/Sessions"));
 const Progress = lazy(() => import("./pages/Progress"));
 const Voucher = lazy(() => import("./pages/Voucher"));
-const Parents = lazy(() => import("./pages/Parents"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Schedule = lazy(() => import("./pages/Schedule"));
 const Attendance = lazy(() => import("./pages/Attendance"));
@@ -59,7 +58,7 @@ export default function App() {
         <Route path="activities" element={page(<Activities />)} />
         <Route path="sessions" element={page(<Sessions />)} />
         <Route path="progress" element={page(<Progress />)} />
-        <Route path="parents" element={page(<Parents />)} />
+        <Route path="parents" element={<Navigate to="/sessions" replace />} />
         <Route path="voucher" element={page(<Voucher />)} />
         <Route path="knowledge" element={page(<Knowledge />)} />
         <Route path="schedule" element={page(<Schedule />)} />
