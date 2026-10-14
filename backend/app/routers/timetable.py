@@ -199,13 +199,17 @@ def sync_schedules(repo, org_id: str, start: date, end: date) -> dict:
     names = {t.id: t.name for t in cfg.teachers}
     gone = {c["id"] for c in repo.list("children", org_id) if c.get("archived")}
     entries = [e for e in entries_all if e.get("child_id") not in gone]
+    try:
+        off = {h["date"] for h in repo.get("organizations", org_id, org_id).get("holidays") or []}  # 기관 휴무일
+    except NotFound:
+        off = set()
     existing = [s for s in repo.list("schedules", org_id) if start.isoformat() <= s["date"] <= end.isoformat()]
     made = {(s.get("timetable_entry_id"), s["date"]) for s in existing if s.get("timetable_entry_id")}
     created, skipped, unlinked = 0, [], 0
     day = start
     while day <= end:
         iso = day.isoformat()
-        for e in entries:
+        for e in (entries if iso not in off else []):
             since = e.get("valid_from") or ((e.get("created_at") or "")[:7] + "-01" if e.get("created_at") else "0000")
             if e["day"] != day.isoweekday() or not since <= iso <= (e.get("valid_to") or "9999"):
                 continue

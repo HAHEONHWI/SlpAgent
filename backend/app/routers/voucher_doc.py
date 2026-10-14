@@ -16,11 +16,11 @@ from ..auth import Principal, current_principal, require_write
 from ..deps import audit, child_or_404, get_repo
 from ..repo.base import NotFound
 from ..services import voucher_hwpx as vh
+from ..services.attendance_state import effective, held, other_notes
 
 router = APIRouter(tags=["voucher"])
 MONTH = r"^\d{4}-(0[1-9]|1[0-2])$"
 HHMM = r"^([01]\d|2[0-3]):[0-5]\d$"
-SKIP_ATTENDANCE = {"absent", "excused"}
 UNKNOWN = "확인되지 않음"
 
 
@@ -58,9 +58,17 @@ def _content(day: str, notes_by_date: dict[str, str], records_by_date: dict[str,
 
 
 def visits_for(repo, p: Principal, child_id: str, month: str, minutes: int) -> list[dict]:
+    return month_data(repo, p, child_id, month, minutes)[0]
+
+
+def month_data(repo, p: Principal, child_id: str, month: str, minutes: int) -> tuple[list[dict], list[tuple[str, str]]]:
+    """(visits, 기타사항 lines). A visit is a class that happened: not moved/cancelled, not 결석·사유결석 and not in
+    a 장기결강 period. Classes nobody marked count as held (출석 is the default)."""
     from .timetable import sync_month
     sync_month(repo, p.org_id, month)  # classes follow the weekly timetable
-    marks = {m["schedule_id"]: m.get("status") for m in repo.list("attendance", p.org_id, child_id=child_id)}
+    marks = {m["schedule_id"]: m for m in repo.list("attendance", p.org_id, child_id=child_id)}
+    absences = repo.list("absences", p.org_id, child_id=child_id)
+    schedules = repo.list("schedules", p.org_id, child_id=child_id)
     sessions = [s for s in repo.list("therapy_sessions", p.org_id, child_id=child_id)
                 if s.get("date", "").startswith(month) and s.get("status", "completed") != "cancelled"]
     notes = {n["session_id"]: n["text"] for n in repo.list("session_notes", p.org_id, child_id=child_id)
@@ -72,20 +80,19 @@ def visits_for(repo, p: Principal, child_id: str, month: str, minutes: int) -> l
     records_by_date = {r["date"]: r for r in repo.list("recording_records", p.org_id, child_id=child_id)
                        if (r.get("date") or "").startswith(month) and r.get("kind", "session") == "session"}
     out = []
-    for s in repo.list("schedules", p.org_id, child_id=child_id):
-        if not s["date"].startswith(month) or s.get("status") == "cancelled" or marks.get(s["id"]) in SKIP_ATTENDANCE:
+    for s in schedules:
+        if not s["date"].startswith(month) or not held(effective(s, marks.get(s["id"]), absences, today="9999-12-31")):
             continue
         text, source = _content(s["date"], notes_by_date, records_by_date)
         out.append({"date": s["date"], "start": s["start"], "end": _plus(s["start"], minutes), "therapist": s.get("therapist", ""),
-                    "content": text, "content_source": source, "from": "schedule"})
-    seen = {(v["date"], v["start"]) for v in out}
+                    "content": text, "content_source": source, "from": "makeup" if s.get("moved_from") else "schedule"})
     for s in sessions:  # session records without a schedule entry
-        if (s["date"], s["start"]) in seen or any(v["date"] == s["date"] for v in out):
+        if any(v["date"] == s["date"] for v in out):
             continue
         text, source = _content(s["date"], notes_by_date, records_by_date)
         out.append({"date": s["date"], "start": s["start"], "end": _plus(s["start"], minutes), "therapist": s.get("therapist", ""),
                     "content": text, "content_source": source, "from": "session"})
-    return sorted(out, key=lambda v: (v["date"], v["start"]))
+    return sorted(out, key=lambda v: (v["date"], v["start"])), other_notes(schedules, marks, absences, month)
 
 
 @router.get("/children/{child_id}/voucher-visits")
@@ -95,8 +102,9 @@ def voucher_visits(child_id: str, month: str, p: Principal = Depends(current_pri
     child_or_404(repo, p, child_id)
     minutes = _service_minutes(repo, p.org_id)
     org = _org(repo, p.org_id)
-    return {"month": month, "minutes": minutes, "unit_price": org.get("unit_price"),
-            "visits": visits_for(repo, p, child_id, month, minutes)}
+    visits, other = month_data(repo, p, child_id, month, minutes)
+    return {"month": month, "minutes": minutes, "unit_price": org.get("unit_price"), "visits": visits,
+            "other": [{"date": d, "text": t} for d, t in other]}
 
 
 class VisitIn(BaseModel):
@@ -108,11 +116,18 @@ class VisitIn(BaseModel):
     content: str = Field(default="", max_length=2000)
 
 
+class OtherIn(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    date: str = Field(default="", max_length=20)
+    text: str = Field(default="", max_length=300)
+
+
 class MonthIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     month: str = Field(pattern=MONTH)
     visits: list[VisitIn] | None = Field(default=None, max_length=40, description="edited visits; omitted = from records")
     written_on: date | None = None
+    other: list[OtherIn] | None = Field(default=None, max_length=30, description="기타사항 lines; omitted = from 출결")
 
 
 class VoucherHwpxIn(BaseModel):
@@ -138,8 +153,9 @@ def voucher_hwpx(child_id: str, body: VoucherHwpxIn, p: Principal = Depends(requ
     files: list[tuple[str, bytes]] = []
     for m in body.months:
         year, mon = int(m.month[:4]), int(m.month[5:])
-        rows = ([v.model_dump(mode="json") for v in m.visits] if m.visits is not None
-                else visits_for(repo, p, child_id, m.month, minutes))
+        auto_rows, auto_other = month_data(repo, p, child_id, m.month, minutes)
+        rows = [v.model_dump(mode="json") for v in m.visits] if m.visits is not None else auto_rows
+        other = [(o.date, o.text) for o in m.other if o.text.strip()] if m.other is not None else auto_other
         visits = [vh.Visit(day=date.fromisoformat(v["date"]) if isinstance(v["date"], str) else v["date"],
                            start=v["start"], end=v["end"], therapist=v.get("therapist", ""), content=v.get("content", ""))
                   for v in rows]
@@ -147,7 +163,7 @@ def voucher_hwpx(child_id: str, body: VoucherHwpxIn, p: Principal = Depends(requ
             raise HTTPException(422, f"{m.month}에 다른 달 날짜가 섞여 있습니다")
         data = vh.VoucherInput(org_name=org.get("name", ""), child_name=child["display_name"], birth_date=birth, year=year,
                                month=mon, visits=visits, written_on=m.written_on, unit_price=price, copay=body.copay,
-                               phone=body.phone)
+                               phone=body.phone, other=other)
         try:
             content = vh.render(data)
         except vh.VoucherError as e:

@@ -7,7 +7,8 @@ import { useChild } from "../lib/child";
 import { Badge, Button, Input, Label, Notice, Textarea } from "./ui";
 
 type Visit = { date: string; start: string; end: string; therapist: string; content: string; content_source?: string };
-type MonthData = { month: string; minutes: number; unit_price: number | null; visits: Visit[] };
+type Other = { date: string; text: string };
+type MonthData = { month: string; minutes: number; unit_price: number | null; visits: Visit[]; other: Other[] };
 
 const addMonths = (ym: string, n: number) => {
   const [y, m] = ym.split("-").map(Number);
@@ -29,6 +30,7 @@ export default function VoucherHwpx({ childId, month }: { childId: string; month
   const months = monthsBetween(from, to < from ? from : to);
   const [tab, setTab] = useState(month);
   const [edits, setEdits] = useState<Record<string, Visit[]>>({});
+  const [otherEdits, setOtherEdits] = useState<Record<string, Other[]>>({});
   const [opt, setOpt] = useState({ unit_price: "", copay: "", phone: "" });
   const [busy, setBusy] = useState(false), [err, setErr] = useState(""), [saved, setSaved] = useState("");
   const loaded = useQueries({ queries: months.map((m) => ({ queryKey: ["voucher-visits", childId, m], queryFn: () => api<MonthData>(`/children/${childId}/voucher-visits?month=${m}`) })) });
@@ -36,6 +38,8 @@ export default function VoucherHwpx({ childId, month }: { childId: string; month
   const data = loaded[months.indexOf(current)]?.data;
   const visits = edits[current] ?? data?.visits ?? [];
   const setVisits = (v: Visit[]) => setEdits({ ...edits, [current]: v });
+  const other = otherEdits[current] ?? data?.other ?? [];
+  const setOther = (o: Other[]) => setOtherEdits({ ...otherEdits, [current]: o });
   const patch = (i: number, p: Partial<Visit>) => setVisits(visits.map((v, j) => (j === i ? { ...v, ...p } : v)));
   const plus = (hhmm: string, min: number) => { const [h, m] = hhmm.split(":").map(Number); const t = h * 60 + m + min; return `${String(Math.floor(t / 60) % 24).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`; };
   const empty = visits.filter((v) => !v.content.trim()).length;
@@ -44,7 +48,7 @@ export default function VoucherHwpx({ childId, month }: { childId: string; month
     setBusy(true); setErr(""); setSaved("");
     try {
       const body = {
-        months: months.map((m) => ({ month: m, ...(edits[m] ? { visits: edits[m] } : {}) })),
+        months: months.map((m) => ({ month: m, ...(edits[m] ? { visits: edits[m] } : {}), ...(otherEdits[m] ? { other: otherEdits[m] } : {}) })),
         ...(opt.unit_price && { unit_price: Number(opt.unit_price) }), ...(opt.copay && { copay: Number(opt.copay) }), ...(opt.phone.trim() && { phone: opt.phone.trim() }),
       };
       setSaved(await download(`/children/${childId}/voucher-hwpx`, body, `${child?.display_name ?? "아동"}-${label(months[0])}.hwpx`));
@@ -93,6 +97,21 @@ export default function VoucherHwpx({ childId, month }: { childId: string; month
             </div>
           </div>)}
       </div>
+
+      {data && (
+        <div className="rounded-lg border border-slate-200 p-3">
+          <p className="mb-2 text-sm font-medium">기타사항 <span className="font-normal text-slate-500">— 1쪽 ‘일자 · 기타사항’ 칸 (출결의 보강·결강·장기결강에서 자동으로 채워져요)</span></p>
+          <div className="space-y-2">
+            {other.map((o, i) => (
+              <div key={i} className="flex gap-2">
+                <div className="w-28 shrink-0"><Input value={o.date} maxLength={20} placeholder="일자" aria-label="일자" onChange={(e) => setOther(other.map((x, j) => (j === i ? { ...x, date: e.target.value } : x)))} /></div>
+                <Input value={o.text} maxLength={300} placeholder="내용" aria-label="기타사항" onChange={(e) => setOther(other.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))} />
+                <button className="rounded p-2 text-red-600 hover:bg-red-50" aria-label="이 줄 빼기" onClick={() => setOther(other.filter((_, j) => j !== i))}><Trash2 size={14} /></button>
+              </div>))}
+            {!other.length && <p className="text-sm text-slate-400">이 달에는 기록할 기타사항이 없어요.</p>}
+            <Button variant="ghost" onClick={() => setOther([...other, { date: "", text: "" }])}><Plus size={14} />줄 추가</Button>
+          </div>
+        </div>)}
 
       {err && <Notice tone="red">{err}</Notice>}
       {saved && <p className="text-sm text-green-700">‘{saved}’ 파일을 내려받았어요.</p>}

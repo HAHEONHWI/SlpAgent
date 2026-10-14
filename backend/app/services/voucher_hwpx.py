@@ -23,6 +23,7 @@ from pathlib import Path
 TEMPLATE = Path(__file__).resolve().parent.parent / "data" / "hwpx" / "voucher_template.hwpx"
 SECTION = "Contents/section0.xml"
 PER_SHEET = 5  # visit columns on page 1
+OTHER_ROWS = 3  # 기타사항 rows on page 1
 
 _LINESEG = re.compile(r"<hp:linesegarray>.*?</hp:linesegarray>", re.S)
 _ADDR = re.compile(r'<hp:cellAddr colAddr="(\d+)" rowAddr="(\d+)"/>')
@@ -56,6 +57,7 @@ class VoucherInput:
     copay: int | None = None  # 본인부담금; None leaves it blank
     phone: str | None = None  # None keeps the template's phone
     service: str = "언어재활"
+    other: list[tuple[str, str]] = field(default_factory=list)  # 기타사항 (일자, 내용): 수업일 변경, 결강, 장기결강
 
 
 # ---- XML helpers -----------------------------------------------------------------------------------
@@ -183,7 +185,7 @@ def _paragraphs(xml: str) -> list[tuple[int, int]]:
     return [(s, e) for s, e, d in _spans(xml, "hp:p") if d == 0]
 
 
-def _fill_sheet(doc: Doc, data: VoucherInput, visits: list[Visit]) -> None:
+def _fill_sheet(doc: Doc, data: VoucherInput, visits: list[Visit], other: list[tuple[str, str]]) -> None:
     def info(t: Table):
         t.set(0, 2, f" {data.org_name}")
         t.set(1, 2, data.child_name)
@@ -202,6 +204,10 @@ def _fill_sheet(doc: Doc, data: VoucherInput, visits: list[Visit]) -> None:
     def approvals(t: Table):
         for i in range(PER_SHEET):
             t.set(1 + i, 0, _md(visits[i].day) if i < len(visits) else "/")
+        for i in range(OTHER_ROWS):  # 일자 | 기타사항 rows under the 승인 rows
+            o = other[i] if i < len(other) else ("", "")
+            t.set(7 + i, 0, o[0])
+            t.set(7 + i, 1, o[1])
     doc.edit(doc.find("승인번호", "기타사항"), approvals)
 
 
@@ -212,19 +218,26 @@ def _fill_pages_1(xml: str, data: VoucherInput) -> str:
     p2 = next(i for i, t in enumerate(texts) if t.strip() == "※ 별지")  # not the 별지첨부 cell on page 1
     sheet_xml = xml[paras[0][0]:paras[p2][0]]
     chunks = [data.visits[i:i + PER_SHEET] for i in range(0, max(len(data.visits), 1), PER_SHEET)] or [[]]
+    # 기타사항: three lines per sheet; anything left over joins the last line of the last sheet
+    lines = list(data.other)
+    room = OTHER_ROWS * len(chunks)
+    if len(lines) > room:
+        tail = lines[room - 1:]
+        lines = lines[:room - 1] + [(tail[0][0], " / ".join([tail[0][1]] + [f"{d} {t}".strip() for d, t in tail[1:]]))]
+    others = [lines[k * OTHER_ROWS:(k + 1) * OTHER_ROWS] for k in range(len(chunks))]
 
-    def filled(chunk: list[Visit], first: bool) -> str:
+    def filled(chunk: list[Visit], first: bool, other: list[tuple[str, str]]) -> str:
         part = sheet_xml
         if not first:  # a copy: no section/column definitions, starts a new page
             part = re.sub(r"<hp:secPr\b.*?</hp:secPr>", "", part, count=1, flags=re.S)
             part = re.sub(r"<hp:ctrl>\s*<hp:colPr\b[^>]*/>\s*</hp:ctrl>", "", part, count=1, flags=re.S)
             part = re.sub(r'pageBreak="0"', 'pageBreak="1"', part, count=1)
         d = Doc(part)
-        _fill_sheet(d, data, chunk)
+        _fill_sheet(d, data, chunk, other)
         d.replace_text(TITLE1, rf"\g<1> {data.month}월 \g<2>")
         return _LINESEG.sub("", d.xml) if not first else d.xml
 
-    body = "".join(filled(c, i == 0) for i, c in enumerate(chunks))
+    body = "".join(filled(c, i == 0, others[i]) for i, c in enumerate(chunks))
     return xml[:paras[0][0]] + body + xml[paras[p2][0]:]
 
 

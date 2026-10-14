@@ -87,3 +87,10 @@ def test_api_uses_schedules_attendance_and_notes(client, child):
     assert bad.status_code == 422
     assert client.post(f"/children/{cid}/voucher-hwpx", headers=H(role="assistant"), json={"months": [{"month": "2026-10"}]}).status_code == 403
     assert client.get(f"/children/{cid}/voucher-visits?month=2026-10", headers=H("orgB")).status_code == 404
+
+
+def test_other_notes_fill_the_gitasahang_rows():
+    other = [("10/13", "수업일 변경 → 10/15 보강"), ("10/20", "결강 (독감)"), ("10/26~11/8", "장기결강 (입원)"), ("10/30", "추가 메모")]
+    xml = _section(vh.render(vh.VoucherInput("기관", "가나", None, 2026, 10, _visits(10, [6, 15]), other=other)))
+    approvals = next(x for x in _tables(xml) if x and x[0][:2] == ["승인일자", "승인번호"])
+    assert approvals[7:10] == [["10/13", "수업일 변경 → 10/15 보강"], ["10/20", "결강 (독감)"], ["10/26~11/8", "장기결강 (입원) / 10/30 추가 메모"]]

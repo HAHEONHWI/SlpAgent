@@ -1,77 +1,179 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Trash2, Undo2 } from "lucide-react";
 import { api } from "../lib/api";
 import { useChild } from "../lib/child";
 import { errText } from "../lib/hooks";
-import { Badge, Button, Card, Empty, Input, Notice, PageTitle, Table, Td } from "../components/ui";
+import { useMe } from "../lib/me";
+import ChildPicker from "../components/ChildPicker";
+import { Badge, Button, Card, Empty, Input, Label, Notice, PageTitle, Table, Td } from "../components/ui";
 
+type State = { status: string | null; auto: boolean; reason: string | null };
 type Mark = { status: string; minutes_late?: number | null; note?: string | null };
-type Row = { schedule_id: string; child_id: string; start: string; end: string; therapist: string; attendance: Mark | null };
-type Summary = { child_id: string; scheduled: number; present: number; late: number; absent: number; excused: number; makeup: number; marked: number; rate_pct: number | null };
+type Row = { schedule_id: string; child_id: string; start: string; end: string; therapist: string; attendance: Mark | null; state: State;
+  moved_to: { date: string; start: string } | null; moved_from: string | null };
+type Summary = { child_id: string; scheduled: number; present: number; late: number; absent: number; excused: number; makeup: number;
+  auto: number; upcoming: number; moved: number; rate_pct: number | null };
+type Absence = { id: string; child_id: string; start: string; end: string; reason: string | null };
+type Holiday = { date: string; name: string };
 
 const ST: Record<string, [string, "green" | "amber" | "red" | "slate" | "indigo"]> = {
   present: ["출석", "green"], late: ["지각", "amber"], absent: ["결석", "red"], excused: ["사유결석", "slate"], makeup: ["보강", "indigo"],
+  moved: ["옮김", "slate"], cancelled: ["취소", "slate"],
 };
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+const md = (iso: string) => `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}`;
 
 export default function Attendance() {
   const { children } = useChild();
+  const isAdmin = useMe().data?.role === "admin";
   const qc = useQueryClient();
   const [day, setDay] = useState(today());
   const [month, setMonth] = useState(today().slice(0, 7));
-  const [late, setLate] = useState<Record<string, string>>({});
-  const [note, setNote] = useState<Record<string, string>>({});
+  const refresh = () => { qc.invalidateQueries({ queryKey: ["attendance"] }); qc.invalidateQueries({ queryKey: ["schedules"] }); qc.invalidateQueries({ queryKey: ["voucher-visits"] }); };
+  const who = (id: string) => { const c = children.find((x) => x.id === id); return c ? `${c.display_name} · ${c.alias}` : "–"; };
   const roll = useQuery({ queryKey: ["attendance", "day", day], queryFn: () => api<Row[]>(`/attendance/day?on=${day}`) });
   const summary = useQuery({ queryKey: ["attendance", "summary", month], queryFn: () => api<Summary[]>(`/attendance/summary?month=${month}`) });
-  const mark = useMutation({
-    mutationFn: ({ sid, status }: { sid: string; status: string }) => api(`/schedules/${sid}/attendance`, { method: "PUT", json: {
-      status, minutes_late: status === "late" && late[sid] ? Number(late[sid]) : null, note: note[sid]?.trim() || null } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["attendance"] }),
-  });
-  const who = (id: string) => { const c = children.find((x) => x.id === id); return c ? `${c.alias} · ${c.display_name}` : "–"; };
+
   return (
     <>
-      <PageTitle title="출결 관리" sub="일정에 등록된 회기별로 출결을 기록합니다. 사유결석은 출석률 계산에서 제외되고, 보강은 출석으로 셉니다." />
+      <PageTitle title="출결 관리" sub="수업은 따로 체크하지 않으면 출석으로 처리돼요. 결석·사유결석·지각, 보강(수업 옮기기), 장기결강, 기관 휴무일만 여기서 기록하세요. 바우처 서류에 자동으로 반영됩니다." />
       <div className="space-y-4">
-        <Card title="일별 출석 체크" action={<div className="w-44 shrink-0"><Input type="date" value={day} onChange={(e) => setDay(e.target.value)} aria-label="날짜" /></div>}>
-          {roll.isLoading ? <p className="text-sm text-slate-400">불러오는 중…</p> : !roll.data?.length ? <Empty>이 날짜에 예정된 회기가 없습니다. 일정 관리에서 먼저 일정을 등록하세요.</Empty> : (
-            <Table head={["시간", "아동", "치료사", "현재", "출결 기록", "지각(분)·메모"]}>
-              {roll.data.map((r) => {
-                const cur = r.attendance?.status;
-                return (
-                  <tr key={r.schedule_id}>
-                    <Td className="whitespace-nowrap">{r.start}–{r.end}</Td><Td className="font-medium">{who(r.child_id)}</Td><Td>{r.therapist}</Td>
-                    <Td>{cur ? <Badge tone={ST[cur][1]}>{ST[cur][0]}{cur === "late" && r.attendance?.minutes_late ? ` ${r.attendance.minutes_late}분` : ""}</Badge> : <span className="text-xs text-slate-400">미기록</span>}
-                      {r.attendance?.note && <p className="mt-1 text-xs text-slate-500">{r.attendance.note}</p>}</Td>
-                    <Td><div className="flex flex-wrap gap-1" role="group" aria-label="출결 선택">
-                      {Object.entries(ST).map(([k, [l]]) => (
-                        <Button key={k} variant={cur === k ? "primary" : "outline"} aria-pressed={cur === k} disabled={mark.isPending}
-                          onClick={() => mark.mutate({ sid: r.schedule_id, status: k })}>{l}</Button>))}
-                    </div></Td>
-                    <Td><div className="flex gap-1">
-                      <Input className="w-16" type="number" min={0} max={240} placeholder="분" value={late[r.schedule_id] ?? ""} onChange={(e) => setLate({ ...late, [r.schedule_id]: e.target.value })} aria-label="지각 분" />
-                      <Input className="w-40" placeholder="메모 (예: 감기)" maxLength={500} value={note[r.schedule_id] ?? ""} onChange={(e) => setNote({ ...note, [r.schedule_id]: e.target.value })} aria-label="메모" />
-                    </div></Td>
-                  </tr>);
-              })}
-            </Table>)}
-          <p className="mt-2 text-xs text-slate-500">지각 분·메모를 먼저 적고 출결 버튼을 누르면 함께 저장됩니다. 다시 누르면 기존 기록을 바꿉니다.</p>
-          {mark.error && <div className="mt-2"><Notice tone="red">{errText(mark.error)}</Notice></div>}
+        <Card title="일별 출결" action={<div className="w-44 shrink-0"><Input type="date" value={day} onChange={(e) => setDay(e.target.value)} aria-label="날짜" /></div>}>
+          {roll.isLoading ? <p className="text-sm text-slate-400">불러오는 중…</p> : !roll.data?.length ? <Empty>이 날짜에 수업이 없습니다.</Empty> : (
+            <ul className="divide-y divide-slate-100">{roll.data.map((r) => <RollRow key={r.schedule_id} r={r} who={who(r.child_id)} onDone={refresh} />)}</ul>)}
+          {roll.error && <Notice tone="red">{errText(roll.error)}</Notice>}
         </Card>
 
-        <Card title="월별 출석 현황" action={<div className="w-44 shrink-0"><Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} aria-label="월" /></div>}>
-          {!summary.data?.length ? <Empty>이 달의 일정이 없습니다.</Empty> : (
-            <Table head={["아동", "예정 회기", "출석", "지각", "보강", "결석", "사유결석", "미기록", "출석률"]}>
+        <Absences who={who} onDone={refresh} />
+        <Holidays isAdmin={isAdmin} onDone={refresh} />
+
+        <Card title="월별 출결 현황" action={<div className="w-44 shrink-0"><Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} aria-label="월" /></div>}>
+          {!summary.data?.length ? <Empty>이 달의 수업이 없습니다.</Empty> : (
+            <Table head={["아동", "수업", "출석", "(자동)", "지각", "결석", "사유결석", "옮김", "남은 수업", "출석률"]}>
               {summary.data.map((s) => (
                 <tr key={s.child_id}>
-                  <Td className="font-medium">{who(s.child_id)}</Td><Td>{s.scheduled}</Td><Td>{s.present}</Td><Td>{s.late}</Td><Td>{s.makeup}</Td>
-                  <Td className={s.absent ? "font-semibold text-red-700" : ""}>{s.absent}</Td><Td>{s.excused}</Td><Td>{Math.max(0, s.scheduled - s.marked)}</Td>
+                  <Td className="font-medium">{who(s.child_id)}</Td><Td>{s.scheduled}</Td><Td>{s.present + s.makeup}</Td><Td className="text-slate-400">{s.auto}</Td><Td>{s.late}</Td>
+                  <Td className={s.absent ? "font-semibold text-red-700" : ""}>{s.absent}</Td><Td>{s.excused}</Td><Td>{s.moved}</Td><Td>{s.upcoming}</Td>
                   <Td>{s.rate_pct == null ? "–" : <Badge tone={s.rate_pct >= 90 ? "green" : s.rate_pct >= 75 ? "amber" : "red"}>{s.rate_pct}%</Badge>}</Td>
                 </tr>))}
             </Table>)}
-          <p className="mt-2 text-xs text-slate-500">출석률 = (출석+지각+보강) ÷ (출석+지각+보강+결석). 서버에서 계산합니다.</p>
+          <p className="mt-2 text-xs text-slate-500">출석에는 따로 체크하지 않아 자동으로 출석 처리된 수업(자동)이 포함돼요. 출석률 = (출석+지각) ÷ (출석+지각+결석). 사유결석·장기결강은 빼고 계산합니다.</p>
         </Card>
       </div>
     </>
+  );
+}
+
+function RollRow({ r, who, onDone }: { r: Row; who: string; onDone: () => void }) {
+  const [note, setNote] = useState(""), [late, setLate] = useState("");
+  const [moving, setMoving] = useState(false), [to, setTo] = useState({ date: "", start: r.start, reason: "" });
+  const mark = useMutation({
+    mutationFn: (status: string) => api(`/schedules/${r.schedule_id}/attendance`, { method: "PUT", json: { status, minutes_late: status === "late" && late ? Number(late) : null, note: note.trim() || null } }),
+    onSuccess: () => { setNote(""); setLate(""); onDone(); },
+  });
+  const clear = useMutation({ mutationFn: () => api(`/schedules/${r.schedule_id}/attendance`, { method: "DELETE" }), onSuccess: onDone });
+  const move = useMutation({ mutationFn: () => api(`/schedules/${r.schedule_id}/move`, { method: "POST", json: { date: to.date, start: to.start, reason: to.reason.trim() || null } }), onSuccess: () => { setMoving(false); onDone(); } });
+  const unmove = useMutation({ mutationFn: () => api(`/schedules/${r.schedule_id}/unmove`, { method: "POST" }), onSuccess: onDone });
+  const st = r.state.status;
+  const err = mark.error || clear.error || move.error || unmove.error;
+  const badge = st === "moved" ? <Badge>옮김 → {r.moved_to ? `${md(r.moved_to.date)} ${r.moved_to.start}` : "?"}</Badge>
+    : st ? <Badge tone={ST[st]?.[1]}>{ST[st]?.[0] ?? st}{st === "late" && r.attendance?.minutes_late ? ` ${r.attendance.minutes_late}분` : ""}{r.state.auto && st === "present" ? " (자동)" : ""}</Badge>
+    : <Badge>예정</Badge>;
+  return (
+    <li className="py-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="w-24 shrink-0 text-sm tabular-nums text-slate-600">{r.start}–{r.end}</span>
+        <span className="font-medium">{who}</span>
+        <span className="text-sm text-slate-500">{r.therapist}</span>
+        {r.moved_from && <Badge tone="indigo">보강</Badge>}
+        {badge}
+        {r.state.reason && <span className="text-xs text-slate-500">{r.state.reason}</span>}
+      </div>
+      {st !== "moved" && !(r.state.auto && st === "excused") && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <div className="w-40"><Input placeholder="사유 (예: 감기)" maxLength={200} value={note} onChange={(e) => setNote(e.target.value)} aria-label="사유" /></div>
+          <Button variant={st === "absent" && !r.state.auto ? "primary" : "outline"} disabled={mark.isPending} onClick={() => mark.mutate("absent")}>결석</Button>
+          <Button variant={st === "excused" && !r.state.auto ? "primary" : "outline"} disabled={mark.isPending} onClick={() => mark.mutate("excused")}>사유결석</Button>
+          <div className="w-16"><Input type="number" min={0} max={240} placeholder="분" value={late} onChange={(e) => setLate(e.target.value)} aria-label="지각 분" /></div>
+          <Button variant={st === "late" ? "primary" : "outline"} disabled={mark.isPending} onClick={() => mark.mutate("late")}>지각</Button>
+          {r.attendance ? <Button variant="ghost" disabled={clear.isPending} onClick={() => clear.mutate()}><Undo2 size={14} />기본(출석)으로</Button>
+            : !r.moved_from && <Button variant="ghost" onClick={() => { move.reset(); setMoving(!moving); }}>보강 잡기</Button>}
+        </div>)}
+      {st === "moved" && <div className="mt-2"><Button variant="ghost" disabled={unmove.isPending} onClick={() => unmove.mutate()}><Undo2 size={14} />옮기기 취소</Button></div>}
+      {moving && (
+        <form className="mt-2 flex flex-wrap items-end gap-2 rounded-lg bg-slate-50 p-3" onSubmit={(e) => { e.preventDefault(); move.mutate(); }}>
+          <Label label="보강 날짜"><Input type="date" required value={to.date} onChange={(e) => setTo({ ...to, date: e.target.value })} /></Label>
+          <Label label="시작 시간"><Input type="time" required value={to.start} onChange={(e) => setTo({ ...to, start: e.target.value })} /></Label>
+          <Label label="사유 (선택)"><Input maxLength={200} value={to.reason} onChange={(e) => setTo({ ...to, reason: e.target.value })} /></Label>
+          <Button disabled={move.isPending}>옮기기</Button>
+          <Button type="button" variant="ghost" onClick={() => setMoving(false)}>취소</Button>
+        </form>)}
+      {err && <div className="mt-2"><Notice tone="red">{errText(err)}</Notice></div>}
+    </li>
+  );
+}
+
+function Absences({ who, onDone }: { who: (id: string) => string; onDone: () => void }) {
+  const qc = useQueryClient();
+  const list = useQuery({ queryKey: ["attendance", "absences"], queryFn: () => api<Absence[]>("/absences") });
+  const [f, setF] = useState({ child_id: "", start: "", end: "", reason: "" });
+  const done = () => { qc.invalidateQueries({ queryKey: ["attendance", "absences"] }); onDone(); };
+  const add = useMutation({ mutationFn: () => api("/absences", { method: "POST", json: { ...f, reason: f.reason.trim() || null } }), onSuccess: () => { setF({ child_id: "", start: "", end: "", reason: "" }); done(); } });
+  const remove = useMutation({ mutationFn: (id: string) => api(`/absences/${id}`, { method: "DELETE" }), onSuccess: done });
+  return (
+    <Card title="장기결강">
+      <form className="grid gap-2 sm:grid-cols-[minmax(0,1.4fr)_9.5rem_9.5rem_minmax(0,1fr)_auto] sm:items-end" onSubmit={(e) => { e.preventDefault(); add.mutate(); }}>
+        <Label label="아동"><ChildPicker value={f.child_id || null} onChange={(id) => setF({ ...f, child_id: id ?? "" })} /></Label>
+        <Label label="시작일"><Input type="date" required value={f.start} onChange={(e) => setF({ ...f, start: e.target.value })} /></Label>
+        <Label label="종료일"><Input type="date" required min={f.start} value={f.end} onChange={(e) => setF({ ...f, end: e.target.value })} /></Label>
+        <Label label="사유"><Input maxLength={200} placeholder="예: 입원, 방학" value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} /></Label>
+        <Button disabled={add.isPending || !f.child_id}>등록</Button>
+      </form>
+      <p className="mt-2 text-xs text-slate-500">기간 안의 수업은 모두 사유결석으로 처리되고 바우처 서류에서 빠지며, ‘기타사항’에 기간과 사유가 적혀요.</p>
+      {!!list.data?.length && (
+        <ul className="mt-3 divide-y divide-slate-100 rounded-lg border border-slate-200">
+          {list.data.map((a) => (
+            <li key={a.id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
+              <span className="font-medium">{who(a.child_id)}</span>
+              <span className="tabular-nums text-slate-600">{a.start} ~ {a.end}</span>
+              {a.reason && <span className="text-slate-500">{a.reason}</span>}
+              <button className="ml-auto rounded p-1.5 text-red-600 hover:bg-red-50" aria-label="장기결강 삭제" onClick={() => remove.mutate(a.id)}><Trash2 size={14} /></button>
+            </li>))}
+        </ul>)}
+      {(add.error || remove.error) && <div className="mt-2"><Notice tone="red">{errText(add.error || remove.error)}</Notice></div>}
+    </Card>
+  );
+}
+
+function Holidays({ isAdmin, onDone }: { isAdmin: boolean; onDone: () => void }) {
+  const qc = useQueryClient();
+  const list = useQuery({ queryKey: ["attendance", "holidays"], queryFn: () => api<Holiday[]>("/org/holidays") });
+  const [f, setF] = useState({ date: "", name: "" });
+  const save = useMutation({
+    mutationFn: (rows: Holiday[]) => api<Holiday[]>("/org/holidays", { method: "PUT", json: { holidays: rows } }),
+    onSuccess: () => { setF({ date: "", name: "" }); qc.invalidateQueries({ queryKey: ["attendance", "holidays"] }); qc.invalidateQueries({ queryKey: ["timetable"] }); onDone(); },
+  });
+  const rows = list.data ?? [];
+  const upcoming = rows.filter((h) => h.date >= today().slice(0, 7));
+  return (
+    <Card title="기관 휴무일">
+      {isAdmin && (
+        <form className="mb-3 flex flex-wrap items-end gap-2" onSubmit={(e) => { e.preventDefault(); save.mutate([...rows, { date: f.date, name: f.name.trim() || "휴무" }]); }}>
+          <Label label="날짜"><Input type="date" required value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></Label>
+          <Label label="이름"><Input maxLength={40} placeholder="예: 한글날, 원내 행사" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Label>
+          <Button disabled={save.isPending}>추가</Button>
+        </form>)}
+      {!upcoming.length ? <Empty>등록된 휴무일이 없습니다.</Empty> : (
+        <div className="flex flex-wrap gap-2">
+          {upcoming.map((h) => (
+            <span key={h.date} className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 py-1 pl-3 pr-1.5 text-sm">
+              <b className="tabular-nums">{md(h.date)}</b>{h.name}
+              {isAdmin && <button className="rounded-full p-0.5 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label={`${h.name} 삭제`} onClick={() => save.mutate(rows.filter((x) => x.date !== h.date))}><Trash2 size={13} /></button>}
+            </span>))}
+        </div>)}
+      <p className="mt-2 text-xs text-slate-500">휴무일에는 주간 시간표 수업이 생기지 않아요. {isAdmin ? "" : "휴무일은 기관 관리자가 정해요."}</p>
+      {save.error && <div className="mt-2"><Notice tone="red">{errText(save.error)}</Notice></div>}
+    </Card>
   );
 }

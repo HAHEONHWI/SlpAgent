@@ -14,21 +14,27 @@ def test_summary_math_excludes_excused_and_counts_makeup():
 
 
 def test_mark_roll_call_and_monthly_summary(client, child):
-    a = _schedule(client, child, "2026-10-13")
-    b = _schedule(client, child, "2026-10-20")
-    c = _schedule(client, child, "2026-10-13", "11:00", "11:40", "이")
+    a = _schedule(client, child, "2020-10-13")
+    b = _schedule(client, child, "2020-10-20")
+    c = _schedule(client, child, "2020-10-13", "11:00", "11:40", "이")
+    f = _schedule(client, child, "2099-10-13")
     assert client.put(f"/schedules/{a['id']}/attendance", headers=H(), json={"status": "late", "minutes_late": 10}).status_code == 200
     # re-marking replaces the mark instead of adding another
     r = client.put(f"/schedules/{a['id']}/attendance", headers=H(), json={"status": "present", "minutes_late": 5})
     assert r.json()["status"] == "present" and r.json()["minutes_late"] is None
     client.put(f"/schedules/{b['id']}/attendance", headers=H(), json={"status": "absent", "note": "감기"})
-    day = client.get("/attendance/day?on=2026-10-13", headers=H()).json()
-    assert [(d["start"], (d["attendance"] or {}).get("status")) for d in day] == [("10:00", "present"), ("11:00", None)]
-    mine = client.get(f"/children/{child['id']}/attendance?month=2026-10", headers=H()).json()
-    assert len(mine["records"]) == 2 and mine["summary"]["rate_pct"] == 50.0
-    org = client.get("/attendance/summary?month=2026-10", headers=H()).json()
+    day = client.get("/attendance/day?on=2020-10-13", headers=H()).json()
+    # nobody marked 11:00, and its day has passed: 출석 by default
+    assert [(d["start"], d["state"]["status"], d["state"]["auto"]) for d in day] == [("10:00", "present", False), ("11:00", "present", True)]
+    mine = client.get(f"/children/{child['id']}/attendance?month=2020-10", headers=H()).json()
+    assert len(mine["records"]) == 3 and mine["summary"]["rate_pct"] == 66.7 and mine["summary"]["auto"] == 1
+    org = client.get("/attendance/summary?month=2020-10", headers=H()).json()
     assert org == [{"child_id": child["id"], "scheduled": 3, **mine["summary"]}]
+    assert client.get(f"/children/{child['id']}/attendance?month=2099-10", headers=H()).json()["summary"]["upcoming"] == 1
+    assert client.delete(f"/schedules/{b['id']}/attendance", headers=H()).status_code == 204  # back to the default
+    assert client.get(f"/children/{child['id']}/attendance?month=2020-10", headers=H()).json()["summary"]["rate_pct"] == 100.0
     assert client.get("/attendance/summary?month=bad", headers=H()).status_code == 422
+    assert f
 
 
 def test_attendance_permissions_and_isolation(client, child):
@@ -40,3 +46,40 @@ def test_attendance_permissions_and_isolation(client, child):
     client.post(f"/schedules/{a['id']}/cancel", headers=H())
     assert client.put(f"/schedules/{a['id']}/attendance", headers=H(), json={"status": "present"}).status_code == 409
     assert client.put(f"/schedules/{a['id']}/attendance", headers=H(), json={"status": "sick"}).status_code in (409, 422)
+
+
+def test_makeup_move_long_absence_and_holidays_reach_the_voucher(client, child):
+    cid = child["id"]
+    a = _schedule(client, child, "2020-10-06")
+    b = _schedule(client, child, "2020-10-13")
+    c = _schedule(client, child, "2020-10-20")
+    d = _schedule(client, child, "2020-10-27")
+    # 보강: 10/13 -> 10/15 11:00
+    mv = client.post(f"/schedules/{b['id']}/move", headers=H(), json={"date": "2020-10-15", "start": "11:00", "reason": "보호자 요청"}).json()
+    assert mv["moved"]["status"] == "moved" and mv["makeup"]["date"] == "2020-10-15" and mv["makeup"]["end"] == "11:40"
+    assert client.post(f"/schedules/{b['id']}/move", headers=H(), json={"date": "2020-10-16", "start": "11:00"}).status_code == 409
+    # 결강 with a reason, and a 장기결강 over 10/27
+    client.put(f"/schedules/{c['id']}/attendance", headers=H(), json={"status": "excused", "note": "독감"})
+    ab = client.post("/absences", headers=H(), json={"child_id": cid, "start": "2020-10-26", "end": "2020-11-08", "reason": "입원"}).json()
+    assert client.post("/absences", headers=H(), json={"child_id": cid, "start": "2020-11-01", "end": "2020-11-02"}).status_code == 409
+    v = client.get(f"/children/{cid}/voucher-visits?month=2020-10", headers=H()).json()
+    assert [x["date"] for x in v["visits"]] == ["2020-10-06", "2020-10-15"]  # held classes only, 보강 included
+    assert v["other"] == [{"date": "10/13", "text": "수업일 변경 → 10/15 11:00 보강 (보호자 요청)"},
+                          {"date": "10/20", "text": "결강 (독감)"},
+                          {"date": "10/26~11/8", "text": "장기결강 (입원)"}]
+    s = client.get(f"/children/{cid}/attendance?month=2020-10", headers=H()).json()["summary"]
+    assert (s["present"], s["excused"], s["moved"]) == (2, 2, 1)
+    # undo the move
+    client.post(f"/schedules/{b['id']}/unmove", headers=H())
+    assert [x["date"] for x in client.get(f"/children/{cid}/voucher-visits?month=2020-10", headers=H()).json()["visits"]] == ["2020-10-06", "2020-10-13"]
+    assert client.delete(f"/absences/{ab['id']}", headers=H()).status_code == 204
+    assert client.post("/absences", headers=H("orgB"), json={"child_id": cid, "start": "2020-10-01", "end": "2020-10-02"}).status_code == 404
+    # 휴무일: admin only; the timetable makes no class that day
+    client.put("/timetable/config", headers=H(role="admin"), json={"teachers": [{"id": "t", "name": "김", "short": "김", "color": "#2563eb"}]})
+    client.post("/timetable/entries", headers=H(), json={"day": 1, "slot": "09:00", "teacher_id": "t", "child_id": cid})
+    assert client.put("/org/holidays", headers=H(), json={"holidays": []}).status_code == 403
+    client.get("/schedules?month=2099-03", headers=H())  # Mondays in March 2099 are made
+    assert client.put("/org/holidays", headers=H(role="admin"), json={"holidays": [{"date": "2099-03-02", "name": "대체휴일"}]}).json() == [{"date": "2099-03-02", "name": "대체휴일"}]
+    days = [x["date"] for x in client.get("/schedules?month=2099-03", headers=H()).json()]
+    assert "2099-03-02" not in days and "2099-03-09" in days
+    assert a and d
