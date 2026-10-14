@@ -28,6 +28,7 @@ const Activities = lazy(() => import("./pages/Activities"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const Platform = lazy(() => import("./pages/Platform"));
 const Account = lazy(() => import("./pages/Account"));
+const Notices = lazy(() => import("./pages/Notices"));
 
 const page = (el: React.ReactNode) => <Suspense fallback={<p className="text-sm text-slate-400">불러오는 중…</p>}>{el}</Suspense>;
 
@@ -64,6 +65,7 @@ export default function App() {
         <Route path="attendance" element={page(<Attendance />)} />
         <Route path="settings" element={page(<Settings />)} />
         <Route path="account" element={page(<Account />)} />
+        <Route path="notices" element={page(<Notices />)} />
         <Route path="*" element={<Navigate to="/" />} />
       </Route>
     </Routes>

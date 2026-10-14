@@ -1,8 +1,9 @@
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
-import { Bell, BookOpen, Brain, CalendarDays, ClipboardList, FileText, HeartHandshake, LayoutDashboard, LineChart, ListChecks, NotebookPen, Settings, Sparkles, Stethoscope, Users, Library, LogOut, UserCheck, UserCog } from "lucide-react";
+import { Bell, Megaphone, BookOpen, Brain, CalendarDays, ClipboardList, FileText, HeartHandshake, LayoutDashboard, LineChart, ListChecks, NotebookPen, Settings, Sparkles, Stethoscope, Users, Library, LogOut, UserCheck, UserCog } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useChild } from "../lib/child";
 import { useMe } from "../lib/me";
+import { seenAt, useNotices } from "../lib/notices";
 import { ageLabel } from "../lib/api";
 import BrandLogo from "./BrandLogo";
 import Footer from "./Footer";
@@ -26,6 +27,7 @@ const MENU: { to: string; label: string; icon: typeof LayoutDashboard; soon?: bo
   { to: "/knowledge", label: "AI 지식자료실", icon: Library },
   { to: "/schedule", label: "일정 관리", icon: CalendarDays },
   { to: "/attendance", label: "출결 관리", icon: UserCheck },
+  { to: "/notices", label: "공지사항", icon: Megaphone },
   { to: "/settings", label: "기관 설정", icon: Settings },
 ];
 
@@ -34,6 +36,9 @@ export default function Layout() {
   const isAiRoute = pathname === "/ai";
   const { label, logout } = useAuth();
   const me = useMe().data;
+  const notices = useNotices().data ?? [];
+  const seen = seenAt(me?.uid); // re-read on every render (route changes), so visiting 공지사항 clears the badge
+  const unread = pathname === "/notices" ? 0 : notices.filter((n) => n.created_at > seen).length;
   const { childId, child, children, setChildId } = useChild();
   return (
     <div className="flex h-dvh overflow-hidden bg-slate-50 print:block print:h-auto print:overflow-visible print:bg-white">
@@ -58,7 +63,11 @@ export default function Layout() {
           <ChildPicker className="w-[min(14rem,42vw)] sm:w-64" value={childId} onChange={setChildId} emptyLabel="아동 선택 안 함 (일반 모드)" aria-label="아동 선택" />
           {child && <span className="hidden text-sm text-slate-500 sm:inline">{ageLabel(child.age_months)}</span>}
           <div className="ml-auto flex min-w-0 items-center gap-1.5 text-sm text-slate-500 sm:gap-3">
-            <Bell size={16} className="hidden shrink-0 sm:block" />
+            <Link to="/notices" title="공지사항" className="relative shrink-0 rounded-md p-1.5 hover:bg-slate-100 hover:text-slate-800">
+              <Bell size={16} />
+              {unread > 0 && <span className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">{unread > 9 ? "9+" : unread}</span>}
+              <span className="sr-only">공지사항{unread > 0 ? ` (새 공지 ${unread}개)` : ""}</span>
+            </Link>
             {me?.org_name && <span className="hidden max-w-40 truncate font-medium text-slate-700 xl:inline">{me.org_name}</span>}
             <Link to="/account" title="내 계정" className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 hover:bg-slate-100 hover:text-slate-800"><UserCog size={15} /><span className="hidden max-w-44 truncate lg:inline">{me?.email ?? label}</span><span className="sr-only">내 계정</span></Link>
             <Button variant="ghost" className="shrink-0 px-2 sm:px-3" onClick={logout}><LogOut size={14} /><span className="sr-only sm:not-sr-only">로그아웃</span></Button>
