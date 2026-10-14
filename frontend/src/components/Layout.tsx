@@ -1,5 +1,6 @@
+import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
-import { Bell, Megaphone, BookOpen, Brain, CalendarDays, ClipboardList, FileText, HeartHandshake, LayoutDashboard, LineChart, ListChecks, NotebookPen, Settings, Sparkles, Stethoscope, Users, Library, LogOut, UserCheck, UserCog } from "lucide-react";
+import { Bell, Megaphone, Menu, X, BookOpen, Brain, CalendarDays, ClipboardList, FileText, HeartHandshake, LayoutDashboard, LineChart, ListChecks, NotebookPen, Settings, Sparkles, Stethoscope, Users, Library, LogOut, UserCheck, UserCog } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useChild } from "../lib/child";
 import { useMe } from "../lib/me";
@@ -36,6 +37,8 @@ export default function Layout() {
   const isAiRoute = pathname === "/ai";
   const { label, logout } = useAuth();
   const me = useMe().data;
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => { setMenuOpen(false); }, [pathname]); // close the mobile menu after navigating
   const notices = useNotices().data ?? [];
   const seen = seenAt(me?.uid); // re-read on every render (route changes), so visiting 공지사항 clears the badge
   const unread = pathname === "/notices" ? 0 : notices.filter((n) => n.created_at > seen).length;
@@ -59,7 +62,9 @@ export default function Layout() {
       </aside>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-10 flex print:hidden shrink-0 items-center gap-2 border-b border-slate-200 bg-white/90 px-2 py-2.5 backdrop-blur sm:gap-3 sm:px-4">
-          <Link to="/" title="메인으로" className="shrink-0 md:hidden"><BrandLogo className="w-14" /></Link>
+          <button className="shrink-0 rounded-md p-1.5 text-slate-600 hover:bg-slate-100 md:hidden" onClick={() => setMenuOpen(!menuOpen)}
+            aria-label={menuOpen ? "메뉴 닫기" : "메뉴 열기"} aria-expanded={menuOpen} aria-controls="mobile-menu">{menuOpen ? <X size={20} /> : <Menu size={20} />}</button>
+          <Link to="/" title="메인으로" className="hidden shrink-0 sm:block md:hidden"><BrandLogo className="w-14" /></Link>
           <ChildPicker className="w-[min(14rem,42vw)] sm:w-64" value={childId} onChange={setChildId} emptyLabel="아동 선택 안 함 (일반 모드)" aria-label="아동 선택" />
           {child && <span className="hidden text-sm text-slate-500 sm:inline">{ageLabel(child.age_months)}</span>}
           <div className="ml-auto flex min-w-0 items-center gap-1.5 text-sm text-slate-500 sm:gap-3">
@@ -73,14 +78,20 @@ export default function Layout() {
             <Button variant="ghost" className="shrink-0 px-2 sm:px-3" onClick={logout}><LogOut size={14} /><span className="sr-only sm:not-sr-only">로그아웃</span></Button>
           </div>
         </header>
-        <nav aria-label="주요 메뉴" className="flex shrink-0 gap-1 overflow-x-auto print:hidden border-b border-slate-200 bg-white px-2 py-1.5 md:hidden">
-          {MENU.map(({ to, label, icon: I }) => (
-            <NavLink key={to} to={to} end={to === "/"} aria-label={label} title={label} className={({ isActive }) =>
-              `inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-2 text-xs transition-colors ${isActive ? "bg-indigo-50 font-semibold text-indigo-800" : "text-slate-600 hover:bg-slate-100"}`}>
-              <I size={15} /><span>{label}</span>
-            </NavLink>
-          ))}
-        </nav>
+        {menuOpen && (
+          <div className="fixed inset-0 top-[3.25rem] z-20 bg-slate-900/30 md:hidden print:hidden" onClick={() => setMenuOpen(false)}>
+            <nav id="mobile-menu" aria-label="주요 메뉴" className="max-h-full overflow-y-auto border-b border-slate-200 bg-white p-3 shadow-lg" onClick={(e) => e.stopPropagation()}>
+              <Link to="/" className="mb-2 flex items-center gap-2 px-1"><BrandLogo className="w-16" />{me?.org_name && <span className="truncate text-sm font-medium text-slate-700">{me.org_name}</span>}</Link>
+              <div className="grid grid-cols-3 gap-1.5">
+                {MENU.map(({ to, label, icon: I }) => (
+                  <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) =>
+                    `flex flex-col items-center gap-1 rounded-lg px-1 py-2.5 text-center text-xs leading-tight transition-colors ${isActive ? "bg-indigo-50 font-semibold text-indigo-800" : "text-slate-600 hover:bg-slate-100"}`}>
+                    <I size={18} /><span className="[word-break:keep-all]">{label}</span>
+                  </NavLink>))}
+              </div>
+              <a href="/privacy" target="_blank" rel="noopener" className="mt-3 block px-1 text-xs text-slate-500">개인정보처리방침</a>
+            </nav>
+          </div>)}
         <main className={isAiRoute
           ? "flex min-h-0 flex-1 flex-col overflow-hidden p-2 sm:p-3"
           : "mx-auto min-h-0 w-full max-w-6xl flex-1 overflow-y-auto p-4 md:p-6 print:max-w-none print:overflow-visible print:p-0"}>

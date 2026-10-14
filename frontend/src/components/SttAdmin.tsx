@@ -51,7 +51,7 @@ export default function SttAdmin() {
             <div className="flex flex-wrap gap-1">{Object.entries(st.by_status).map(([k, v]) => <Badge key={k} tone={k === "failed" ? "red" : k === "waiting" ? "amber" : "slate"}>{STATUS[k] ?? k} {v}</Badge>)}</div>
             {st.failures.length ? (
               <Table head={["작업", "상태", "사유", "실패 구간", "시각"]}>
-                {st.failures.map((x) => <tr key={x.job_id}><Td className="font-mono text-xs">{x.job_id}</Td><Td>{STATUS[x.status] ?? x.status}</Td><Td>{x.reason ?? "-"}</Td><Td>{x.chunks_failed}</Td><Td className="text-xs">{x.at?.slice(0, 16).replace("T", " ") ?? "-"}</Td></tr>)}
+                {st.failures.map((x) => <tr key={x.job_id}><Td className="font-mono text-xs">{x.job_id}</Td><Td>{STATUS[x.status] ?? x.status}</Td><Td wrap>{x.reason ?? "-"}</Td><Td>{x.chunks_failed}</Td><Td className="text-xs">{x.at?.slice(0, 16).replace("T", " ") ?? "-"}</Td></tr>)}
               </Table>) : <Empty>실패한 작업이 없습니다.</Empty>}
           </div>)}
       </Card>

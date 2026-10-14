@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useMemo, useState, useSyncExternalStore } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Printer, Settings2, Trash2, X } from "lucide-react";
 import { api } from "../lib/api";
@@ -21,6 +21,10 @@ const HATCH = { backgroundImage: "repeating-linear-gradient(135deg, #cbd5e1 0 1p
 const WEEKEND = { backgroundColor: "#d4d4d8" };
 const EVENING = WEEKEND;
 const isEvening = (slot: string) => slot >= "19:00";
+const PHONE = "(max-width: 639px)";
+/** True on phone-width screens (re-renders when the width crosses the breakpoint). */
+const usePhone = () => useSyncExternalStore((cb) => { const m = matchMedia(PHONE); m.addEventListener("change", cb); return () => m.removeEventListener("change", cb); },
+  () => matchMedia(PHONE).matches, () => false);
 const iso = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const monday = (s: string) => { const d = new Date(s + "T00:00:00"); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d; };
 const plus = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
@@ -32,6 +36,8 @@ export default function Timetable() {
   const me = useMe().data;
   const isAdmin = me?.role === "admin", canWrite = me?.role === "admin" || me?.role === "therapist";
   const { children } = useChild();
+  const phone = usePhone();
+  const [phoneDay, setPhoneDay] = useState(() => new Date().getDay() || 7); // ISO weekday, today by default
   const tt = useQuery({ queryKey: ["timetable"], queryFn: () => api<Data>("/timetable") });
   const [week, setWeek] = useState(iso(new Date()));
   const [edit, setEdit] = useState(false), [cell, setCell] = useState<Cell | null>(null), [setup, setSetup] = useState(false);
@@ -51,6 +57,8 @@ export default function Timetable() {
   if (tt.isLoading) return <p className="text-sm text-slate-400">불러오는 중…</p>;
   if (!tt.data) return <Notice tone="red">{errText(tt.error)}</Notice>;
   const { config: cfg, morning, afternoon } = tt.data;
+  // On a phone the grid shows one day at a time (chosen with the tabs above it); printing always shows the week.
+  const shown = phone ? [cfg.days.includes(phoneDay) ? phoneDay : cfg.days[0]] : cfg.days;
   const closed = new Set(cfg.closed);
   // Text lines down the page: a row is as tall as its fullest cell (two children sharing a cell by period = 2 lines).
   const printRows = [...morning, ...afternoon].reduce((n, slot) => n + cfg.teachers.reduce((m, t) =>
@@ -62,7 +70,7 @@ export default function Timetable() {
     <tr key={slot + t.id} className={i === cfg.teachers.length - 1 && !last ? "border-b-2 border-slate-400" : ""}>
       {i === 0 && <th rowSpan={cfg.teachers.length} style={isEvening(slot) ? EVENING : undefined} className="border border-slate-300 bg-white px-1 text-center text-sm font-semibold tabular-nums">{hm(slot)}</th>}
       <td className="border border-slate-300 px-1 text-center text-xs font-bold" style={{ color: t.color, backgroundColor: t.color + "1a" }} title={t.name}>{t.short}</td>
-      {cfg.days.map((day) => {
+      {shown.map((day) => {
         const off = isClosed(day, slot, t.id);
         const items = byCell.get(`${day}|${slot}|${t.id}`) ?? [];
         return (
@@ -104,18 +112,24 @@ export default function Timetable() {
             .tt-sheet table { height: 100%; min-width: 0 !important; table-layout: fixed; font-size: ${fontPt}pt; }
             .tt-sheet td, .tt-sheet th { height: auto !important; padding: 0 2px !important; font-size: inherit !important; line-height: 1.1 !important; }
           }`}</style>
+          {phone && (
+            <div role="tablist" aria-label="요일" className="grid gap-1 print:hidden" style={{ gridTemplateColumns: `repeat(${cfg.days.length}, minmax(0, 1fr))` }}>
+              {cfg.days.map((d) => (
+                <button key={d} role="tab" aria-selected={shown[0] === d} onClick={() => setPhoneDay(d)}
+                  className={`rounded-md py-1.5 text-sm ${shown[0] === d ? "bg-indigo-600 font-semibold text-white" : "bg-slate-100 text-slate-700"}`}>{DAY[d]}</button>))}
+            </div>)}
           <div className="tt-sheet overflow-x-auto rounded-lg border border-slate-300 bg-white">
-            <table className="w-full min-w-[720px] border-collapse">
+            <table className={`w-full border-collapse ${phone ? "" : "min-w-[720px]"}`}>
               <thead>
                 <tr className="bg-yellow-100 text-sm">
                   <th className="w-16 border border-slate-300 py-1" /><th className="w-12 border border-slate-300 py-1">담당</th>
-                  {cfg.days.map((d) => <th key={d} className="border border-slate-300 py-1" style={d >= 6 ? WEEKEND : undefined}>{DAY[d]}</th>)}
+                  {shown.map((d) => <th key={d} className="border border-slate-300 py-1" style={d >= 6 ? WEEKEND : undefined}>{DAY[d]}{phone && "요일"}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {morning.map((s, i) => <Fragment key={s}>{block(s, i === morning.length - 1)}</Fragment>)}
                 {morning.length > 0 && afternoon.length > 0 && (
-                  <tr><td colSpan={cfg.days.length + 2} className="border-y-2 border-slate-400 bg-slate-50 py-1 text-center text-sm font-semibold tracking-[0.5em] text-slate-600">점심시간</td></tr>)}
+                  <tr><td colSpan={shown.length + 2} className="border-y-2 border-slate-400 bg-slate-50 py-1 text-center text-sm font-semibold tracking-[0.5em] text-slate-600">점심시간</td></tr>)}
                 {afternoon.map((s, i) => <Fragment key={s}>{block(s, i === afternoon.length - 1)}</Fragment>)}
               </tbody>
             </table>

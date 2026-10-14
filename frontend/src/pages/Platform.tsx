@@ -38,18 +38,18 @@ export default function Platform() {
   return (
     <div className="min-h-screen">
       <header className="flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-2.5">
-        <ShieldCheck size={18} className="text-indigo-600" /><span className="font-bold text-indigo-700">SLP Agent 사이트 관리</span>
-        <a href="/privacy" target="_blank" rel="noopener" className="ml-auto text-xs text-slate-500 underline">개인정보처리방침</a><span className="text-sm text-slate-500">{label}</span><Button variant="ghost" onClick={logout}>로그아웃</Button>
+        <ShieldCheck size={18} className="shrink-0 text-indigo-600" /><span className="truncate font-bold text-indigo-700">사이트 관리<span className="hidden sm:inline"> · SLP AI</span></span>
+        <a href="/privacy" target="_blank" rel="noopener" className="ml-auto hidden text-xs text-slate-500 underline sm:inline">개인정보처리방침</a><span className="hidden truncate text-sm text-slate-500 md:inline">{label}</span><Button variant="ghost" className="ml-auto shrink-0 sm:ml-0" onClick={logout}>로그아웃</Button>
       </header>
       <main className="mx-auto max-w-6xl space-y-5 p-4 md:p-6">
         <PageTitle title="전체 관리자 대시보드" sub="기관별 집계만 표시합니다. 아동 개인정보와 치료 기록은 사이트 관리자에게 보이지 않습니다." />
         <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
           {[["승인 대기", s?.pending_signups], ["기관", s?.organizations], ["사용자", s?.users], ["아동", s?.children], ["최근 30일 회기", s?.sessions_30d], ["최근 30일 가입 신청", s?.signups_30d]].map(([k, v]) => kpi(k as string, v))}
         </div>
-        <div className="flex gap-1 rounded-lg bg-slate-100 p-1 text-sm w-fit" role="tablist">
+        <div className="flex max-w-full gap-1 overflow-x-auto rounded-lg bg-slate-100 p-1 text-sm sm:w-fit" role="tablist">
           {TABS.map(([k, l]) => (
             <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
-              className={`rounded-md px-4 py-1.5 ${tab === k ? "bg-white font-semibold shadow-sm" : "text-slate-600"}`}>{l}</button>))}
+              className={`shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 sm:px-4 ${tab === k ? "bg-white font-semibold shadow-sm" : "text-slate-600"}`}>{l}</button>))}
         </div>
         {tab === "signups" && <Signups orgs={orgs.data ?? []} />}
         {tab === "orgs" && <Orgs orgs={orgs.data ?? []} />}
@@ -90,7 +90,7 @@ function Signups({ orgs }: { orgs: Org[] }) {
             return (
               <tr key={r.uid}>
                 <Td className="whitespace-nowrap text-xs">{dt(r.created_at)}</Td><Td>{r.email ?? r.uid}</Td><Td className="font-medium">{r.org_name}</Td><Td>{r.therapist_name}</Td>
-                <Td><Badge tone={ST[r.status]?.[1]}>{ST[r.status]?.[0] ?? r.status}</Badge>
+                <Td wrap><Badge tone={ST[r.status]?.[1]}>{ST[r.status]?.[0] ?? r.status}</Badge>
                   {r.status === "approved" && r.org_id && <p className="mt-1 text-xs text-slate-500">→ {orgName(r.org_id)}</p>}
                   {r.reason && <p className="mt-1 text-xs text-slate-500">사유: {r.reason}</p>}</Td>
                 <Td>{r.status === "pending" && (

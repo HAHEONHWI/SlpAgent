@@ -15,8 +15,9 @@ export const Label = ({ children, label }: { children: ReactNode; label: string 
   <label className="block text-xs font-medium text-slate-600"><span className="mb-1 block">{label}</span>{children}</label>
 );
 export const Card = ({ title, action, children, className }: { title?: string; action?: ReactNode; children: ReactNode; className?: string }) => (
-  <section className={clsx("rounded-lg border border-slate-200 bg-white shadow-sm", className)}>
-    {title && <header className="flex items-center justify-between border-b border-slate-100 px-4 py-3"><h2 className="text-sm font-semibold">{title}</h2>{action}</header>}
+  // min-w-0: a wide table inside scrolls within the card instead of widening the page on phones
+  <section className={clsx("min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm", className)}>
+    {title && <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3"><h2 className="text-sm font-semibold">{title}</h2>{action}</header>}
     <div className="p-4">{children}</div>
   </section>
 );
@@ -30,9 +31,12 @@ export const Notice = ({ tone = "amber", children }: { tone?: "amber" | "red"; c
   <div className={clsx("rounded-md border px-3 py-2 text-sm", tone === "amber" ? "border-amber-200 bg-amber-50 text-amber-900" : "border-red-200 bg-red-50 text-red-800")}>{children}</div>
 );
 export const Table = ({ head, children }: { head: string[]; children: ReactNode }) => (
-  <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b border-slate-200 text-left text-xs text-slate-500">{head.map((h) => <th key={h} className="px-2 py-2 font-medium">{h}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{children}</tbody></table></div>
+  <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b border-slate-200 text-left text-xs text-slate-500">{head.map((h) => <th key={h} className="whitespace-nowrap px-2 py-2 font-medium">{h}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{children}</tbody></table></div>
 );
-export const Td = ({ children, className }: { children?: ReactNode; className?: string }) => <td className={clsx("px-2 py-2 align-top", className)}>{children}</td>;
+// Cells don't wrap (narrow screens scroll the table sideways instead of breaking words letter by letter);
+// `wrap` is for free-text cells such as reasons.
+export const Td = ({ children, className, wrap }: { children?: ReactNode; className?: string; wrap?: boolean }) =>
+  <td className={clsx("px-2 py-2 align-top", wrap ? "min-w-48 [word-break:keep-all]" : "whitespace-nowrap", className)}>{children}</td>;
 export const Empty = ({ children }: { children: ReactNode }) => <p className="py-6 text-center text-sm text-slate-400">{children}</p>;
 // API error notice; 404 from endpoints the server has not shipped yet shows a soft notice instead.
 export const ErrorNotice = ({ error }: { error: unknown }) => !error ? null : error instanceof ApiError && error.status === 404
