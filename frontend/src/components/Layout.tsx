@@ -43,7 +43,7 @@ export default function Layout() {
   return (
     <div className="flex h-dvh overflow-hidden bg-slate-50 print:block print:h-auto print:overflow-visible print:bg-white">
       <aside className="sticky top-0 hidden print:!hidden h-full w-60 shrink-0 flex-col border-r border-slate-200 bg-white md:flex">
-        <div className="px-4 py-3"><BrandLogo className="mx-auto w-40" /></div>
+        <Link to="/" title="메인으로" className="block px-4 py-3"><BrandLogo className="mx-auto w-40" /></Link>
         <nav aria-label="주요 메뉴" className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-4">
           {MENU.map(({ to, label, icon: I, soon }) => (
             <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) =>
@@ -59,7 +59,7 @@ export default function Layout() {
       </aside>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-10 flex print:hidden shrink-0 items-center gap-2 border-b border-slate-200 bg-white/90 px-2 py-2.5 backdrop-blur sm:gap-3 sm:px-4">
-          <BrandLogo className="w-14 shrink-0 md:hidden" />
+          <Link to="/" title="메인으로" className="shrink-0 md:hidden"><BrandLogo className="w-14" /></Link>
           <ChildPicker className="w-[min(14rem,42vw)] sm:w-64" value={childId} onChange={setChildId} emptyLabel="아동 선택 안 함 (일반 모드)" aria-label="아동 선택" />
           {child && <span className="hidden text-sm text-slate-500 sm:inline">{ageLabel(child.age_months)}</span>}
           <div className="ml-auto flex min-w-0 items-center gap-1.5 text-sm text-slate-500 sm:gap-3">
