@@ -30,7 +30,8 @@ export default function ChildPicker({ value, onChange, emptyLabel, placeholder =
   const id = useId();
   const selected = children.find((c) => c.id === value) ?? null;
 
-  const myName = (useMe().data?.name ?? "").trim();
+  const me = useMe().data;
+  const myName = (me?.therapist_name ?? me?.name ?? "").trim(); // the 치료사 목록 entry linked to this account
   const options = useMemo(() => {
     const k = norm(q);
     const hits = !k ? children : children.filter((c) => {

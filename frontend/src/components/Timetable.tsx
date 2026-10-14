@@ -199,6 +199,7 @@ function CellEditor({ cell, entries, cfg, isAdmin, closedHere, onClose, onSaved 
 
 function Setup({ cfg, onDone }: { cfg: Config; onDone: () => void }) {
   const [c, setC] = useState<Config>(cfg);
+  const roster = useQuery({ queryKey: ["org", "therapists"], queryFn: () => api<string[]>("/org/therapists") }).data ?? [];
   const save = useMutation({ mutationFn: () => api("/timetable/config", { method: "PUT", json: c }), onSuccess: onDone });
   const num = (k: keyof Config) => (e: any) => setC({ ...c, [k]: Number(e.target.value) });
   const setT = (i: number, patch: Partial<Teacher>) => setC({ ...c, teachers: c.teachers.map((t, j) => (j === i ? { ...t, ...patch } : t)) });
@@ -226,7 +227,7 @@ function Setup({ cfg, onDone }: { cfg: Config; onDone: () => void }) {
             {c.teachers.map((t, i) => (
               <div key={t.id} className="flex flex-wrap items-center gap-2">
                 <div className="w-20 shrink-0"><Input className="text-center font-bold" style={{ color: t.color }} value={t.short} maxLength={4} placeholder="약칭" onChange={(e) => setT(i, { short: e.target.value })} aria-label="약칭 (표에 표시)" /></div>
-                <div className="w-40 shrink-0"><Input value={t.name} maxLength={20} placeholder="이름" onChange={(e) => setT(i, { name: e.target.value })} onBlur={() => !t.short.trim() && t.name.trim() && setT(i, { short: t.name.trim().slice(0, 1) })} aria-label="이름" /></div>
+                <div className="w-40 shrink-0"><Input value={t.name} maxLength={20} placeholder="이름" list="tt-roster" onChange={(e) => setT(i, { name: e.target.value })} onBlur={() => !t.short.trim() && t.name.trim() && setT(i, { short: t.name.trim().slice(0, 1) })} aria-label="이름" /></div>
                 <div className="flex gap-1">{PALETTE.map((p) => <button type="button" key={p} aria-label={`색 ${p}`} onClick={() => setT(i, { color: p })} className={`h-5 w-5 rounded-full ${t.color === p ? "ring-2 ring-slate-900 ring-offset-1" : ""}`} style={{ backgroundColor: p }} />)}</div>
                 <div className="ml-auto flex gap-1">
                   <Button type="button" variant="ghost" disabled={i === 0} onClick={() => move(i, -1)} aria-label="위로">↑</Button>
@@ -235,6 +236,7 @@ function Setup({ cfg, onDone }: { cfg: Config; onDone: () => void }) {
                 </div>
               </div>))}
           </div>
+          <datalist id="tt-roster">{roster.map((n) => <option key={n} value={n} />)}</datalist>
           <Button type="button" variant="outline" className="mt-2" disabled={c.teachers.length >= 20}
             onClick={() => setC({ ...c, teachers: [...c.teachers, { id: crypto.randomUUID().slice(0, 8), name: "", short: "", color: PALETTE[c.teachers.length % PALETTE.length] }] })}>+ 교사 추가</Button>
           <p className="mt-1 text-[11px] text-slate-500">교사를 지우면 그 교사 줄의 칸은 시간표에서 보이지 않아요(기록은 남아요).</p>

@@ -228,7 +228,13 @@ def me(identity: Identity = Depends(current_identity), repo=Depends(get_repo)):
         return {**identity.model_dump(), "status": "suspended", "signup": None, "org_name": None}
     out = identity.model_dump()
     out["name"] = None
+    out["therapist_name"] = None  # the 치료사 목록 entry linked to this account
     if identity.org_id:
+        try:
+            linked = repo.get("organizations", identity.org_id, identity.org_id).get("therapists") or []
+            out["therapist_name"] = next((t["name"] for t in linked if t.get("uid") == identity.uid), None)
+        except NotFound:
+            pass
         try:
             out["name"] = repo.get("users", identity.org_id, identity.uid).get("name")
         except NotFound:

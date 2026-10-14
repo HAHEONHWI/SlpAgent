@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { errText } from "../lib/hooks";
 import { Button, Card, Empty, Input, Label, Notice, PageTitle, Table, Td } from "../components/ui";
 import { useAuth } from "../lib/auth";
+import TherapistRoster from "../components/TherapistRoster";
 
 export default function Settings() {
   const qc = useQueryClient();
@@ -39,6 +40,7 @@ export default function Settings() {
           <Button disabled={save.isPending}>저장</Button>
         </form>
       </Card>
+      <TherapistRoster />
       <AuditLog />
     </>
   );

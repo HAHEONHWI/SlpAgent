@@ -30,3 +30,23 @@ def test_knowledge_documents_status(client, repo):
     d = {x["source"]: x["status"] for x in client.get("/knowledge/documents", headers=H()).json()}
     assert d == {"A.pdf": "partial", "B.pdf": "ocr_required"}
     assert client.get("/knowledge/documents", headers=H("orgB")).json() == []
+
+
+def test_therapist_roster_links_accounts_and_renames_follow(client, repo, child):
+    from tests.conftest import H
+    admin = H(role="admin", uid="boss")
+    repo.create("users", "orgA", {"uid": "t1", "email": "t1@example.com", "name": "김치료", "role": "therapist"}, doc_id="t1")
+    client.put(f"/children/{child['id']}/therapist", headers=H(), json={"therapist": "김치료"})
+    assert "김치료" in client.get("/org/roster", headers=admin).json()["suggestions"]
+    assert client.put("/org/roster", headers=H(), json={"therapists": []}).status_code == 403
+    assert client.put("/org/roster", headers=admin, json={"therapists": [{"name": "A"}, {"name": "A"}]}).status_code == 422
+    assert client.put("/org/roster", headers=admin, json={"therapists": [{"name": "A", "uid": "nobody"}]}).status_code == 422
+    r = client.put("/org/roster", headers=admin, json={"therapists": [{"name": "김치료", "uid": "t1"}, {"name": "박선생"}]}).json()
+    assert [(t["name"], t["email"]) for t in r["therapists"]] == [("김치료", "t1@example.com"), ("박선생", None)]
+    assert client.get("/org/therapists", headers=H()).json() == ["김치료", "박선생"]
+    assert client.get("/me", headers=H(uid="t1")).json()["therapist_name"] == "김치료"
+    rid = r["therapists"][0]["id"]
+    client.put("/org/roster", headers=admin, json={"therapists": [{"id": rid, "name": "김재활", "uid": "t1"}, {"name": "박선생"}]})
+    assert client.get(f"/children/{child['id']}", headers=H()).json()["therapist"] == "김재활"  # rename followed
+    assert client.get("/me", headers=H(uid="t1")).json()["therapist_name"] == "김재활"
+    assert "members" not in client.get("/org/roster", headers=H()).json()
