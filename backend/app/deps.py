@@ -9,9 +9,41 @@ def audit(repo: Repo, p: Principal, action: str, col: str, doc_id: str, child_id
                                          "doc_id": doc_id, "child_id": child_id, "via_ai": via_ai})
 
 
+def my_therapist_name(repo: Repo, p: Principal) -> str:
+    """The 치료사 목록 name linked to this account (else the account's own name)."""
+    try:
+        linked = repo.get("organizations", p.org_id, p.org_id).get("therapists") or []
+        name = next((t["name"] for t in linked if t.get("uid") == p.uid), None)
+        if name:
+            return name.strip()
+    except NotFound:
+        pass
+    try:
+        return (repo.get("users", p.org_id, p.uid).get("name") or "").strip()
+    except NotFound:
+        return ""
+
+
+def child_scope(repo: Repo, p: Principal) -> set[str] | None:
+    """Children a non-admin therapist may see: their own 담당 아동. None = no restriction (admins, assistants)."""
+    if p.role != "therapist":
+        return None
+    name = my_therapist_name(repo, p)
+    return {c["id"] for c in repo.list("children", p.org_id) if name and (c.get("therapist") or "").strip() == name}
+
+
+def in_scope(rows: list[dict], scope: set[str] | None, key: str = "child_id") -> list[dict]:
+    """Drop rows about children outside the scope (rows with no child stay)."""
+    return rows if scope is None else [r for r in rows if not r.get(key) or r[key] in scope]
+
+
 def child_or_404(repo: Repo, p: Principal, child_id: str) -> dict:
     from fastapi import HTTPException
     try:
-        return repo.get("children", p.org_id, child_id)
+        child = repo.get("children", p.org_id, child_id)
     except NotFound:
         raise HTTPException(404, "child not found")
+    scope = child_scope(repo, p)
+    if scope is not None and child_id not in scope:  # another therapist's child: as if it did not exist
+        raise HTTPException(404, "child not found")
+    return child

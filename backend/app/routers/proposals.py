@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from ..auth import Principal, current_principal, require_write
-from ..deps import audit, get_repo
+from ..deps import audit, child_scope, get_repo, in_scope
 from ..repo.base import NotFound, now_iso
 from .plans import create_plan_version
 
@@ -22,7 +22,7 @@ def _get(repo, p, pid):
 
 @router.get("")
 def list_pending(child_id: str | None = None, p: Principal = Depends(current_principal), repo=Depends(get_repo)):
-    rows = repo.list("ai_analyses", p.org_id, status="draft")
+    rows = in_scope(repo.list("ai_analyses", p.org_id, status="draft"), child_scope(repo, p))
     return [r for r in rows if not child_id or r.get("child_id") == child_id]
 
 

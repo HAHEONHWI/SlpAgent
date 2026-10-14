@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime, timedelta
 from ..auth import Principal, current_principal, require_admin, require_write
-from ..deps import audit, child_or_404, get_repo
+from ..deps import audit, child_or_404, child_scope, get_repo, in_scope
 from ..repo.base import NotFound
 from ..services.attendance_state import NOT_HELD, effective
 from ..services.billing import attendance_summary, minutes_between
@@ -66,7 +66,7 @@ def day(on: date, p: Principal = Depends(current_principal), repo=Depends(get_re
     d = on.isoformat()
     marks = {m["schedule_id"]: m for m in repo.list("attendance", p.org_id, date=d)}
     absences = _absences(repo, p.org_id)
-    rows = [s for s in repo.list("schedules", p.org_id, date=d) if s.get("status") != "cancelled"]
+    rows = in_scope([s for s in repo.list("schedules", p.org_id, date=d) if s.get("status") != "cancelled"], child_scope(repo, p))
     out = []
     for s in sorted(rows, key=lambda s: s["start"]):
         moved_to = None
@@ -91,7 +91,7 @@ def org_summary(month: str = Query(pattern=r"^\d{4}-\d{2}$"), p: Principal = Dep
     marks = {m["schedule_id"]: m for m in repo.list("attendance", p.org_id) if m.get("date", "").startswith(month)}
     absences = _absences(repo, p.org_id)
     by_child: dict[str, list[dict]] = {}
-    for s in repo.list("schedules", p.org_id):
+    for s in in_scope(repo.list("schedules", p.org_id), child_scope(repo, p)):
         if s.get("date", "").startswith(month) and s.get("status") != "cancelled":
             by_child.setdefault(s["child_id"], []).append(effective(s, marks.get(s["id"]), absences))
     return [{"child_id": c, "scheduled": sum(1 for st in states if st["status"] != "moved"), **_summary(states)}
@@ -196,7 +196,7 @@ class AbsenceIn(BaseModel):
 
 @router.get("/absences")
 def list_absences(child_id: str | None = None, p: Principal = Depends(current_principal), repo=Depends(get_repo)):
-    return _absences(repo, p.org_id, child_id)
+    return in_scope(_absences(repo, p.org_id, child_id), child_scope(repo, p))
 
 
 @router.post("/absences", status_code=201)

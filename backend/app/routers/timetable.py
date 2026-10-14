@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from ..auth import Principal, current_principal, require_admin, require_write
-from ..deps import audit, child_or_404, get_repo
+from ..deps import audit, child_or_404, get_repo, child_scope, my_therapist_name
 from ..repo.base import NotFound
 
 router = APIRouter(prefix="/timetable", tags=["timetable"])
@@ -127,7 +127,12 @@ def get_timetable(p: Principal = Depends(current_principal), repo=Depends(get_re
     cfg = _config(repo, p.org_id)
     am, pm = slots(cfg)
     gone = {c["id"] for c in repo.list("children", p.org_id) if c.get("archived")}
-    entries = sorted([e for e in repo.list("timetable_entries", p.org_id) if e.get("child_id") not in gone], key=lambda e: (e["slot"], e["day"], e.get("valid_from") or ""))
+    entries = [e for e in repo.list("timetable_entries", p.org_id) if e.get("child_id") not in gone]
+    scope = child_scope(repo, p)
+    if scope is not None:  # a therapist sees their own children (and their own name-only cells)
+        mine = {t.id for t in cfg.teachers if t.name.strip() == my_therapist_name(repo, p)}
+        entries = [e for e in entries if e.get("child_id") in scope or (not e.get("child_id") and e["teacher_id"] in mine)]
+    entries = sorted(entries, key=lambda e: (e["slot"], e["day"], e.get("valid_from") or ""))
     return {"config": cfg.model_dump(), "morning": am, "afternoon": pm, "entries": entries}
 
 

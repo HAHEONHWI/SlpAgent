@@ -7,9 +7,14 @@ from app.deps import get_repo
 from app.repo.memory import MemoryRepo
 
 
+THERAPIST = "테스트치료사"
+
+
 @pytest.fixture
 def repo():
     r = MemoryRepo()
+    # the default test account (H(): therapist u1) is the 담당 치료사 of the test child; therapists only see their own children
+    r.create("users", "orgA", {"uid": "u1", "email": "u1@example.com", "name": THERAPIST, "role": "therapist"}, doc_id="u1")
     app.dependency_overrides[get_repo] = lambda: r
     yield r
     app.dependency_overrides.clear()
@@ -29,7 +34,7 @@ def H(org="orgA", role="therapist", uid="u1"):
 @pytest.fixture
 def child(client):
     r = client.post("/children", json={"alias": "A-01", "display_name": "테스트아동", "birth_date": "2022-03-15",
-                                       "guardian_contact": "010-0000-0000"}, headers=H())
+                                       "guardian_contact": "010-0000-0000", "therapist": THERAPIST}, headers=H())
     assert r.status_code == 201
     return r.json()
 

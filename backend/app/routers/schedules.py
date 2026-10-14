@@ -2,7 +2,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, model_validator
 from ..auth import Principal, current_principal, require_write
-from ..deps import audit, child_or_404, get_repo
+from ..deps import audit, child_or_404, child_scope, get_repo, in_scope
 from ..repo.base import NotFound
 from ..services.billing import minutes_between
 
@@ -45,7 +45,7 @@ def list_(month: str | None = None, child_id: str | None = None, p: Principal = 
         from .timetable import sync_month
         sync_month(repo, p.org_id, month)  # dated classes follow the weekly timetable automatically
     rows = repo.list("schedules", p.org_id, **({"child_id": child_id} if child_id else {}))
-    rows = [r for r in rows if not month or r["date"].startswith(month)]
+    rows = in_scope([r for r in rows if not month or r["date"].startswith(month)], child_scope(repo, p))
     return sorted(rows, key=lambda r: (r["date"], r["start"]))
 
 

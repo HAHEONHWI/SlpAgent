@@ -1,6 +1,6 @@
 import { Fragment, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../lib/api";
+import { ageLabel, api } from "../lib/api";
 import { errText, useCreate, useRecords } from "../lib/hooks";
 import RequireChild from "../components/RequireChild";
 import { ItemChecklist, ItemResponses, type BankItem } from "../components/assessment/ItemChecklist";
@@ -54,9 +54,9 @@ function Inner({ childId }: { childId: string }) {
       </Card>
       <Card title="검사 이력" className={hasBank ? "lg:col-span-3" : "lg:col-span-2"}>
         {!list.data?.length ? <Empty>검사 기록이 없습니다.</Empty> : (
-          <Table head={["검사일", "검사", "월령", "원점수", "문항수", "규준 점수"]}>
+          <Table head={["검사일", "검사", "검사 시 나이", "원점수", "문항수", "규준 점수"]}>
             {[...list.data].reverse().map((a) => (
-              <Fragment key={a.id}><tr className="cursor-pointer hover:bg-slate-50" aria-expanded={open === a.id} onClick={() => setOpen(open === a.id ? null : a.id)}><Td>{open === a.id ? "▾ " : "▸ "}{a.assessed_on}</Td><Td>{a.test_code}</Td><Td>{a.age_months_at_test}</Td><Td>{a.raw_total ?? "-"}</Td><Td>{a.items.length}</Td>
+              <Fragment key={a.id}><tr className="cursor-pointer hover:bg-slate-50" aria-expanded={open === a.id} onClick={() => setOpen(open === a.id ? null : a.id)}><Td>{open === a.id ? "▾ " : "▸ "}{a.assessed_on}</Td><Td>{a.test_code}</Td><Td>{ageLabel(a.age_months_at_test)}</Td><Td>{a.raw_total ?? "-"}</Td><Td>{a.items.length}</Td>
                 <Td><Badge tone="amber">{a.derived_scores.status === "norm_unavailable" ? "규준 없음" : "산출"}</Badge></Td></tr>
                 {open === a.id && <tr className="bg-slate-50"><td colSpan={6} className="px-3 py-2">
                   <p className="mb-1 text-xs font-medium text-slate-600">저장된 문항 응답 (문항 ID → 응답)</p><ItemResponses items={a.items} />

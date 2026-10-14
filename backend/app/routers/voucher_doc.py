@@ -44,9 +44,12 @@ def _service_minutes(repo, org_id: str) -> int:
         return 50
 
 
-def _content(day: str, notes_by_date: dict[str, str], records_by_date: dict[str, dict]) -> tuple[str, str]:
+def _content(day: str, notes_by_date: dict[str, str], records_by_date: dict[str, dict],
+             consult_by_date: dict[str, str] | None = None) -> tuple[str, str]:
     if notes_by_date.get(day):
         return notes_by_date[day], "session_note"
+    if consult_by_date and consult_by_date.get(day):  # 보호자 상담 written after the class
+        return consult_by_date[day], "consultation"
     rec = records_by_date.get(day)
     if rec:
         sec = rec.get("sections") or {}
@@ -78,18 +81,20 @@ def month_data(repo, p: Principal, child_id: str, month: str, minutes: int) -> t
         if notes.get(s["id"]):
             notes_by_date[s["date"]] = notes[s["id"]]
     records_by_date = {r["date"]: r for r in repo.list("recording_records", p.org_id, child_id=child_id)
-                       if (r.get("date") or "").startswith(month) and r.get("kind", "session") == "session"}
+                       if (r.get("date") or "").startswith(month)}
+    consult_by_date = {c["date"]: (c.get("session_summary") or c.get("summary") or "").strip()
+                       for c in repo.list("parent_consultations", p.org_id, child_id=child_id) if (c.get("date") or "").startswith(month)}
     out = []
     for s in schedules:
         if not s["date"].startswith(month) or not held(effective(s, marks.get(s["id"]), absences, today="9999-12-31")):
             continue
-        text, source = _content(s["date"], notes_by_date, records_by_date)
+        text, source = _content(s["date"], notes_by_date, records_by_date, consult_by_date)
         out.append({"date": s["date"], "start": s["start"], "end": _plus(s["start"], minutes), "therapist": s.get("therapist", ""),
                     "content": text, "content_source": source, "from": "makeup" if s.get("moved_from") else "schedule"})
     for s in sessions:  # session records without a schedule entry
         if any(v["date"] == s["date"] for v in out):
             continue
-        text, source = _content(s["date"], notes_by_date, records_by_date)
+        text, source = _content(s["date"], notes_by_date, records_by_date, consult_by_date)
         out.append({"date": s["date"], "start": s["start"], "end": _plus(s["start"], minutes), "therapist": s.get("therapist", ""),
                     "content": text, "content_source": source, "from": "session"})
     return sorted(out, key=lambda v: (v["date"], v["start"])), other_notes(schedules, marks, absences, month)

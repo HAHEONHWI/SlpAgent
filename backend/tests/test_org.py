@@ -36,9 +36,9 @@ def test_therapist_roster_links_accounts_and_renames_follow(client, repo, child)
     from tests.conftest import H
     admin = H(role="admin", uid="boss")
     repo.create("users", "orgA", {"uid": "t1", "email": "t1@example.com", "name": "김치료", "role": "therapist"}, doc_id="t1")
-    client.put(f"/children/{child['id']}/therapist", headers=H(), json={"therapist": "김치료"})
+    client.put(f"/children/{child['id']}/therapist", headers=admin, json={"therapist": "김치료"})
     auto = client.get("/org/roster", headers=admin).json()["therapists"]
-    assert [(t["name"], t["uid"]) for t in auto] == [("김치료", "t1")]  # assigned -> listed, same-name account linked
+    assert [(t["name"], t["uid"]) for t in auto] == [("테스트치료사", "u1"), ("김치료", "t1")]  # assigned -> listed, same-name account linked
     assert client.put("/org/roster", headers=H(), json={"therapists": []}).status_code == 403
     assert client.put("/org/roster", headers=admin, json={"therapists": [{"name": "A"}, {"name": "A"}]}).status_code == 422
     assert client.put("/org/roster", headers=admin, json={"therapists": [{"name": "A", "uid": "nobody"}]}).status_code == 422
@@ -48,7 +48,7 @@ def test_therapist_roster_links_accounts_and_renames_follow(client, repo, child)
     assert client.get("/me", headers=H(uid="t1")).json()["therapist_name"] == "김치료"
     rid = r["therapists"][0]["id"]
     client.put("/org/roster", headers=admin, json={"therapists": [{"id": rid, "name": "김재활", "uid": "t1"}, {"name": "박선생"}]})
-    assert client.get(f"/children/{child['id']}", headers=H()).json()["therapist"] == "김재활"  # rename followed
+    assert client.get(f"/children/{child['id']}", headers=H(uid="t1")).json()["therapist"] == "김재활"  # rename followed, still t1's child
     assert client.get("/me", headers=H(uid="t1")).json()["therapist_name"] == "김재활"
     assert "members" not in client.get("/org/roster", headers=H()).json()
 
@@ -57,12 +57,12 @@ def test_assigned_therapists_join_the_roster_automatically(client, repo, child):
     from tests.conftest import H
     admin = H(role="admin", uid="boss")
     repo.create("users", "orgA", {"uid": "t9", "email": "t9@example.com", "name": "최치료", "role": "therapist"}, doc_id="t9")
-    client.put(f"/children/{child['id']}/therapist", headers=H(), json={"therapist": "최치료"})
+    client.put(f"/children/{child['id']}/therapist", headers=admin, json={"therapist": "최치료"})
     client.post("/children", headers=H(), json={"alias": "N-1", "display_name": "새아동", "birth_date": "2021-01-01", "therapist": "정선생"})
     client.post("/children/import", headers=H(), json={"rows": [{"alias": "N-2", "display_name": "둘째", "birth_date": "2021-02-02", "therapist": "한선생"}]})
     rows = client.get("/org/roster", headers=admin).json()["therapists"]
-    assert [(t["name"], t["uid"]) for t in rows] == [("최치료", "t9"), ("정선생", None), ("한선생", None)]  # same-name account linked
-    assert client.get("/org/therapists", headers=H()).json() == ["최치료", "정선생", "한선생"]
+    assert [(t["name"], t["uid"]) for t in rows] == [("테스트치료사", "u1"), ("최치료", "t9"), ("정선생", None), ("한선생", None)]  # same-name account linked
+    assert client.get("/org/therapists", headers=H()).json() == ["테스트치료사", "최치료", "정선생", "한선생"]
     # names assigned before the roster existed show up when the roster is opened
     repo.update("children", "orgA", child["id"], {"therapist": "옛선생"})
     assert "옛선생" in [t["name"] for t in client.get("/org/roster", headers=admin).json()["therapists"]]

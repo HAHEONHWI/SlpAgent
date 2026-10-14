@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from ..auth import Principal, current_principal, require_admin, require_write
 from ..config import get_settings
-from ..deps import audit, child_or_404, get_repo
+from ..deps import audit, child_or_404, child_scope, get_repo
 from ..services.child_purge import purge_child
 from .org import ensure_in_roster
 
@@ -69,13 +69,16 @@ def import_children(body: ImportIn, p: Principal = Depends(require_write), repo=
 @router.get("")
 def list_children(p: Principal = Depends(current_principal), repo=Depends(get_repo)):
     # age_months is derived on read (never stored) so it is always current
-    return [{**c, "age_months": age_months(c["birth_date"])} for c in repo.list("children", p.org_id) if not c.get("archived")]
+    scope = child_scope(repo, p)
+    return [{**c, "age_months": age_months(c["birth_date"])} for c in repo.list("children", p.org_id)
+            if not c.get("archived") and (scope is None or c["id"] in scope)]
 
 
 @router.get("/archived")
 def list_archived(p: Principal = Depends(current_principal), repo=Depends(get_repo)):
     """삭제된 아동 (trash): restorable until an admin deletes them permanently."""
-    rows = [c for c in repo.list("children", p.org_id) if c.get("archived")]
+    scope = child_scope(repo, p)
+    rows = [c for c in repo.list("children", p.org_id) if c.get("archived") and (scope is None or c["id"] in scope)]
     return sorted(rows, key=lambda c: c.get("archived_at") or "", reverse=True)
 
 

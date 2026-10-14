@@ -106,7 +106,7 @@ def test_child_bulk_import_skips_duplicates(client, child):
     assert client.post("/children/import", headers=H(role="assistant"), json={"rows": rows}).status_code == 403
     r = client.post("/children/import", headers=H(), json={"rows": rows}).json()
     assert r["created"] == 1 and [s["row"] for s in r["skipped"]] == [1, 2, 3]
-    made = next(c for c in client.get("/children", headers=H()).json() if c["alias"] == "D-01")
+    made = next(c for c in client.get("/children", headers=H(role="admin")).json() if c["alias"] == "D-01")
     assert (made["sex"], made["therapist"], made["age_months"] > 0) == ("남", "김치료", True)
     assert client.post("/children/import", headers=H(), json={"rows": rows}).json()["created"] == 0  # re-upload is harmless
     assert client.post("/children/import", headers=H(), json={"rows": [{"alias": "x", "display_name": "y", "birth_date": "2022-13-01"}]}).status_code == 422
@@ -114,8 +114,13 @@ def test_child_bulk_import_skips_duplicates(client, child):
 
 def test_therapist_choices_and_assignment(client, child):
     client.put("/timetable/config", headers=H(role="admin"), json={"teachers": [{"id": "t", "name": "박선생", "short": "하", "color": "#2563eb"}]})
-    assert "박선생" in client.get("/org/therapists", headers=H()).json()
-    r = client.put(f"/children/{child['id']}/therapist", headers=H(), json={"therapist": "박선생"})
+    r = client.put(f"/children/{child['id']}/therapist", headers=H(role="admin"), json={"therapist": "박선생"})
     assert r.json()["therapist"] == "박선생"
+    assert "박선생" in client.get("/org/therapists", headers=H()).json()  # assigned -> on the 치료사 목록
+    # therapists only see their own children: u1 is no longer this child's therapist
+    assert client.get(f"/children/{child['id']}", headers=H()).status_code == 404
+    assert all(c["id"] != child["id"] for c in client.get("/children", headers=H()).json())
+    assert client.get(f"/children/{child['id']}", headers=H(role="admin")).status_code == 200
+    assert client.get(f"/children/{child['id']}", headers=H(role="assistant")).status_code == 200
     assert client.put(f"/children/{child['id']}/therapist", headers=H(role="assistant"), json={"therapist": None}).status_code == 403
-    assert client.put(f"/children/{child['id']}/therapist", headers=H("orgB"), json={"therapist": None}).status_code == 404
+    assert client.put(f"/children/{child['id']}/therapist", headers=H("orgB", "admin"), json={"therapist": None}).status_code == 404

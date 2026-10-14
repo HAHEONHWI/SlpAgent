@@ -19,3 +19,13 @@ def test_class_records_join_schedule_state_and_records(client, child):
     assert client.get("/class-records?month=2020-10", headers=H("orgB")).json() == []
     assert client.get("/class-records?month=bad", headers=H()).status_code == 422
     assert s1
+
+
+def test_parent_consultation_is_the_class_record(client, child):
+    cid = child["id"]
+    client.post("/schedules", headers=H(), json={"child_id": cid, "date": "2020-10-06", "start": "10:00", "end": "10:40", "therapist": "김치료"})
+    client.post(f"/children/{cid}/consultations", headers=H(), json={"date": "2020-10-06", "counselor": "김치료", "summary": "FAKE 오늘 2음절 모방 연습"})
+    row = client.get(f"/class-records?month=2020-10&child_id={cid}", headers=H()).json()[0]
+    assert row["consultations"][0]["summary"] == "FAKE 오늘 2음절 모방 연습"
+    v = client.get(f"/children/{cid}/voucher-visits?month=2020-10", headers=H()).json()["visits"]
+    assert (v[0]["content"], v[0]["content_source"]) == ("FAKE 오늘 2음절 모방 연습", "consultation")  # 바우처 2쪽

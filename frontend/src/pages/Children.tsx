@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileSpreadsheet, RotateCcw, Trash2 } from "lucide-react";
 import ChildImport from "../components/ChildImport";
-import { api } from "../lib/api";
+import { ageLabel, api } from "../lib/api";
 import { useChild } from "../lib/child";
 import { errText } from "../lib/hooks";
 import { useMe } from "../lib/me";
@@ -48,10 +48,10 @@ export default function Children() {
         </Card>
         <Card title={`아동 목록 (${children.length})`} className="lg:col-span-2"
           action={canWrite && <Button variant="outline" onClick={() => setImporting(!importing)}><FileSpreadsheet size={14} />엑셀로 등록</Button>}>
-          {children.length === 0 ? <Empty>등록된 아동이 없습니다.</Empty> : (
-            <Table head={["가명", "이름", "생년월일", "성별", "월령", "담당", ""]}>
+          {children.length === 0 ? <Empty>{role === "therapist" ? "담당 아동이 없어요. 치료사는 담당 아동만 보여요. 기관 관리자가 기관 설정 › 치료사 목록에서 이 계정을 연결하고 아동의 담당 치료사로 지정하면 나타나요." : "등록된 아동이 없습니다."}</Empty> : (
+            <Table head={["가명", "이름", "생년월일", "성별", "나이", "담당", ""]}>
               {sorted.map((c) => (
-                <tr key={c.id}><Td>{c.alias}</Td><Td>{c.display_name}</Td><Td>{c.birth_date}</Td><Td>{(c as any).sex ?? "-"}</Td><Td>{(c as any).age_months ?? "-"}</Td><Td>{canWrite
+                <tr key={c.id}><Td>{c.alias}</Td><Td>{c.display_name}</Td><Td>{c.birth_date}</Td><Td>{(c as any).sex ?? "-"}</Td><Td>{ageLabel((c as any).age_months) || "-"}</Td><Td>{canWrite
                   ? <Select aria-label={`${c.display_name} 담당 치료사`} className="w-28 py-1" value={(c as any).therapist ?? ""} disabled={assign.isPending}
                       onChange={(e) => assign.mutate({ id: c.id, therapist: e.target.value || null })}>
                       <option value="">-</option>{choices((c as any).therapist).map((t) => <option key={t}>{t}</option>)}</Select>
