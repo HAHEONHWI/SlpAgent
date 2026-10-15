@@ -71,7 +71,9 @@ def month_data(repo, p: Principal, child_id: str, month: str, minutes: int) -> t
     sync_month(repo, p.org_id, month)  # classes follow the weekly timetable
     marks = {m["schedule_id"]: m for m in repo.list("attendance", p.org_id, child_id=child_id)}
     absences = repo.list("absences", p.org_id, child_id=child_id)
-    schedules = repo.list("schedules", p.org_id, child_id=child_id)
+    all_schedules = repo.list("schedules", p.org_id, child_id=child_id)
+    schedules = [s for s in all_schedules if s.get("extra") != "paid"]  # 추가(유료) is not a voucher class
+    paid_days = {s["date"] for s in all_schedules if s.get("extra") == "paid"}
     sessions = [s for s in repo.list("therapy_sessions", p.org_id, child_id=child_id)
                 if s.get("date", "").startswith(month) and s.get("status", "completed") != "cancelled"]
     notes = {n["session_id"]: n["text"] for n in repo.list("session_notes", p.org_id, child_id=child_id)
@@ -92,7 +94,7 @@ def month_data(repo, p: Principal, child_id: str, month: str, minutes: int) -> t
         out.append({"date": s["date"], "start": s["start"], "end": _plus(s["start"], minutes), "therapist": s.get("therapist", ""),
                     "content": text, "content_source": source, "from": "makeup" if s.get("moved_from") else "schedule"})
     for s in sessions:  # session records without a schedule entry
-        if any(v["date"] == s["date"] for v in out):
+        if any(v["date"] == s["date"] for v in out) or s["date"] in paid_days:
             continue
         text, source = _content(s["date"], notes_by_date, records_by_date, consult_by_date)
         out.append({"date": s["date"], "start": s["start"], "end": _plus(s["start"], minutes), "therapist": s.get("therapist", ""),

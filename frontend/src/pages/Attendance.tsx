@@ -5,18 +5,19 @@ import { api } from "../lib/api";
 import { useChild } from "../lib/child";
 import { errText } from "../lib/hooks";
 import { useMe } from "../lib/me";
+import { EXTRA, type Extra } from "../lib/extraClass";
 import ChildPicker from "../components/ChildPicker";
 import { Badge, Button, Card, Empty, Input, Label, Notice, PageTitle, Table, Td } from "../components/ui";
 
 type State = { status: string | null; auto: boolean; reason: string | null };
 type Mark = { status: string; minutes_late?: number | null; note?: string | null };
 type Row = { schedule_id: string; child_id: string; start: string; end: string; therapist: string; attendance: Mark | null; state: State;
-  moved_to: { date: string; start: string } | null; moved_from: string | null };
+  moved_to: { date: string; start: string } | null; moved_from: string | null; extra?: Extra | null };
 type Summary = { child_id: string; scheduled: number; present: number; late: number; absent: number; excused: number; makeup: number;
   auto: number; upcoming: number; moved: number; rate_pct: number | null };
 type Absence = { id: string; child_id: string; start: string; end: string; reason: string | null };
 type Holiday = { date: string; name: string; scope?: "site" | "org" };
-type Rec = { date: string; start: string; end: string; status: string | null; auto: boolean; reason: string | null };
+type Rec = { date: string; start: string; end: string; status: string | null; auto: boolean; reason: string | null; extra?: Extra | null };
 
 const ST: Record<string, [string, "green" | "amber" | "red" | "slate" | "indigo"]> = {
   present: ["출석", "green"], late: ["지각", "amber"], absent: ["결석", "red"], excused: ["사유결석", "slate"], makeup: ["보강", "indigo"],
@@ -45,13 +46,13 @@ export default function Attendance() {
       const b = (value: string) => ({ value, fontWeight: "bold" as const });
       const totals = [["아동", "수업", "출석", "(자동)", "지각", "결석", "사유결석", "옮김", "남은 수업", "출석률(%)"].map(b),
         ...rows.map((s) => [who(s.child_id), s.scheduled, s.present + s.makeup, s.auto, s.late, s.absent, s.excused, s.moved, s.upcoming, s.rate_pct])];
-      const classes = [["날짜", "시간", "아동", "출결", "사유"].map(b),
-        ...rows.flatMap((s, i) => recs[i].records.map((r) => [r.date, `${r.start}–${r.end}`, who(s.child_id),
+      const classes = [["날짜", "시간", "아동", "구분", "출결", "사유"].map(b),
+        ...rows.flatMap((s, i) => recs[i].records.map((r) => [r.date, `${r.start}–${r.end}`, who(s.child_id), r.extra ? EXTRA[r.extra] : "정규",
           r.status ? `${ST[r.status]?.[0] ?? r.status}${r.auto && r.status === "present" ? " (자동)" : ""}` : "예정", r.reason]))
           .sort((x, y) => `${x[0]}${x[1]}`.localeCompare(`${y[0]}${y[1]}`))];
       await writeXlsxFile([
         { data: totals, sheet: "월별 현황", columns: [{ width: 22 }, ...Array(9).fill({ width: 9 })], stickyRowsCount: 1 },
-        { data: classes, sheet: "수업별 출결", columns: [{ width: 12 }, { width: 13 }, { width: 22 }, { width: 12 }, { width: 30 }], stickyRowsCount: 1 },
+        { data: classes, sheet: "수업별 출결", columns: [{ width: 12 }, { width: 13 }, { width: 22 }, { width: 16 }, { width: 12 }, { width: 30 }], stickyRowsCount: 1 },
       ]).toFile(`출결_${month}.xlsx`);
     } catch (e) { setExportError(errText(e)); } finally { setExporting(false); }
   };
@@ -64,6 +65,7 @@ export default function Attendance() {
           {roll.isLoading ? <p className="text-sm text-slate-400">불러오는 중…</p> : !roll.data?.length ? <Empty>이 날짜에 수업이 없습니다.</Empty> : (
             <ul className="divide-y divide-slate-100">{roll.data.map((r) => <RollRow key={r.schedule_id} r={r} who={who(r.child_id)} onDone={refresh} />)}</ul>)}
           {roll.error && <Notice tone="red">{errText(roll.error)}</Notice>}
+          <AddClass day={day} onDone={refresh} />
         </Card>
 
         <Absences who={who} onDone={refresh} />
@@ -89,6 +91,34 @@ export default function Attendance() {
   );
 }
 
+/** 수업 추가: a one-off class on the chosen day, either 바우처 5회 (goes into the voucher form) or 유료 (does not). */
+function AddClass({ day, onDone }: { day: string; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const empty = { child_id: "", start: "", extra: "" as Extra | "" };
+  const [f, setF] = useState(empty);
+  const add = useMutation({
+    mutationFn: () => api("/schedules", { method: "POST", json: { child_id: f.child_id, date: day, start: f.start, extra: f.extra } }),
+    onSuccess: () => { setF(empty); setOpen(false); onDone(); },
+  });
+  if (!open) return <div className="mt-3"><Button variant="outline" onClick={() => { add.reset(); setOpen(true); }}>+ 수업 추가</Button></div>;
+  return (
+    <form className="mt-3 space-y-2 rounded-lg bg-slate-50 p-3" onSubmit={(e) => { e.preventDefault(); add.mutate(); }}>
+      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="추가 종류">
+        {(Object.keys(EXTRA) as Extra[]).map((k) => (
+          <Button key={k} type="button" role="radio" aria-checked={f.extra === k} variant={f.extra === k ? "primary" : "outline"} onClick={() => setF({ ...f, extra: k })}>{EXTRA[k]}</Button>))}
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="min-w-48 flex-1"><Label label="아동"><ChildPicker value={f.child_id || null} onChange={(id) => setF({ ...f, child_id: id ?? "" })} /></Label></div>
+        <Label label={`시작 시간 (${md(day)})`}><Input type="time" required value={f.start} onChange={(e) => setF({ ...f, start: e.target.value })} /></Label>
+        <Button disabled={add.isPending || !f.child_id || !f.extra}>추가</Button>
+        <Button type="button" variant="ghost" onClick={() => setOpen(false)}>취소</Button>
+      </div>
+      <p className="text-xs text-slate-500">바우처 5회는 바우처 서류에 들어가고, 유료는 출결에만 남고 바우처 서류에서 빠져요. 담당 치료사와 수업 길이는 아동·시간표 설정을 따라요.</p>
+      {add.error && <Notice tone="red">{errText(add.error)}</Notice>}
+    </form>
+  );
+}
+
 function RollRow({ r, who, onDone }: { r: Row; who: string; onDone: () => void }) {
   const [note, setNote] = useState(""), [late, setLate] = useState("");
   const [moving, setMoving] = useState(false), [to, setTo] = useState({ date: "", start: r.start, reason: "" });
@@ -111,6 +141,7 @@ function RollRow({ r, who, onDone }: { r: Row; who: string; onDone: () => void }
         <span className="font-medium">{who}</span>
         <span className="text-sm text-slate-500">{r.therapist}</span>
         {r.moved_from && <Badge tone="indigo">보강</Badge>}
+        {r.extra && <Badge tone={r.extra === "paid" ? "amber" : "indigo"}>{EXTRA[r.extra]}</Badge>}
         {badge}
         {r.state.reason && <span className="text-xs text-slate-500">{r.state.reason}</span>}
       </div>

@@ -94,7 +94,7 @@ def day(on: date, p: Principal = Depends(current_principal), repo=Depends(get_re
         out.append({"schedule_id": s["id"], "child_id": s["child_id"], "date": d, "start": s["start"], "end": s["end"],
                     "therapist": s.get("therapist"), "attendance": marks.get(s["id"]),
                     "state": effective(s, marks.get(s["id"]), absences), "moved_to": moved_to, "moved_from": s.get("moved_from"),
-                    "source": s.get("source")})
+                    "source": s.get("source"), "extra": s.get("extra")})
     return out
 
 
@@ -127,7 +127,7 @@ def child_attendance(child_id: str, month: str | None = None, p: Principal = Dep
                    if (not month or s["date"].startswith(month)) and s.get("status") != "cancelled"),
                   key=lambda s: (s["date"], s["start"]))
     states = [effective(s, marks.get(s["id"]), absences) for s in rows]
-    records = [{"schedule_id": s["id"], "date": s["date"], "start": s["start"], "end": s["end"], **st}
+    records = [{"schedule_id": s["id"], "date": s["date"], "start": s["start"], "end": s["end"], "extra": s.get("extra"), **st}
                for s, st in zip(rows, states)]
     return {"records": records, "summary": _summary(states)}
 
@@ -174,6 +174,8 @@ def move(sid: str, body: MoveIn, p: Principal = Depends(require_write), repo=Dep
     minutes = minutes_between(s["start"], s["end"])
     new = {"child_id": s["child_id"], "date": body.date.isoformat(), "start": body.start, "end": _plus(body.start, minutes),
            "therapist": s.get("therapist"), "note": "보강", "status": "scheduled", "source": "makeup", "moved_from": sid}
+    if s.get("extra"):  # a moved 추가 수업 stays the same kind
+        new["extra"] = s["extra"]
     for o in repo.list("schedules", p.org_id, date=new["date"], status="scheduled"):
         if o["start"] < new["end"] and new["start"] < o["end"] and (o.get("therapist") == new["therapist"] or o["child_id"] == new["child_id"]):
             raise HTTPException(409, f"시간 충돌: {o['start']}–{o['end']} ({o.get('therapist')})")

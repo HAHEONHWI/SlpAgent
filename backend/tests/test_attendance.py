@@ -105,3 +105,25 @@ def test_makeup_move_long_absence_and_holidays_reach_the_voucher(client, repo, c
     client.put("/org/holidays", headers=H(role="admin"), json={"holidays": []})  # an org cannot drop it
     assert [h["date"] for h in client.get("/org/holidays", headers=H()).json()] == ["2099-03-09"]
     assert a and d
+
+
+def test_extra_classes_voucher_and_paid(client, child):
+    cid = child["id"]
+    # therapist and end default to the child's 담당 and the timetable's class length
+    v = client.post("/schedules", headers=H(), json={"child_id": cid, "date": "2020-10-29", "start": "15:00", "extra": "voucher"})
+    assert v.status_code == 201
+    v = v.json()
+    assert (v["end"], v["therapist"], v["note"], v["source"], v["extra"]) == ("15:40", child["therapist"], "추가(바우처 5회)", "extra", "voucher")
+    paid = client.post("/schedules", headers=H(), json={"child_id": cid, "date": "2020-10-30", "start": "15:00", "extra": "paid"}).json()
+    assert paid["note"] == "추가(유료)"
+    assert client.post("/schedules", headers=H(), json={"child_id": cid, "date": "2020-10-30", "start": "15:00", "extra": "free"}).status_code == 422
+    day = client.get("/attendance/day?on=2020-10-30", headers=H()).json()
+    assert [d["extra"] for d in day] == ["paid"]
+    # both are classes for 출결; only the 바우처 one goes into the voucher form, even with a 결강 or a moved 유료 class
+    assert client.get("/attendance/summary?month=2020-10", headers=H()).json()[0]["scheduled"] == 2
+    visits = client.get(f"/children/{cid}/voucher-visits?month=2020-10", headers=H()).json()
+    assert [x["date"] for x in visits["visits"]] == ["2020-10-29"]
+    mv = client.post(f"/schedules/{paid['id']}/move", headers=H(), json={"date": "2020-10-31", "start": "10:00"}).json()
+    assert mv["makeup"]["extra"] == "paid"
+    visits = client.get(f"/children/{cid}/voucher-visits?month=2020-10", headers=H()).json()
+    assert [x["date"] for x in visits["visits"]] == ["2020-10-29"] and visits["other"] == []
