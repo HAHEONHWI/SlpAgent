@@ -116,13 +116,19 @@ def test_every_range_and_latest_query_has_a_firestore_index():
     import json, pathlib, re
     idx = json.loads((pathlib.Path(__file__).parents[2] / "firestore.indexes.json").read_text())["indexes"]
     have = {(i["collectionGroup"], tuple(f["fieldPath"] for f in i["fields"])) for i in idx}
+    have_desc = {(i["collectionGroup"], tuple(f["fieldPath"] for f in i["fields"])) for i in idx
+                 if i["fields"][-1]["order"] == "DESCENDING"}
     src = "\n".join(p.read_text() for p in (pathlib.Path(__file__).parents[1] / "app").rglob("*.py"))
-    needed = set()
-    for m in re.finditer(r'list_(range|latest)\("(\w+)", [^,]+, "(\w+)"[^)]*?((?:, \w+=[^,)]+|, \*\*\w+)*)\)', src):
-        _, col, field, rest = m.groups()
+    needed, needed_desc = set(), set()
+    for m in re.finditer(r'list_(range|latest)\((\w+|"\w+"), [^,]+, "(\w+)"[^)]*?((?:, \w+=[^,)]+|, \*\*\w+)*)\)', src):
+        kind, col, field, rest = m.groups()
+        cols = [col.strip('"')] if col.startswith('"') else ["therapy_sessions", "parent_consultations", "recording_records"]  # latest(col)
         eqs = tuple(re.findall(r", (\w+)=", rest))
-        needed.add((col, ("organization_id", *eqs, field)))
-        if "**flt" in rest:
-            needed.add((col, ("organization_id", "child_id", field)))
-    assert needed, "pattern found no queries"
+        for c in cols:
+            key = (c, ("organization_id", *eqs, field))
+            (needed_desc if kind == "latest" else needed).add(key)
+            if "**flt" in rest:
+                needed.add((c, ("organization_id", "child_id", field)))
+    assert needed and needed_desc, "pattern found no queries"
     assert needed - have == set()
+    assert needed_desc - have_desc == set()  # newest-first reads need a DESCENDING index

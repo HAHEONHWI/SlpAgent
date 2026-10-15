@@ -1,17 +1,20 @@
 """Tools exposed to the model. READ tools return org/child-scoped data (no names/contacts).
 WRITE tools only create drafts in ai_analyses; applying them requires /proposals/{id}/approve."""
 from ..auth import Principal
-from ..deps import audit
+from ..deps import audit, child_or_404
 from ..repo.base import NotFound
 from ..routers.children import age_months
 from ..routers.plans import Goal, PlanIn
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
+from fastapi import HTTPException
+from typing import Literal, TypedDict
 from . import knowledge
 from .privacy import sanitize_external_value
 
 READ = {"get_child_profile", "get_assessment_history", "get_assessment_responses", "get_treatment_goals",
-        "get_session_history", "get_behavior_observations", "get_vocabulary_progress", "search_clinical_knowledge"}
+        "get_session_history", "get_recent_records", "get_behavior_observations", "get_vocabulary_progress", "search_clinical_knowledge"}
 WRITE = {"generate_treatment_plan", "generate_session_note", "draft_parent_guidance"}
+RECENT_LIMIT = 10  # get_recent_records: newest records handed to the model
 
 
 def _obj(props: dict, req: list[str] | None = None) -> dict:
@@ -25,6 +28,7 @@ SPECS = [
     ("get_assessment_responses", "특정 검사의 문항별 응답", _obj({"assessment_id": _S}, ["assessment_id"])),
     ("get_treatment_goals", "현재 활성 치료목표(승인된 것만)와 버전", _obj({})),
     ("get_session_history", "회기 기록(날짜, 활동별 정반응/시행, 발화, 승인된 기록문)", _obj({})),
+    ("get_recent_records", "선택 아동의 최근 회기·상담·승인 녹음 요약 통합 조회(날짜 최신순 10건, 녹취 원문 제외)", _obj({})),
     ("get_behavior_observations", "ABC 행동 관찰 기록", _obj({})),
     ("get_vocabulary_progress", "어휘 습득 상태", _obj({"modality": {"type": "string", "enum": ["receptive", "expressive"]}})),
     ("search_clinical_knowledge", "기관 지식자료실 검색(문서명·페이지 반환)", _obj({"query": _S, "test_code": _S}, ["query"])),
@@ -58,6 +62,13 @@ class SessionDraft(TextDraft):
     session_id: str = Field(min_length=1, max_length=200)
 
 
+class RecentRecord(TypedDict):
+    record_type: Literal["session", "consultation", "recording"]
+    id: str
+    date: str
+    content: dict[str, JsonValue]
+
+
 class ToolRunner:
     def __init__(self, repo, p: Principal, child_id: str | None,
                  allowed_tools: frozenset[str] | None = None,
@@ -79,6 +90,10 @@ class ToolRunner:
         try:
             out = getattr(self, name)(**args)
         except NotFound:
+            return {"error": "not found"}
+        except HTTPException as error:
+            if error.status_code != 404:
+                raise
             return {"error": "not found"}
         except ValidationError:
             return {"error": "invalid tool arguments"}
@@ -114,6 +129,34 @@ class ToolRunner:
         return [{"id": s["id"], "date": s["date"], "minutes": s["minutes"], "activities": s["activities"],
                  "utterances": s["utterances"], "observed_behaviors": s["observed_behaviors"], "approved_note": notes.get(s["id"])}
                 for s in self._rows("therapy_sessions") if s["status"] == "completed"]
+
+    def get_recent_records(self) -> list[RecentRecord]:
+        # Runs on every clinical message: read only the newest few of each kind (each doc is a billed read),
+        # with headroom for unfinished sessions and unapproved drafts that are skipped.
+        child_id = self._need_child()
+        child_or_404(self.repo, self.p, child_id)
+        latest = lambda col: self.repo.list_latest(col, self.p.org_id, "date", RECENT_LIMIT * 2, child_id=child_id)
+        records: list[RecentRecord] = []
+        for s in latest("therapy_sessions"):
+            if s.get("status") != "completed":
+                continue
+            notes = [n["text"] for n in self.repo.list("session_notes", self.p.org_id, session_id=s["id"]) if n.get("status") == "approved"]
+            records.append({"record_type": "session", "id": s["id"], "date": s["date"], "content": {
+                "id": s["id"], "date": s["date"], "minutes": s.get("minutes"), "activities": s.get("activities"),
+                "utterances": s.get("utterances"), "observed_behaviors": s.get("observed_behaviors"),
+                "approved_note": notes[-1] if notes else None}})
+        sources: tuple[tuple[str, Literal["consultation", "recording"], tuple[str, ...]], ...] = (
+            ("parent_consultations", "consultation", ("summary", "session_summary", "topics", "parent_concerns",
+                                                       "guidance_given", "home_activities", "follow_up")),
+            ("recording_records", "recording", ("kind", "sections")),
+        )
+        for collection, kind, fields in sources:
+            for row in latest(collection):
+                if row.get("status", "approved") != "approved":
+                    continue
+                records.append({"record_type": kind, "id": row["id"], "date": row.get("date") or "",
+                                "content": {field: row.get(field) for field in fields}})
+        return sorted(records, key=lambda record: record["date"], reverse=True)[:RECENT_LIMIT]
 
     def get_behavior_observations(self):
         return [{k: b.get(k) for k in ("id", "observed_at", "antecedent", "behavior", "consequence", "setting", "activity",

@@ -45,6 +45,13 @@ def test_assistant_cannot_create_consultation(client, repo, child):
     assert repo.list("parent_consultations", "orgA") == []
 
 
+def test_consultation_rejects_invalid_child_detail_fields(client, child):
+    url = f"/children/{child['id']}/consultations"
+    assert client.post(url, headers=H(), json=_consultation(session_summary="x" * 10001)).status_code == 422
+    assert client.post(url, headers=H(), json=_consultation(parent_concerns="목록이 아닌 문자열")).status_code == 422
+    assert client.post(url, headers=H(), json=_consultation(home_activities="목록이 아닌 문자열")).status_code == 422
+
+
 def test_parent_consultation_document_uses_consultation_fields(client, child, tmp_path, monkeypatch):
     monkeypatch.setattr(documents, "get_settings", lambda: NS(gcs_bucket="", local_documents_dir=str(tmp_path),
                                                                document_url_signing_key="test-key", pdf_font_path="",

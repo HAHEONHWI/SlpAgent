@@ -12,3 +12,5 @@ app/data/assessments/
 reference-docs/
 extracted/
 .venv312/
+.DS_Store
+**/.DS_Store

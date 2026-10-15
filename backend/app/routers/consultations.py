@@ -18,6 +18,9 @@ class ConsultationIn(BaseModel):
     participants: list[str] = []
     topics: list[str] = []
     summary: str = Field(max_length=10000)
+    session_summary: str | None = Field(default=None, max_length=10000)
+    parent_concerns: list[str] | None = Field(default=None, max_length=50)
+    home_activities: list[str] | None = Field(default=None, max_length=50)
     guidance_given: str | None = Field(default=None, max_length=10000)
     follow_up: str | None = Field(default=None, max_length=10000)
 
