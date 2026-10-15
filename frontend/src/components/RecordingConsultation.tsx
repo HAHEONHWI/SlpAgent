@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Mic } from "lucide-react";
 import { api } from "../lib/api";
-import { errText } from "../lib/hooks";
+import { errText, useClassSlot } from "../lib/hooks";
 import { resumableUpload, type UploadTarget } from "../lib/upload";
 import { Badge, Button, Card, Input, Label, Notice, Select, Textarea } from "./ui";
 
@@ -40,6 +40,8 @@ export default function RecordingConsultation({ childId, defaultKind = "consulta
   const [inputKey, setInputKey] = useState(0);
   const [form, setForm] = useState({ kind: defaultKind, date: today(), start: "", end: "", counselor: "", consent: false });
   const [progress, setProgress] = useState<number | null>(null);
+  // 날짜를 고르면 그날 시간표의 수업 시간·담당을 채운다 (수업이 없는 날은 시간을 비운다)
+  useClassSlot(childId, form.date, (s) => setForm((f) => ({ ...f, start: s?.start ?? "", end: s?.end ?? "", counselor: s?.therapist || f.counselor })));
   const jobs = useQuery({
     queryKey: ["recordings", childId],
     queryFn: () => api<Job[]>(`/children/${childId}/recordings`),

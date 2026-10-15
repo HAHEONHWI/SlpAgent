@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { api } from "../lib/api";
-import { errText, useCreate, useRecords } from "../lib/hooks";
+import { errText, useClassSlot, useCreate, useRecords } from "../lib/hooks";
 import RequireChild from "../components/RequireChild";
 import RecordingConsultation from "../components/RecordingConsultation";
 import RecordingRecords from "../components/RecordingRecords";
@@ -32,6 +32,8 @@ function Inner({ childId }: { childId: string }) {
   const [details, setDetails] = useState(false);
   const [acts, setActs] = useState<A[]>([{ ...blankA }]);
   const [err, setErr] = useState("");
+  // 날짜를 고르면 그날 시간표의 수업 시간·담당을 채운다
+  useClassSlot(childId, f.date, (s) => setF((x) => ({ ...x, start: s?.start ?? "", end: s?.end ?? "", counselor: s?.therapist || x.counselor })));
   const set = (k: keyof typeof blank) => (e: any) => setF({ ...f, [k]: e.target.value });
   const upd = (i: number, k: keyof A, v: string) => setActs(acts.map((a, j) => (j === i ? { ...a, [k]: v } : a)));
   const filledActs = acts.filter((a) => a.name.trim());
@@ -46,7 +48,7 @@ function Inner({ childId }: { childId: string }) {
       if (hasDetails) await saveSession.mutateAsync({ date: f.date, start: f.start, end: f.end, therapist: f.counselor, status: "completed",
         utterances: lines(f.utterances), observed_behaviors: lines(f.behaviors),
         activities: filledActs.map((a) => ({ name: a.name.trim(), correct: Number(a.correct || 0), trials: Number(a.trials || 0), prompt_level: a.prompt_level || null })) });
-      setF({ ...blank, date: f.date, counselor: f.counselor, start: "", end: "" }); setActs([{ ...blankA }]); setDetails(false);
+      setF({ ...blank, date: f.date, counselor: f.counselor, start: f.start, end: f.end }); setActs([{ ...blankA }]); setDetails(false);
     } catch (e) { setErr(errText(e)); }
   };
 
