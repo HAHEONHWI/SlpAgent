@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { Bell, History, Megaphone, Menu, X, BookOpen, Brain, CalendarDays, ClipboardList, FileText, LayoutDashboard, LineChart, ListChecks, NotebookPen, Settings, Sparkles, Stethoscope, Users, Library, LogOut, UserCheck, UserCog, Wallet } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useChild } from "../lib/child";
-import { useMe } from "../lib/me";
+import { type Me, useMe } from "../lib/me";
 import { seenAt, useNotices } from "../lib/notices";
 import { ageLabel } from "../lib/api";
 import BrandLogo from "./BrandLogo";
@@ -11,27 +12,44 @@ import Footer from "./Footer";
 import ChildPicker from "./ChildPicker";
 import { Button, Select } from "./ui";
 
-const MENU: { to: string; label: string; icon: typeof LayoutDashboard; soon?: boolean; settle?: boolean }[] = [
-  { to: "/", label: "대시보드", icon: LayoutDashboard },
-  { to: "/ai", label: "AI 대화", icon: Sparkles },
-  { to: "/children", label: "아동 관리", icon: Users },
-  { to: "/assessments", label: "발달검사 관리", icon: ClipboardList },
-  { to: "/analysis", label: "통합 발달 분석", icon: Brain },
-  { to: "/behavior", label: "행동분석", icon: Stethoscope },
-  { to: "/vocabulary", label: "어휘 발달 관리", icon: BookOpen },
-  { to: "/plans", label: "치료계획", icon: ListChecks },
-  { to: "/activities", label: "치료활동 생성", icon: Sparkles },
-  { to: "/sessions", label: "수업 기록", icon: NotebookPen },
-  { to: "/class-records", label: "수업 기록 조회", icon: History },
-  { to: "/progress", label: "발달 진행도 분석", icon: LineChart },
-  { to: "/voucher", label: "바우처·문서 생성", icon: FileText },
-  { to: "/knowledge", label: "AI 지식자료실", icon: Library },
-  { to: "/schedule", label: "일정 관리", icon: CalendarDays },
-  { to: "/attendance", label: "출결 관리", icon: UserCheck },
-  { to: "/settlement", label: "정산", icon: Wallet, settle: true },  // 기관 관리자와 회계 담당만
-  { to: "/notices", label: "공지사항", icon: Megaphone },
-  { to: "/settings", label: "기관 설정", icon: Settings },
+type Item = { to: string; label: string; icon: typeof LayoutDashboard; soon?: boolean; show?: (me: Me | undefined) => boolean };
+const adminOnly = (me: Me | undefined) => me?.role === "admin";
+const canWrite = (me: Me | undefined) => me?.role === "admin" || me?.role === "therapist";
+const HOME: Item = { to: "/", label: "대시보드", icon: LayoutDashboard };
+// Grouped so the everyday screens are short to find; the other groups start folded.
+const GROUPS: { id: string; title: string; items: Item[] }[] = [
+  { id: "daily", title: "매일", items: [
+    { to: "/schedule", label: "일정 관리", icon: CalendarDays },
+    { to: "/attendance", label: "출결 관리", icon: UserCheck },
+    { to: "/sessions", label: "수업 기록", icon: NotebookPen },
+    { to: "/class-records", label: "수업 기록 조회", icon: History },
+    { to: "/children", label: "아동 관리", icon: Users },
+  ] },
+  { id: "care", title: "아동 평가·치료", items: [
+    { to: "/assessments", label: "발달검사 관리", icon: ClipboardList },
+    { to: "/analysis", label: "통합 발달 분석", icon: Brain },
+    { to: "/behavior", label: "행동분석", icon: Stethoscope },
+    { to: "/vocabulary", label: "어휘 발달 관리", icon: BookOpen },
+    { to: "/plans", label: "치료계획", icon: ListChecks },
+    { to: "/progress", label: "발달 진행도 분석", icon: LineChart },
+  ] },
+  { id: "ai", title: "AI", items: [
+    { to: "/ai", label: "AI 대화", icon: Sparkles },
+    { to: "/activities", label: "치료활동 생성", icon: Sparkles, show: canWrite },  // 보조(읽기 전용)는 만들 수 없음
+    { to: "/knowledge", label: "AI 지식자료실", icon: Library },
+  ] },
+  { id: "admin", title: "행정", items: [
+    { to: "/voucher", label: "바우처·문서 생성", icon: FileText },
+    { to: "/settlement", label: "정산", icon: Wallet, show: (me) => !!me?.can_settle },  // 기관 관리자와 회계 담당만
+    { to: "/notices", label: "공지사항", icon: Megaphone },
+    { to: "/settings", label: "기관 설정", icon: Settings, show: adminOnly },
+  ] },
 ];
+const OPEN_KEY = "menu-open-groups";
+const readOpen = (): string[] => {
+  try { const v = JSON.parse(localStorage.getItem(OPEN_KEY) ?? "null"); return Array.isArray(v) ? v : ["daily"]; } catch { return ["daily"]; }
+};
+const matches = (to: string, pathname: string) => (to === "/" ? pathname === "/" : pathname === to || pathname.startsWith(to + "/"));
 
 export default function Layout() {
   const { pathname } = useLocation();
@@ -44,18 +62,38 @@ export default function Layout() {
   const seen = seenAt(me?.uid); // re-read on every render (route changes), so visiting 공지사항 clears the badge
   const unread = pathname === "/notices" ? 0 : notices.filter((n) => n.created_at > seen).length;
   const { childId, child, children, setChildId } = useChild();
-  const menu = MENU.filter((m) => !m.settle || me?.can_settle);
+  const groups = GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => !i.show || i.show(me)) })).filter((g) => g.items.length);
+  const [open, setOpen] = useState<string[]>(readOpen);
+  const toggle = (id: string) => {
+    const next = open.includes(id) ? open.filter((x) => x !== id) : [...open, id];
+    setOpen(next);
+    try { localStorage.setItem(OPEN_KEY, JSON.stringify(next)); } catch { /* the choice just isn't remembered */ }
+  };
+  const link = ({ to, label, icon: I, soon }: Item) => (
+    <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) =>
+      `flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors ${isActive ? "bg-indigo-50 font-semibold text-indigo-800" : "text-slate-600 hover:bg-slate-100"}`}>
+      <I size={16} /> <span className="flex-1">{label}</span>{soon && <span className="text-[10px] text-slate-400">준비중</span>}
+    </NavLink>
+  );
   return (
     <div className="flex h-dvh overflow-hidden bg-slate-50 print:block print:h-auto print:overflow-visible print:bg-white">
       <aside className="sticky top-0 hidden print:!hidden h-full w-60 shrink-0 flex-col border-r border-slate-200 bg-white md:flex">
         <Link to="/" title="메인으로" className="block px-4 py-3"><BrandLogo className="mx-auto w-40" /></Link>
         <nav aria-label="주요 메뉴" className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-4">
-          {menu.map(({ to, label, icon: I, soon }) => (
-            <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) =>
-              `flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors ${isActive ? "bg-indigo-50 font-semibold text-indigo-800" : "text-slate-600 hover:bg-slate-100"}`}>
-              <I size={16} /> <span className="flex-1">{label}</span>{soon && <span className="text-[10px] text-slate-400">준비중</span>}
-            </NavLink>
-          ))}
+          {link(HOME)}
+          {groups.map((g) => {
+            const here = g.items.some((i) => matches(i.to, pathname));
+            const shown = here || open.includes(g.id);  // the group of the current page is always open
+            return (
+              <div key={g.id} className="pt-2">
+                <button type="button" onClick={() => toggle(g.id)} aria-expanded={shown} aria-controls={`menu-${g.id}`} disabled={here}
+                  className="flex w-full items-center gap-1 rounded-md px-3 py-1 text-xs font-semibold text-slate-500 hover:text-slate-800 disabled:cursor-default disabled:hover:text-slate-500">
+                  <span className="flex-1 text-left">{g.title}</span>
+                  {!here && <ChevronDown size={14} className={`transition-transform ${shown ? "" : "-rotate-90"}`} />}
+                </button>
+                {shown && <div id={`menu-${g.id}`} className="space-y-0.5">{g.items.map(link)}</div>}
+              </div>);
+          })}
         </nav>
         <div className="border-t border-slate-100 px-4 py-3 text-left text-xs text-slate-500">
           <a href="/privacy" target="_blank" rel="noopener" className="hover:text-slate-800">개인정보처리방침</a>
@@ -84,13 +122,17 @@ export default function Layout() {
           <div className="fixed inset-0 top-[3.25rem] z-20 bg-slate-900/30 md:hidden print:hidden" onClick={() => setMenuOpen(false)}>
             <nav id="mobile-menu" aria-label="주요 메뉴" className="max-h-full overflow-y-auto border-b border-slate-200 bg-white p-3 shadow-lg" onClick={(e) => e.stopPropagation()}>
               <Link to="/" className="mb-2 flex items-center gap-2 px-1"><BrandLogo className="w-16" />{me?.org_name && <span className="truncate text-sm font-medium text-slate-700">{me.org_name}</span>}</Link>
-              <div className="grid grid-cols-3 gap-1.5">
-                {menu.map(({ to, label, icon: I }) => (
-                  <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) =>
-                    `flex flex-col items-center gap-1 rounded-lg px-1 py-2.5 text-center text-xs leading-tight transition-colors ${isActive ? "bg-indigo-50 font-semibold text-indigo-800" : "text-slate-600 hover:bg-slate-100"}`}>
-                    <I size={18} /><span className="[word-break:keep-all]">{label}</span>
-                  </NavLink>))}
-              </div>
+              {[{ id: "home", title: "", items: [HOME] }, ...groups].map((g) => (
+                <div key={g.id} className="mt-2 first:mt-0">
+                  {g.title && <p className="mb-1 px-1 text-[11px] font-semibold text-slate-400">{g.title}</p>}
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {g.items.map(({ to, label, icon: I }) => (
+                      <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) =>
+                        `flex flex-col items-center gap-1 rounded-lg px-1 py-2.5 text-center text-xs leading-tight transition-colors ${isActive ? "bg-indigo-50 font-semibold text-indigo-800" : "text-slate-600 hover:bg-slate-100"}`}>
+                        <I size={18} /><span className="[word-break:keep-all]">{label}</span>
+                      </NavLink>))}
+                  </div>
+                </div>))}
               <a href="/privacy" target="_blank" rel="noopener" className="mt-3 block px-1 text-xs text-slate-500">개인정보처리방침</a>
             </nav>
           </div>)}
