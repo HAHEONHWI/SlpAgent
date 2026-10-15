@@ -63,7 +63,7 @@ export default function Layout() {
         </div>
       </aside>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-10 flex print:hidden shrink-0 items-center gap-2 border-b border-slate-200 bg-white/90 px-2 py-2.5 backdrop-blur sm:gap-3 sm:px-4">
+        <header className="sticky top-0 z-30 flex print:hidden shrink-0 items-center gap-2 border-b border-slate-200 bg-white/90 px-2 py-2.5 backdrop-blur sm:gap-3 sm:px-4">
           <button className="shrink-0 rounded-md p-1.5 text-slate-600 hover:bg-slate-100 md:hidden" onClick={() => setMenuOpen(!menuOpen)}
             aria-label={menuOpen ? "메뉴 닫기" : "메뉴 열기"} aria-expanded={menuOpen} aria-controls="mobile-menu">{menuOpen ? <X size={20} /> : <Menu size={20} />}</button>
           <Link to="/" title="메인으로" className="shrink-0 md:hidden"><BrandLogo className="w-11 sm:w-14" /></Link>
