@@ -6,7 +6,9 @@ from ..deps import can_settle, get_repo
 from ..repo.base import NotFound
 from ..services import billing
 from ..services.attendance_state import effective, held
-from .voucher_doc import _service_minutes, month_data
+from .attendance import month_bounds
+from .timetable import sync_month
+from .voucher_doc import held_visits
 
 
 
@@ -32,16 +34,25 @@ def month_settlement(month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"), p: 
         paid_price = repo.get("organizations", p.org_id, p.org_id).get("paid_price")
     except NotFound:
         paid_price = None
-    minutes = _service_minutes(repo, p.org_id)
+    # one read of the month for the whole organization, then split per child (not one pass per child)
+    sync_month(repo, p.org_id, month)
+    first, last = month_bounds(month)
+    by_child: dict[str, dict[str, list]] = {}
+    def bucket(cid: str) -> dict[str, list]:
+        return by_child.setdefault(cid, {"schedules": [], "sessions": []})
+    for s in repo.list_range("schedules", p.org_id, "date", first, last):
+        bucket(s["child_id"])["schedules"].append(s)
+    for s in repo.list_range("therapy_sessions", p.org_id, "date", first, last):
+        bucket(s["child_id"])["sessions"].append(s)
+    marks = {m["schedule_id"]: m for m in repo.list_range("attendance", p.org_id, "date", first, last)}
     absences = repo.list("absences", p.org_id)
     rows = []
     for c in repo.list("children", p.org_id):
         if c.get("archived"):
             continue
-        visits, _ = month_data(repo, p, c["id"], month, minutes)  # held classes except 추가(유료); later days count as planned
-        marks = {m["schedule_id"]: m for m in repo.list("attendance", p.org_id, child_id=c["id"])}
-        paid = sum(1 for s in repo.list("schedules", p.org_id, child_id=c["id"])
-                   if s.get("extra") == "paid" and s["date"].startswith(month)
+        data = by_child.get(c["id"], {"schedules": [], "sessions": []})
+        visits = held_visits(data["schedules"], marks, absences, data["sessions"], month)  # 추가(유료) excluded
+        paid = sum(1 for s in data["schedules"] if s.get("extra") == "paid"
                    and held(effective(s, marks.get(s["id"]), absences, today="9999-12-31")))
         grade = c.get("voucher_grade")
         if not grade and not visits and not paid:

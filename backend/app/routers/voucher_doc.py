@@ -64,42 +64,53 @@ def visits_for(repo, p: Principal, child_id: str, month: str, minutes: int) -> l
     return month_data(repo, p, child_id, month, minutes)[0]
 
 
+def held_visits(schedules: list[dict], marks: dict[str, dict], absences: list[dict], sessions: list[dict], month: str) -> list[dict]:
+    """The month's 바우처 visits ({'date','start','therapist','from'}): classes that happened (not moved/cancelled,
+    not 결석·사유결석, not in a 장기결강 period; unmarked ones count as held, later days as planned) except
+    추가(유료), plus therapy session records on days without such a class. Shared by the form and 정산."""
+    voucher = [s for s in schedules if s.get("extra") != "paid" and s["date"].startswith(month)]
+    paid_days = {s["date"] for s in schedules if s.get("extra") == "paid"}
+    out = [{"date": s["date"], "start": s["start"], "therapist": s.get("therapist", ""), "from": "makeup" if s.get("moved_from") else "schedule"}
+           for s in voucher if held(effective(s, marks.get(s["id"]), absences, today="9999-12-31"))]
+    for s in sessions:  # session records without a schedule entry
+        if s.get("date", "").startswith(month) and s.get("status", "completed") != "cancelled" \
+                and s["date"] not in paid_days and not any(v["date"] == s["date"] for v in out):
+            out.append({"date": s["date"], "start": s["start"], "therapist": s.get("therapist", ""), "from": "session"})
+    return sorted(out, key=lambda v: (v["date"], v["start"]))
+
+
 def month_data(repo, p: Principal, child_id: str, month: str, minutes: int) -> tuple[list[dict], list[tuple[str, str]]]:
-    """(visits, 기타사항 lines). A visit is a class that happened: not moved/cancelled, not 결석·사유결석 and not in
-    a 장기결강 period. Classes nobody marked count as held (출석 is the default)."""
+    """(visits, 기타사항 lines) for one child. Reads only that month's records."""
+    from .attendance import month_bounds
     from .timetable import sync_month
     sync_month(repo, p.org_id, month)  # classes follow the weekly timetable
-    marks = {m["schedule_id"]: m for m in repo.list("attendance", p.org_id, child_id=child_id)}
+    first, last = month_bounds(month)
+    marks = {m["schedule_id"]: m for m in repo.list_range("attendance", p.org_id, "date", first, last, child_id=child_id)}
     absences = repo.list("absences", p.org_id, child_id=child_id)
-    all_schedules = repo.list("schedules", p.org_id, child_id=child_id)
-    schedules = [s for s in all_schedules if s.get("extra") != "paid"]  # 추가(유료) is not a voucher class
-    paid_days = {s["date"] for s in all_schedules if s.get("extra") == "paid"}
-    sessions = [s for s in repo.list("therapy_sessions", p.org_id, child_id=child_id)
-                if s.get("date", "").startswith(month) and s.get("status", "completed") != "cancelled"]
-    notes = {n["session_id"]: n["text"] for n in repo.list("session_notes", p.org_id, child_id=child_id)
-             if n.get("status", "approved") == "approved"}
+    schedules = repo.list_range("schedules", p.org_id, "date", first, last, child_id=child_id)
+    sessions = repo.list_range("therapy_sessions", p.org_id, "date", first, last, child_id=child_id)
+    visits = held_visits(schedules, marks, absences, sessions, month)
     notes_by_date: dict[str, str] = {}
     for s in sessions:
-        if notes.get(s["id"]):
-            notes_by_date[s["date"]] = notes[s["id"]]
-    records_by_date = {r["date"]: r for r in repo.list("recording_records", p.org_id, child_id=child_id)
-                       if (r.get("date") or "").startswith(month)}
+        for n in repo.list("session_notes", p.org_id, session_id=s["id"]):
+            if n.get("status", "approved") == "approved" and n.get("text"):
+                notes_by_date[s["date"]] = n["text"]
+    records_by_date = {r["date"]: r for r in repo.list_range("recording_records", p.org_id, "date", first, last, child_id=child_id)}
     consult_by_date = {c["date"]: (c.get("session_summary") or c.get("summary") or "").strip()
-                       for c in repo.list("parent_consultations", p.org_id, child_id=child_id) if (c.get("date") or "").startswith(month)}
-    out = []
-    for s in schedules:
-        if not s["date"].startswith(month) or not held(effective(s, marks.get(s["id"]), absences, today="9999-12-31")):
-            continue
-        text, source = _content(s["date"], notes_by_date, records_by_date, consult_by_date)
-        out.append({"date": s["date"], "start": s["start"], "end": _plus(s["start"], minutes), "therapist": s.get("therapist", ""),
-                    "content": text, "content_source": source, "from": "makeup" if s.get("moved_from") else "schedule"})
-    for s in sessions:  # session records without a schedule entry
-        if any(v["date"] == s["date"] for v in out) or s["date"] in paid_days:
-            continue
-        text, source = _content(s["date"], notes_by_date, records_by_date, consult_by_date)
-        out.append({"date": s["date"], "start": s["start"], "end": _plus(s["start"], minutes), "therapist": s.get("therapist", ""),
-                    "content": text, "content_source": source, "from": "session"})
-    return sorted(out, key=lambda v: (v["date"], v["start"])), other_notes(schedules, marks, absences, month)
+                       for c in repo.list_range("parent_consultations", p.org_id, "date", first, last, child_id=child_id)}
+    for v in visits:
+        v["end"] = _plus(v["start"], minutes)
+        v["content"], v["content_source"] = _content(v["date"], notes_by_date, records_by_date, consult_by_date)
+    # a class moved to another month: 기타사항 still names where it went
+    voucher = [s for s in schedules if s.get("extra") != "paid"]
+    have = {s["id"] for s in voucher}
+    for s in list(voucher):
+        if s.get("moved_to") and s["moved_to"] not in have:
+            try:
+                voucher.append(repo.get("schedules", p.org_id, s["moved_to"]))
+            except NotFound:
+                pass
+    return visits, other_notes(voucher, marks, absences, month)
 
 
 @router.get("/children/{child_id}/voucher-visits")

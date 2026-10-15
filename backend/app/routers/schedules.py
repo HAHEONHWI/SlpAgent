@@ -60,8 +60,13 @@ def list_(month: str | None = None, child_id: str | None = None, p: Principal = 
     if month:
         from .timetable import sync_month
         sync_month(repo, p.org_id, month)  # dated classes follow the weekly timetable automatically
-    rows = repo.list("schedules", p.org_id, **({"child_id": child_id} if child_id else {}))
-    rows = in_scope([r for r in rows if not month or r["date"].startswith(month)], child_scope(repo, p))
+    flt = {"child_id": child_id} if child_id else {}
+    if month:
+        from .attendance import month_bounds
+        rows = repo.list_range("schedules", p.org_id, "date", *month_bounds(month), **flt)
+    else:
+        rows = repo.list("schedules", p.org_id, **flt)
+    rows = in_scope(rows, child_scope(repo, p))
     return sorted(rows, key=lambda r: (r["date"], r["start"]))
 
 

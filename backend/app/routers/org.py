@@ -145,6 +145,8 @@ def put_roster(body: RosterIn, p: Principal = Depends(current_principal), repo=D
             cfg = repo.get("timetable_config", p.org_id, "default")
             teachers = [{**t, "name": renames.get(t["name"], t["name"])} for t in cfg.get("teachers", [])]
             repo.update("timetable_config", p.org_id, "default", {"teachers": teachers})
+            from .timetable import touch_timetable
+            touch_timetable(repo, p.org_id)  # classes made from now on carry the new name
         except NotFound:
             pass
     if _org_doc(repo, p.org_id):

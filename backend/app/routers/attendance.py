@@ -8,8 +8,14 @@ from ..auth import Identity, Principal, current_principal, require_admin, requir
 from ..deps import audit, child_or_404, child_scope, get_repo, in_scope
 from ..repo.base import NotFound
 from ..services.accounts import PLATFORM
+from .timetable import touch_timetable
 from ..services.attendance_state import NOT_HELD, effective
 from ..services.billing import attendance_summary, minutes_between
+
+
+def month_bounds(month: str) -> tuple[str, str]:
+    """'YYYY-MM' -> first and last possible date strings, for date-range reads."""
+    return f"{month[:7]}-01", f"{month[:7]}-31"
 
 
 def _plus(hhmm: str, minutes: int) -> str:
@@ -76,8 +82,8 @@ def _summary(states: list[dict]) -> dict:
 @router.get("/attendance/day")
 def day(on: date, p: Principal = Depends(current_principal), repo=Depends(get_repo)):
     """Roll call: that day's classes with what happened (explicit mark, 장기결강, or 출석 by default)."""
-    from .timetable import sync_schedules
-    sync_schedules(repo, p.org_id, on, on)  # the day's classes come from the weekly timetable
+    from .timetable import sync_month
+    sync_month(repo, p.org_id, on.isoformat()[:7])  # the day's classes come from the weekly timetable
     d = on.isoformat()
     marks = {m["schedule_id"]: m for m in repo.list("attendance", p.org_id, date=d)}
     absences = _absences(repo, p.org_id)
@@ -103,11 +109,12 @@ def org_summary(month: str = Query(pattern=r"^\d{4}-\d{2}$"), p: Principal = Dep
     """Per-child monthly summary. Classes nobody marked count as 출석 once their day has come."""
     from .timetable import sync_month
     sync_month(repo, p.org_id, month)
-    marks = {m["schedule_id"]: m for m in repo.list("attendance", p.org_id) if m.get("date", "").startswith(month)}
+    first, last = month_bounds(month)
+    marks = {m["schedule_id"]: m for m in repo.list_range("attendance", p.org_id, "date", first, last)}
     absences = _absences(repo, p.org_id)
     by_child: dict[str, list[dict]] = {}
-    for s in in_scope(repo.list("schedules", p.org_id), _scope(repo, p)):
-        if s.get("date", "").startswith(month) and s.get("status") != "cancelled":
+    for s in in_scope(repo.list_range("schedules", p.org_id, "date", first, last), _scope(repo, p)):
+        if s.get("status") != "cancelled":
             by_child.setdefault(s["child_id"], []).append(effective(s, marks.get(s["id"]), absences))
     return [{"child_id": c, "scheduled": sum(1 for st in states if st["status"] != "moved"), **_summary(states)}
             for c, states in sorted(by_child.items())]
@@ -121,10 +128,11 @@ def child_attendance(child_id: str, month: str | None = None, p: Principal = Dep
     if month:
         from .timetable import sync_month
         sync_month(repo, p.org_id, month)
-    marks = {m["schedule_id"]: m for m in repo.list("attendance", p.org_id, child_id=child_id)}
+    first, last = month_bounds(month) if month else ("0000-00-00", "9999-12-31")
+    marks = {m["schedule_id"]: m for m in repo.list_range("attendance", p.org_id, "date", first, last, child_id=child_id)}
     absences = _absences(repo, p.org_id, child_id)
-    rows = sorted((s for s in repo.list("schedules", p.org_id, child_id=child_id)
-                   if (not month or s["date"].startswith(month)) and s.get("status") != "cancelled"),
+    rows = sorted((s for s in repo.list_range("schedules", p.org_id, "date", first, last, child_id=child_id)
+                   if s.get("status") != "cancelled"),
                   key=lambda s: (s["date"], s["start"]))
     states = [effective(s, marks.get(s["id"]), absences) for s in rows]
     records = [{"schedule_id": s["id"], "date": s["date"], "start": s["start"], "end": s["end"], "extra": s.get("extra"), **st}
@@ -287,12 +295,11 @@ def _rows(body: HolidaysIn) -> list[dict]:
 
 def _drop_classes_on(repo, org_id: str, days: set[str]):
     """Classes the timetable already put on those days go away (untouched ones only; they come back if the day is removed)."""
-    if not days:
-        return
-    marked = {m["schedule_id"] for m in repo.list("attendance", org_id)}
-    for s in repo.list("schedules", org_id):
-        if s["date"] in days and s.get("timetable_entry_id") and s.get("status") == "scheduled" and s["id"] not in marked:
-            repo.delete("schedules", org_id, s["id"])
+    for d in sorted(days):
+        marked = {m["schedule_id"] for m in repo.list("attendance", org_id, date=d)}
+        for s in repo.list("schedules", org_id, date=d):
+            if s.get("timetable_entry_id") and s.get("status") == "scheduled" and s["id"] not in marked:
+                repo.delete("schedules", org_id, s["id"])
 
 
 @router.get("/org/holidays")
@@ -310,6 +317,7 @@ def put_holidays(body: HolidaysIn, p: Principal = Depends(require_admin), repo=D
     except NotFound:
         repo.create("organizations", p.org_id, {"name": "", "holidays": rows}, doc_id=p.org_id)
     _drop_classes_on(repo, p.org_id, {h["date"] for h in rows})
+    touch_timetable(repo, p.org_id)  # a removed 휴무일 gets its classes back
     audit(repo, p, "update", "organizations", p.org_id)
     return holidays(repo, p.org_id)
 
@@ -322,11 +330,13 @@ def get_site_holidays(admin: Identity = Depends(require_site_admin), repo=Depend
 @router.put("/platform/holidays")
 def put_site_holidays(body: HolidaysIn, admin: Identity = Depends(require_site_admin), repo=Depends(get_repo)):
     rows = _rows(body)
+    import uuid
+    data = {"holidays": rows, "rev": uuid.uuid4().hex}  # every organization syncs its classes again
     try:
         repo.get("settings", PLATFORM, "holidays")
-        repo.update("settings", PLATFORM, "holidays", {"holidays": rows})
+        repo.update("settings", PLATFORM, "holidays", data)
     except NotFound:
-        repo.create("settings", PLATFORM, {"holidays": rows}, doc_id="holidays")
+        repo.create("settings", PLATFORM, data, doc_id="holidays")
     days = {h["date"] for h in rows}
     for org in repo.list("organization_registry", PLATFORM):
         _drop_classes_on(repo, org.get("org_id") or org["id"], days)

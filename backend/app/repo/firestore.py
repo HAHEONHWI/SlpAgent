@@ -29,6 +29,21 @@ class FirestoreRepo:
             q = q.where(k, "==", v)
         return [s.to_dict() for s in q.stream()]
 
+    def list_range(self, col, org_id, field, lo, hi, **eq: Any):
+        q = self.c.collection(col).where("organization_id", "==", org_id)
+        for k, v in eq.items():
+            q = q.where(k, "==", v)
+        q = q.where(field, ">=", lo).where(field, "<=", hi)  # needs a composite index (organization_id, *eq, field)
+        return [s.to_dict() for s in q.stream()]
+
+    def list_latest(self, col, org_id, field, limit, **eq: Any):
+        from google.cloud import firestore
+        q = self.c.collection(col).where("organization_id", "==", org_id)
+        for k, v in eq.items():
+            q = q.where(k, "==", v)
+        q = q.order_by(field, direction=firestore.Query.DESCENDING).limit(limit)  # composite index (organization_id, *eq, field desc)
+        return [s.to_dict() for s in q.stream()]
+
     def update(self, col, org_id, doc_id, patch):
         self.get(col, org_id, doc_id)
         patch = {k: v for k, v in patch.items() if k not in ("id", "organization_id")}

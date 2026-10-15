@@ -203,7 +203,10 @@ def preview_merge(org_id: str, body: MergeIn, admin: Identity = Depends(require_
 
 @router.post("/platform/organizations/{org_id}/merge")
 def apply_merge(org_id: str, body: MergeIn, admin: Identity = Depends(require_site_admin), repo=Depends(get_repo)):
-    return merge_organizations(repo, org_id, body, admin.uid)
+    out = merge_organizations(repo, org_id, body, admin.uid)
+    from .timetable import touch_timetable
+    touch_timetable(repo, body.target_org_id)  # the merged timetable syncs again
+    return out
 
 
 def _platform_audit(repo, actor: Identity, action: str, target: str):
@@ -347,8 +350,8 @@ def reject_signup(uid: str, body: RejectIn, admin: Identity = Depends(require_si
 def _org_stats(repo, org_id: str, since: str) -> dict:
     # Counts only: the platform view must not expose names or clinical content.
     children = [c for c in repo.list("children", org_id) if not c.get("archived")]
-    sessions = [s for s in repo.list("therapy_sessions", org_id) if s.get("date", "") >= since[:10]]
-    activity = max((a.get("created_at", "") for a in repo.list("audit_logs", org_id)), default=None)
+    sessions = repo.list_range("therapy_sessions", org_id, "date", since[:10], "9999-12-31")
+    activity = next((a.get("created_at") for a in repo.list_latest("audit_logs", org_id, "created_at", 1)), None)
     return {"users": len(repo.list("users", org_id)), "children": len(children),
             "sessions_30d": len(sessions), "last_activity": activity}
 

@@ -24,6 +24,12 @@ class MemoryRepo:
         return [copy.deepcopy(d) for d in self.db[col].values()
                 if d["organization_id"] == org_id and all(d.get(k) == v for k, v in eq.items())]
 
+    def list_range(self, col, org_id, field, lo, hi, **eq: Any):
+        return [d for d in self.list(col, org_id, **eq) if d.get(field) is not None and lo <= d[field] <= hi]
+
+    def list_latest(self, col, org_id, field, limit, **eq: Any):
+        return sorted(self.list(col, org_id, **eq), key=lambda d: d.get(field) or "", reverse=True)[:limit]
+
     def update(self, col, org_id, doc_id, patch):
         d = self.db[col].get(doc_id)
         if not d or d["organization_id"] != org_id:

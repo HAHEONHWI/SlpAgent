@@ -24,8 +24,8 @@ class DocumentIn(BaseModel):
 def _data(repo, principal: Principal, child_id: str, month: str) -> dict:
     record = child_or_404(repo, principal, child_id)
     child = {key: record.get(key) for key in ("id", "alias", "display_name", "birth_date")}
-    sessions = [row for row in repo.list("therapy_sessions", principal.org_id, child_id=child_id)
-                if row["date"].startswith(month)]
+    from .attendance import month_bounds
+    sessions = repo.list_range("therapy_sessions", principal.org_id, "date", *month_bounds(month), child_id=child_id)
     try:
         org = repo.get("organizations", principal.org_id, principal.org_id)
     except NotFound:
@@ -33,8 +33,7 @@ def _data(repo, principal: Principal, child_id: str, month: str) -> dict:
     summary = billing.monthly_summary(sessions, org.get("unit_price"), org.get("voucher_minutes"))
     from .timetable import sync_month
     sync_month(repo, principal.org_id, month)
-    schedules = [row for row in repo.list("schedules", principal.org_id, child_id=child_id)
-                 if row["date"].startswith(month)]
+    schedules = repo.list_range("schedules", principal.org_id, "date", *month_bounds(month), child_id=child_id)
     plans = repo.list("treatment_plans", principal.org_id, child_id=child_id)
     assessments = repo.list("assessments", principal.org_id, child_id=child_id)
     consultations = [row for row in repo.list("parent_consultations", principal.org_id, child_id=child_id)

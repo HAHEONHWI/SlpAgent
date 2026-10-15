@@ -153,6 +153,7 @@ def put_config(body: TimetableConfig, p: Principal = Depends(require_admin), rep
 def create_entry(body: EntryIn, p: Principal = Depends(require_write), repo=Depends(get_repo)):
     doc = repo.create("timetable_entries", p.org_id, _validate_entry(repo, p, body, None))
     audit(repo, p, "create", "timetable_entries", doc["id"], body.child_id)
+    touch_timetable(repo, p.org_id)
     return doc
 
 
@@ -202,11 +203,11 @@ def sync_schedules(repo, org_id: str, start: date, end: date) -> dict:
     cfg = _config(repo, org_id)
     am, pm = slots(cfg)
     names = {t.id: t.name for t in cfg.teachers}
-    gone = {c["id"] for c in repo.list("children", org_id) if c.get("archived")}
+    gone = {c["id"] for c in repo.list("children", org_id, archived=True)}
     entries = [e for e in entries_all if e.get("child_id") not in gone]
     from .attendance import holidays
     off = {h["date"] for h in holidays(repo, org_id)}  # 전체·기관 휴무일
-    existing = [s for s in repo.list("schedules", org_id) if start.isoformat() <= s["date"] <= end.isoformat()]
+    existing = repo.list_range("schedules", org_id, "date", start.isoformat(), end.isoformat())
     made = {(s.get("timetable_entry_id"), s["date"]) for s in existing if s.get("timetable_entry_id")}
     created, skipped, unlinked = 0, [], 0
     day = start
@@ -248,16 +249,54 @@ def sync_month(repo, org_id: str, month: str) -> None:
     except (ValueError, TypeError):
         return
     last = (date(y + (m == 12), m % 12 + 1, 1) - timedelta(days=1))
+    # Every screen calls this, and a full sync reads the whole timetable and the month's classes. Remember the
+    # timetable revision each month was last synced at, and skip the work until something that changes the
+    # result (timetable, 휴무일, archiving a child) bumps it (touch_timetable).
+    rev = _timetable_rev(repo, org_id)
+    marker = f"{org_id}-{month[:7]}"
+    try:
+        if repo.get("timetable_sync", org_id, marker).get("rev") == rev:
+            return
+    except NotFound:
+        pass
     sync_schedules(repo, org_id, first, last)
+    try:
+        repo.update("timetable_sync", org_id, marker, {"rev": rev})
+    except NotFound:
+        repo.create("timetable_sync", org_id, {"rev": rev, "month": month[:7]}, doc_id=marker)
+
+
+def _timetable_rev(repo, org_id: str) -> str:
+    from ..services.accounts import PLATFORM
+    try:
+        org = repo.get("organizations", org_id, org_id).get("timetable_rev") or ""
+    except NotFound:
+        org = ""
+    try:
+        site = repo.get("settings", PLATFORM, "holidays").get("rev") or ""  # 전체 휴무일
+    except NotFound:
+        site = ""
+    return f"{org}:{site}"
+
+
+def touch_timetable(repo, org_id: str) -> None:
+    """Something the dated classes are built from changed: every month syncs again on its next view."""
+    import uuid
+    rev = uuid.uuid4().hex
+    try:
+        repo.update("organizations", org_id, org_id, {"timetable_rev": rev})
+    except NotFound:
+        repo.create("organizations", org_id, {"name": "", "timetable_rev": rev}, doc_id=org_id)
 
 
 def prune_upcoming(repo, org_id: str, entry_ids: set[str] | None = None) -> int:
     """After the timetable changes, drop upcoming classes it made that nobody has touched (still scheduled, no
     attendance mark) so they are rebuilt from the new timetable. Past classes and marked ones stay as they are."""
     today = date.today().isoformat()
-    marked = {m["schedule_id"] for m in repo.list("attendance", org_id)}
+    touch_timetable(repo, org_id)
+    marked = {m["schedule_id"] for m in repo.list_range("attendance", org_id, "date", today, "9999-12-31")}
     n = 0
-    for s in repo.list("schedules", org_id):
+    for s in repo.list_range("schedules", org_id, "date", today, "9999-12-31"):
         tid = s.get("timetable_entry_id")
         if tid and (entry_ids is None or tid in entry_ids) and s["date"] >= today \
                 and s.get("status") == "scheduled" and s["id"] not in marked:

@@ -74,3 +74,55 @@ def test_dated_classes_follow_the_timetable_automatically(client, child):
     assert kept == {("2099-03-09", "scheduled"), ("2099-03-16", "cancelled")}
     assert {s["date"] for s in after if s["start"] == "09:50"} == {"2099-03-03", "2099-03-10", "2099-03-17", "2099-03-24", "2099-03-31"}
     assert client.get("/schedules?month=2026-01", headers=H()).json() == []  # before the entry was added
+
+
+def test_a_synced_month_is_not_synced_again_until_something_changes(client, repo, child):
+    from app.routers import timetable
+    calls = []
+    real = timetable.sync_schedules
+    timetable.sync_schedules = lambda *a, **k: calls.append(a[2:]) or real(*a, **k)
+    try:
+        client.put("/timetable/config", headers=ADMIN, json=CFG)
+        _entry(client, child_id=child["id"])
+        client.get("/schedules?month=2099-03", headers=H())
+        client.get("/attendance/day?on=2099-03-09", headers=H())
+        client.get("/attendance/summary?month=2099-03", headers=H())
+        assert len(calls) == 1  # every screen after the first reuses the synced month
+        # each change that alters the classes makes the next view sync again
+        second = _entry(client, child_id=child["id"], day=3).json()  # new cell
+        assert len([s for s in client.get("/schedules?month=2099-03", headers=H()).json() if s["start"] == "09:00"]) == 9
+        client.put("/org/holidays", headers=ADMIN, json={"holidays": [{"date": "2099-03-04"}]})
+        assert "2099-03-04" not in {s["date"] for s in client.get("/schedules?month=2099-03", headers=H()).json()}
+        client.put("/org/holidays", headers=ADMIN, json={"holidays": []})  # the day's class comes back
+        assert "2099-03-04" in {s["date"] for s in client.get("/schedules?month=2099-03", headers=H()).json()}
+        client.put("/platform/holidays", headers=H("-", "site_admin", "root"), json={"holidays": [{"date": "2099-03-11"}]})
+        repo.create("organization_registry", "_platform", {"org_id": "orgA"}, doc_id="orgA")
+        client.put("/platform/holidays", headers=H("-", "site_admin", "root"), json={"holidays": [{"date": "2099-03-11"}]})
+        assert "2099-03-11" not in {s["date"] for s in client.get("/schedules?month=2099-03", headers=H()).json()}
+        client.post(f"/children/{child['id']}/archive", headers=H())
+        client.post(f"/children/{child['id']}/restore", headers=H())
+        assert client.get("/schedules?month=2099-04", headers=H()).json()  # restored child's classes are made again
+        client.get("/schedules?month=2099-03", headers=H())  # first view after the restore syncs March again
+        n = len(calls)
+        client.get("/schedules?month=2099-03", headers=H())
+        client.get("/settlement?month=2099-03", headers=ADMIN)
+        assert len(calls) == n and second  # …and then not again
+    finally:
+        timetable.sync_schedules = real
+
+
+def test_every_range_and_latest_query_has_a_firestore_index():
+    """list_range / list_latest need composite indexes in production; a missing one fails at query time."""
+    import json, pathlib, re
+    idx = json.loads((pathlib.Path(__file__).parents[2] / "firestore.indexes.json").read_text())["indexes"]
+    have = {(i["collectionGroup"], tuple(f["fieldPath"] for f in i["fields"])) for i in idx}
+    src = "\n".join(p.read_text() for p in (pathlib.Path(__file__).parents[1] / "app").rglob("*.py"))
+    needed = set()
+    for m in re.finditer(r'list_(range|latest)\("(\w+)", [^,]+, "(\w+)"[^)]*?((?:, \w+=[^,)]+|, \*\*\w+)*)\)', src):
+        _, col, field, rest = m.groups()
+        eqs = tuple(re.findall(r", (\w+)=", rest))
+        needed.add((col, ("organization_id", *eqs, field)))
+        if "**flt" in rest:
+            needed.add((col, ("organization_id", "child_id", field)))
+    assert needed, "pattern found no queries"
+    assert needed - have == set()

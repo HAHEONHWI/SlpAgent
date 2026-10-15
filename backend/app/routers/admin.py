@@ -10,7 +10,6 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 def audit_logs(limit: int = Query(default=100, ge=1, le=500), child_id: str | None = None,
                p: Principal = Depends(require_admin), repo=Depends(get_repo)):
     filters = {"child_id": child_id} if child_id else {}
-    rows = repo.list("audit_logs", p.org_id, **filters)
-    rows.sort(key=lambda row: row.get("created_at", ""), reverse=True)
+    rows = repo.list_latest("audit_logs", p.org_id, "created_at", limit, **filters)  # never the whole log
     audit(repo, p, "read", "audit_logs", "query", child_id)
-    return rows[:limit]
+    return rows

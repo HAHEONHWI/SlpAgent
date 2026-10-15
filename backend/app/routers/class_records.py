@@ -22,15 +22,17 @@ def class_records(month: str, child_id: str | None = None, therapist: str | None
         raise HTTPException(422, "month must be YYYY-MM")
     from .timetable import sync_month
     sync_month(repo, p.org_id, month)
+    from .attendance import month_bounds
     flt = {"child_id": child_id} if child_id else {}
-    in_month = lambda rows: [r for r in rows if (r.get("date") or "").startswith(month)]
-    schedules = [s for s in in_month(repo.list("schedules", p.org_id, **flt)) if s.get("status") != "cancelled"]
-    marks = {m["schedule_id"]: m for m in in_month(repo.list("attendance", p.org_id, **flt))}
+    in_month = lambda col: repo.list_range(col, p.org_id, "date", *month_bounds(month), **flt)  # only this month is read
+    schedules = [s for s in in_month("schedules") if s.get("status") != "cancelled"]
+    marks = {m["schedule_id"]: m for m in in_month("attendance")}
     absences = repo.list("absences", p.org_id, **flt)
-    sessions = in_month(repo.list("therapy_sessions", p.org_id, **flt))
-    notes = {n["session_id"]: n for n in repo.list("session_notes", p.org_id, **flt) if n.get("status", "approved") == "approved"}
-    recordings = in_month(repo.list("recording_records", p.org_id, **flt))  # 회기·상담 녹음 기록
-    consultations = in_month(repo.list("parent_consultations", p.org_id, **flt))  # 보호자 상담 = the clinic's 수업 기록
+    sessions = in_month("therapy_sessions")
+    notes = {n["session_id"]: n for s in sessions for n in repo.list("session_notes", p.org_id, session_id=s["id"])
+             if n.get("status", "approved") == "approved"}
+    recordings = in_month("recording_records")  # 회기·상담 녹음 기록
+    consultations = in_month("parent_consultations")  # 보호자 상담 = the clinic's 수업 기록
 
     def records_for(cid: str, day: str) -> dict:
         sess = [s for s in sessions if s["child_id"] == cid and s["date"] == day]

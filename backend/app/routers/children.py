@@ -7,6 +7,7 @@ from ..config import get_settings
 from ..deps import audit, child_or_404, child_scope, get_repo
 from ..services.child_purge import purge_child
 from .org import ensure_in_roster
+from .timetable import touch_timetable
 
 router = APIRouter(prefix="/children", tags=["children"])
 
@@ -139,8 +140,10 @@ def archive(child_id: str, p: Principal = Depends(require_write), repo=Depends(g
     for s in repo.list("schedules", p.org_id, child_id=child_id):  # upcoming sessions no longer happen
         if s.get("status") == "scheduled" and s["date"] >= today:
             repo.update("schedules", p.org_id, s["id"], {"status": "cancelled", "cancel_reason": "child archived"})
-    return repo.update("children", p.org_id, child_id,
-                       {"archived": True, "archived_at": datetime.now(timezone.utc).isoformat()})
+    doc = repo.update("children", p.org_id, child_id,
+                      {"archived": True, "archived_at": datetime.now(timezone.utc).isoformat()})
+    touch_timetable(repo, p.org_id)
+    return doc
 
 
 @router.post("/{child_id}/restore")
@@ -149,7 +152,9 @@ def restore(child_id: str, p: Principal = Depends(require_write), repo=Depends(g
     if not child.get("archived"):
         return child
     audit(repo, p, "restore", "children", child_id, child_id)
-    return repo.update("children", p.org_id, child_id, {"archived": False, "archived_at": None})
+    doc = repo.update("children", p.org_id, child_id, {"archived": False, "archived_at": None})
+    touch_timetable(repo, p.org_id)  # the child's timetable classes come back
+    return doc
 
 
 class PurgeIn(BaseModel):
