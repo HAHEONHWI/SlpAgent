@@ -204,10 +204,8 @@ def sync_schedules(repo, org_id: str, start: date, end: date) -> dict:
     names = {t.id: t.name for t in cfg.teachers}
     gone = {c["id"] for c in repo.list("children", org_id) if c.get("archived")}
     entries = [e for e in entries_all if e.get("child_id") not in gone]
-    try:
-        off = {h["date"] for h in repo.get("organizations", org_id, org_id).get("holidays") or []}  # 기관 휴무일
-    except NotFound:
-        off = set()
+    from .attendance import holidays
+    off = {h["date"] for h in holidays(repo, org_id)}  # 전체·기관 휴무일
     existing = [s for s in repo.list("schedules", org_id) if start.isoformat() <= s["date"] <= end.isoformat()]
     made = {(s.get("timetable_entry_id"), s["date"]) for s in existing if s.get("timetable_entry_id")}
     created, skipped, unlinked = 0, [], 0

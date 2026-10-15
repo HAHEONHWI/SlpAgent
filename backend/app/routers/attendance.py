@@ -4,9 +4,10 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime, timedelta
-from ..auth import Principal, current_principal, require_admin, require_write
+from ..auth import Identity, Principal, current_principal, require_admin, require_site_admin, require_write
 from ..deps import audit, child_or_404, child_scope, get_repo, in_scope
 from ..repo.base import NotFound
+from ..services.accounts import PLATFORM
 from ..services.attendance_state import NOT_HELD, effective
 from ..services.billing import attendance_summary, minutes_between
 
@@ -255,11 +256,41 @@ class HolidaysIn(BaseModel):
     holidays: list[Holiday] = Field(default_factory=list, max_length=200)
 
 
-def holidays(repo, org_id: str) -> list[dict]:
+def org_holidays(repo, org_id: str) -> list[dict]:
     try:
         return sorted(repo.get("organizations", org_id, org_id).get("holidays") or [], key=lambda h: h["date"])
     except NotFound:
         return []
+
+
+def site_holidays(repo) -> list[dict]:
+    """전체 휴무일: set by a site admin, closed in every organization."""
+    try:
+        return sorted(repo.get("settings", PLATFORM, "holidays").get("holidays") or [], key=lambda h: h["date"])
+    except NotFound:
+        return []
+
+
+def holidays(repo, org_id: str) -> list[dict]:
+    """Every day this organization is closed: 전체 휴무일 (scope "site") and its own 기관 휴무일 (scope "org")."""
+    out = {h["date"]: {**h, "scope": "org"} for h in org_holidays(repo, org_id)}
+    out.update({h["date"]: {**h, "scope": "site"} for h in site_holidays(repo)})
+    return sorted(out.values(), key=lambda h: h["date"])
+
+
+def _rows(body: HolidaysIn) -> list[dict]:
+    return sorted({h.date.isoformat(): {"date": h.date.isoformat(), "name": h.name.strip() or "휴무"} for h in body.holidays}.values(),
+                  key=lambda h: h["date"])
+
+
+def _drop_classes_on(repo, org_id: str, days: set[str]):
+    """Classes the timetable already put on those days go away (untouched ones only; they come back if the day is removed)."""
+    if not days:
+        return
+    marked = {m["schedule_id"] for m in repo.list("attendance", org_id)}
+    for s in repo.list("schedules", org_id):
+        if s["date"] in days and s.get("timetable_entry_id") and s.get("status") == "scheduled" and s["id"] not in marked:
+            repo.delete("schedules", org_id, s["id"])
 
 
 @router.get("/org/holidays")
@@ -269,18 +300,34 @@ def get_holidays(p: Principal = Depends(current_principal), repo=Depends(get_rep
 
 @router.put("/org/holidays")
 def put_holidays(body: HolidaysIn, p: Principal = Depends(require_admin), repo=Depends(get_repo)):
-    rows = sorted({h.date.isoformat(): {"date": h.date.isoformat(), "name": h.name.strip() or "휴무"} for h in body.holidays}.values(),
-                  key=lambda h: h["date"])
+    """This organization's own 기관 휴무일 (전체 휴무일 are the site admin's)."""
+    rows = _rows(body)
     try:
         repo.get("organizations", p.org_id, p.org_id)
         repo.update("organizations", p.org_id, p.org_id, {"holidays": rows})
     except NotFound:
         repo.create("organizations", p.org_id, {"name": "", "holidays": rows}, doc_id=p.org_id)
-    # classes the timetable already put on those days go away (untouched ones only; they come back if the day is removed)
-    days = {h["date"] for h in rows}
-    marked = {m["schedule_id"] for m in repo.list("attendance", p.org_id)}
-    for s in repo.list("schedules", p.org_id):
-        if s["date"] in days and s.get("timetable_entry_id") and s.get("status") == "scheduled" and s["id"] not in marked:
-            repo.delete("schedules", p.org_id, s["id"])
+    _drop_classes_on(repo, p.org_id, {h["date"] for h in rows})
     audit(repo, p, "update", "organizations", p.org_id)
+    return holidays(repo, p.org_id)
+
+
+@router.get("/platform/holidays")
+def get_site_holidays(admin: Identity = Depends(require_site_admin), repo=Depends(get_repo)):
+    return site_holidays(repo)
+
+
+@router.put("/platform/holidays")
+def put_site_holidays(body: HolidaysIn, admin: Identity = Depends(require_site_admin), repo=Depends(get_repo)):
+    rows = _rows(body)
+    try:
+        repo.get("settings", PLATFORM, "holidays")
+        repo.update("settings", PLATFORM, "holidays", {"holidays": rows})
+    except NotFound:
+        repo.create("settings", PLATFORM, {"holidays": rows}, doc_id="holidays")
+    days = {h["date"] for h in rows}
+    for org in repo.list("organization_registry", PLATFORM):
+        _drop_classes_on(repo, org.get("org_id") or org["id"], days)
+    repo.create("audit_logs", PLATFORM, {"actor": admin.uid, "role": "site_admin", "action": "update",
+                                         "collection": "settings", "doc_id": "holidays"})
     return rows

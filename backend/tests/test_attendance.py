@@ -1,4 +1,5 @@
 from app.services.billing import attendance_summary
+from app.services.accounts import PLATFORM
 from tests.conftest import H
 
 
@@ -57,7 +58,7 @@ def test_attendance_permissions_and_isolation(client, child):
     assert client.put(f"/schedules/{a['id']}/attendance", headers=H(), json={"status": "sick"}).status_code in (409, 422)
 
 
-def test_makeup_move_long_absence_and_holidays_reach_the_voucher(client, child):
+def test_makeup_move_long_absence_and_holidays_reach_the_voucher(client, repo, child):
     cid = child["id"]
     a = _schedule(client, child, "2020-10-06")
     b = _schedule(client, child, "2020-10-13")
@@ -88,7 +89,19 @@ def test_makeup_move_long_absence_and_holidays_reach_the_voucher(client, child):
     client.post("/timetable/entries", headers=H(), json={"day": 1, "slot": "09:00", "teacher_id": "t", "child_id": cid})
     assert client.put("/org/holidays", headers=H(), json={"holidays": []}).status_code == 403
     client.get("/schedules?month=2099-03", headers=H())  # Mondays in March 2099 are made
-    assert client.put("/org/holidays", headers=H(role="admin"), json={"holidays": [{"date": "2099-03-02", "name": "대체휴일"}]}).json() == [{"date": "2099-03-02", "name": "대체휴일"}]
+    assert client.put("/org/holidays", headers=H(role="admin"), json={"holidays": [{"date": "2099-03-02", "name": "대체휴일"}]}).json() == [{"date": "2099-03-02", "name": "대체휴일", "scope": "org"}]
     days = [x["date"] for x in client.get("/schedules?month=2099-03", headers=H()).json()]
     assert "2099-03-02" not in days and "2099-03-09" in days
+    # 전체 휴무일: the site admin closes a day in every organization; orgs see it but cannot change it
+    repo.create("organization_registry", PLATFORM, {"org_id": "orgA", "name": "A"}, doc_id="orgA")
+    site = H("-", "site_admin", "root")
+    assert client.put("/platform/holidays", headers=H(role="admin"), json={"holidays": []}).status_code == 403
+    assert client.put("/platform/holidays", headers=site, json={"holidays": [{"date": "2099-03-09", "name": "설날"}]}).status_code == 200
+    assert client.get("/platform/holidays", headers=site).json() == [{"date": "2099-03-09", "name": "설날"}]
+    assert client.get("/org/holidays", headers=H()).json() == [{"date": "2099-03-02", "name": "대체휴일", "scope": "org"},
+                                                               {"date": "2099-03-09", "name": "설날", "scope": "site"}]
+    days = [x["date"] for x in client.get("/schedules?month=2099-03", headers=H()).json()]
+    assert "2099-03-09" not in days and "2099-03-16" in days
+    client.put("/org/holidays", headers=H(role="admin"), json={"holidays": []})  # an org cannot drop it
+    assert [h["date"] for h in client.get("/org/holidays", headers=H()).json()] == ["2099-03-09"]
     assert a and d

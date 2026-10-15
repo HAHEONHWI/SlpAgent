@@ -9,6 +9,7 @@ import { errText } from "../lib/hooks";
 import { Badge, Button, Card, Empty, Input, Label, Notice, PageTitle, Select, Table, Td } from "../components/ui";
 import SttAdmin from "../components/SttAdmin";
 import SiteNotices from "../components/SiteNotices";
+import SiteHolidays from "../components/SiteHolidays";
 
 const ApiDocs = lazy(() => import("../components/ApiDocs")); // Swagger UI is large; load it only on its tab
 
@@ -24,7 +25,7 @@ const COL: Record<string, string> = { children: "아동", users: "사용자", as
   vocabulary_records: "어휘", treatment_plans: "치료계획", parent_consultations: "상담", schedules: "일정", generated_documents: "문서", chat_conversations: "대화",
   chat_messages: "메시지", ai_analyses: "AI 초안", clinical_analyses: "승인 분석", therapy_activities: "활동", knowledge_documents: "자료", audit_logs: "감사로그" };
 const dt = (s?: string | null) => (s ? s.slice(0, 16).replace("T", " ") : "-");
-const TABS = [["signups", "가입 신청"], ["orgs", "기관"], ["accounts", "계정"], ["stt", "받아쓰기"], ["notices", "공지"], ["api", "API 문서"]] as const;
+const TABS = [["signups", "가입 신청"], ["orgs", "기관"], ["accounts", "계정"], ["stt", "받아쓰기"], ["notices", "공지"], ["holidays", "휴무일"], ["api", "API 문서"]] as const;
 type Tab = (typeof TABS)[number][0];
 
 /** Site (platform) admin: signups, organizations (rename/licenses/merge) and accounts. Aggregate counts only. */
@@ -56,6 +57,7 @@ export default function Platform() {
         {tab === "accounts" && <Accounts orgs={orgs.data ?? []} />}
         {tab === "stt" && <SttAdmin />}
         {tab === "notices" && <SiteNotices />}
+        {tab === "holidays" && <SiteHolidays />}
         {tab === "api" && <Suspense fallback={<p className="text-sm text-slate-400">불러오는 중…</p>}><ApiDocs /></Suspense>}
       </main>
       <Footer className="py-6" />

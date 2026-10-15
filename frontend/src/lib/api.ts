@@ -22,7 +22,8 @@ export async function api<T = any>(path: string, init: RequestInit & { json?: un
     if (res.status === 504) msg = "응답 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.";
     throw new ApiError(res.status, msg);
   }
-  return res.json();
+  const text = await res.text();  // 204 (e.g. DELETE) has no body
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 /** POST that returns a file; saves it with the server's file name (Content-Disposition, UTF-8 aware). */

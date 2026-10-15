@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Trash2, Undo2 } from "lucide-react";
+import { Download, Trash2, Undo2 } from "lucide-react";
 import { api } from "../lib/api";
 import { useChild } from "../lib/child";
 import { errText } from "../lib/hooks";
@@ -15,7 +15,8 @@ type Row = { schedule_id: string; child_id: string; start: string; end: string; 
 type Summary = { child_id: string; scheduled: number; present: number; late: number; absent: number; excused: number; makeup: number;
   auto: number; upcoming: number; moved: number; rate_pct: number | null };
 type Absence = { id: string; child_id: string; start: string; end: string; reason: string | null };
-type Holiday = { date: string; name: string };
+type Holiday = { date: string; name: string; scope?: "site" | "org" };
+type Rec = { date: string; start: string; end: string; status: string | null; auto: boolean; reason: string | null };
 
 const ST: Record<string, [string, "green" | "amber" | "red" | "slate" | "indigo"]> = {
   present: ["출석", "green"], late: ["지각", "amber"], absent: ["결석", "red"], excused: ["사유결석", "slate"], makeup: ["보강", "indigo"],
@@ -34,6 +35,26 @@ export default function Attendance() {
   const who = (id: string) => { const c = children.find((x) => x.id === id); return c ? `${c.display_name} · ${c.alias}` : "–"; };
   const roll = useQuery({ queryKey: ["attendance", "day", day], queryFn: () => api<Row[]>(`/attendance/day?on=${day}`) });
   const summary = useQuery({ queryKey: ["attendance", "summary", month], queryFn: () => api<Summary[]>(`/attendance/summary?month=${month}`) });
+  const [exporting, setExporting] = useState(false), [exportError, setExportError] = useState("");
+  const exportXlsx = async () => {
+    setExporting(true); setExportError("");
+    try {
+      const rows = summary.data ?? [];
+      const recs = await Promise.all(rows.map((s) => api<{ records: Rec[] }>(`/children/${s.child_id}/attendance?month=${month}`)));
+      const { default: writeXlsxFile } = await import("write-excel-file/browser");
+      const b = (value: string) => ({ value, fontWeight: "bold" as const });
+      const totals = [["아동", "수업", "출석", "(자동)", "지각", "결석", "사유결석", "옮김", "남은 수업", "출석률(%)"].map(b),
+        ...rows.map((s) => [who(s.child_id), s.scheduled, s.present + s.makeup, s.auto, s.late, s.absent, s.excused, s.moved, s.upcoming, s.rate_pct])];
+      const classes = [["날짜", "시간", "아동", "출결", "사유"].map(b),
+        ...rows.flatMap((s, i) => recs[i].records.map((r) => [r.date, `${r.start}–${r.end}`, who(s.child_id),
+          r.status ? `${ST[r.status]?.[0] ?? r.status}${r.auto && r.status === "present" ? " (자동)" : ""}` : "예정", r.reason]))
+          .sort((x, y) => `${x[0]}${x[1]}`.localeCompare(`${y[0]}${y[1]}`))];
+      await writeXlsxFile([
+        { data: totals, sheet: "월별 현황", columns: [{ width: 22 }, ...Array(9).fill({ width: 9 })], stickyRowsCount: 1 },
+        { data: classes, sheet: "수업별 출결", columns: [{ width: 12 }, { width: 13 }, { width: 22 }, { width: 12 }, { width: 30 }], stickyRowsCount: 1 },
+      ]).toFile(`출결_${month}.xlsx`);
+    } catch (e) { setExportError(errText(e)); } finally { setExporting(false); }
+  };
 
   return (
     <>
@@ -48,7 +69,9 @@ export default function Attendance() {
         <Absences who={who} onDone={refresh} />
         <Holidays isAdmin={isAdmin} onDone={refresh} />
 
-        <Card title="월별 출결 현황" action={<div className="w-44 shrink-0"><Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} aria-label="월" /></div>}>
+        <Card title="월별 출결 현황" action={<div className="flex shrink-0 items-center gap-2">
+          <Button variant="outline" disabled={!summary.data?.length || exporting} onClick={exportXlsx}><Download size={14} />{exporting ? "만드는 중…" : "엑셀로 내보내기"}</Button>
+          <div className="w-44"><Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} aria-label="월" /></div></div>}>
           {!summary.data?.length ? <Empty>이 달의 수업이 없습니다.</Empty> : (
             <Table head={["아동", "수업", "출석", "(자동)", "지각", "결석", "사유결석", "옮김", "남은 수업", "출석률"]}>
               {summary.data.map((s) => (
@@ -58,6 +81,7 @@ export default function Attendance() {
                   <Td>{s.rate_pct == null ? "–" : <Badge tone={s.rate_pct >= 90 ? "green" : s.rate_pct >= 75 ? "amber" : "red"}>{s.rate_pct}%</Badge>}</Td>
                 </tr>))}
             </Table>)}
+          {exportError && <div className="mt-2"><Notice tone="red">{exportError}</Notice></div>}
           <p className="mt-2 text-xs text-slate-500">출석에는 따로 체크하지 않아 자동으로 출석 처리된 수업(자동)이 포함돼요. 출석률 = (출석+지각) ÷ (출석+지각+결석). 사유결석·장기결강은 빼고 계산합니다.</p>
         </Card>
       </div>
@@ -154,8 +178,9 @@ function Holidays({ isAdmin, onDone }: { isAdmin: boolean; onDone: () => void })
     mutationFn: (rows: Holiday[]) => api<Holiday[]>("/org/holidays", { method: "PUT", json: { holidays: rows } }),
     onSuccess: () => { setF({ date: "", name: "" }); qc.invalidateQueries({ queryKey: ["attendance", "holidays"] }); qc.invalidateQueries({ queryKey: ["timetable"] }); onDone(); },
   });
-  const rows = list.data ?? [];
-  const upcoming = rows.filter((h) => h.date >= today().slice(0, 7));
+  const all = list.data ?? [];
+  const rows = all.filter((h) => h.scope !== "site").map(({ date, name }) => ({ date, name }));  // only the organization's own ones are saved here
+  const upcoming = all.filter((h) => h.date >= today().slice(0, 7));
   return (
     <Card title="기관 휴무일">
       {isAdmin && (
@@ -169,10 +194,10 @@ function Holidays({ isAdmin, onDone }: { isAdmin: boolean; onDone: () => void })
           {upcoming.map((h) => (
             <span key={h.date} className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 py-1 pl-3 pr-1.5 text-sm">
               <b className="tabular-nums">{md(h.date)}</b>{h.name}
-              {isAdmin && <button className="rounded-full p-0.5 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label={`${h.name} 삭제`} onClick={() => save.mutate(rows.filter((x) => x.date !== h.date))}><Trash2 size={13} /></button>}
+              {h.scope === "site" ? <Badge tone="indigo">전체</Badge> : isAdmin && <button className="rounded-full p-0.5 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label={`${h.name} 삭제`} onClick={() => save.mutate(rows.filter((x) => x.date !== h.date))}><Trash2 size={13} /></button>}
             </span>))}
         </div>)}
-      <p className="mt-2 text-xs text-slate-500">휴무일에는 주간 시간표 수업이 생기지 않아요. {isAdmin ? "" : "휴무일은 기관 관리자가 정해요."}</p>
+      <p className="mt-2 text-xs text-slate-500">휴무일에는 주간 시간표 수업이 생기지 않아요. ‘전체’ 휴무일은 사이트 관리자가 모든 기관에 정한 날이에요. {isAdmin ? "" : "기관 휴무일은 기관 관리자가 정해요."}</p>
       {save.error && <div className="mt-2"><Notice tone="red">{errText(save.error)}</Notice></div>}
     </Card>
   );
