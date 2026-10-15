@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { useChild } from "../lib/child";
 import { errText } from "../lib/hooks";
 import Timetable from "../components/Timetable";
+import OrgHolidays from "../components/OrgHolidays";
 import ChildPicker from "../components/ChildPicker";
 import { EXTRA } from "../lib/extraClass";
 import { Badge, Button, Card, Empty, Input, Label, Notice, PageTitle, Select, Table, Td } from "../components/ui";
@@ -12,11 +13,12 @@ export default function Schedule() {
   const [view, setView] = useState<"week" | "dated">("week");
   return (
     <>
-      <div className="print:hidden"><PageTitle title="일정 관리" sub="주간 시간표대로 날짜별 일정이 자동으로 채워져요. 출결과 바우처 서류는 날짜별 일정을 씁니다." /></div>
+      <div className="print:hidden"><PageTitle title="일정 관리" sub="주간 시간표대로 날짜별 일정이 자동으로 채워져요. 출결과 바우처 서류는 날짜별 일정을 씁니다. 기관 휴무일도 여기서 정해요." /></div>
       <div className="mb-4 inline-grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1 text-sm print:hidden">
         {(["week", "dated"] as const).map((v) => <button key={v} onClick={() => setView(v)} className={`rounded-md px-4 py-1.5 ${view === v ? "bg-white font-semibold shadow-sm" : "text-slate-600"}`}>{v === "week" ? "주간 시간표" : "날짜별 일정"}</button>)}
       </div>
       {view === "week" ? <Timetable /> : <DatedSchedule />}
+      <div className="print:hidden"><OrgHolidays /></div>
     </>
   );
 }

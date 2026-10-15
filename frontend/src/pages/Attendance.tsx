@@ -4,7 +4,6 @@ import { Download, Trash2, Undo2 } from "lucide-react";
 import { api } from "../lib/api";
 import { useChild } from "../lib/child";
 import { errText } from "../lib/hooks";
-import { useMe } from "../lib/me";
 import { EXTRA, type Extra } from "../lib/extraClass";
 import ChildPicker from "../components/ChildPicker";
 import { Badge, Button, Card, Empty, Input, Label, Notice, PageTitle, Table, Td } from "../components/ui";
@@ -16,7 +15,6 @@ type Row = { schedule_id: string; child_id: string; start: string; end: string; 
 type Summary = { child_id: string; scheduled: number; present: number; late: number; absent: number; excused: number; makeup: number;
   auto: number; upcoming: number; moved: number; rate_pct: number | null };
 type Absence = { id: string; child_id: string; start: string; end: string; reason: string | null };
-type Holiday = { date: string; name: string; scope?: "site" | "org" };
 type Rec = { date: string; start: string; end: string; status: string | null; auto: boolean; reason: string | null; extra?: Extra | null };
 
 const ST: Record<string, [string, "green" | "amber" | "red" | "slate" | "indigo"]> = {
@@ -28,7 +26,6 @@ const md = (iso: string) => `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10
 
 export default function Attendance() {
   const { children } = useChild();
-  const isAdmin = useMe().data?.role === "admin";
   const qc = useQueryClient();
   const [day, setDay] = useState(today());
   const [month, setMonth] = useState(today().slice(0, 7));
@@ -59,7 +56,7 @@ export default function Attendance() {
 
   return (
     <>
-      <PageTitle title="출결 관리" sub="수업은 따로 체크하지 않으면 출석으로 처리돼요. 결석·사유결석·지각, 보강(수업 옮기기), 장기결강, 기관 휴무일만 여기서 기록하세요. 바우처 서류에 자동으로 반영됩니다." />
+      <PageTitle title="출결 관리" sub="수업은 따로 체크하지 않으면 출석으로 처리돼요. 결석·사유결석·지각, 보강(수업 옮기기), 장기결강만 여기서 기록하세요. 기관 휴무일은 일정 관리에서 정해요. 바우처 서류에 자동으로 반영됩니다." />
       <div className="space-y-4">
         <Card title="일별 출결" action={<div className="w-44 shrink-0"><Input type="date" value={day} onChange={(e) => setDay(e.target.value)} aria-label="날짜" /></div>}>
           {roll.isLoading ? <p className="text-sm text-slate-400">불러오는 중…</p> : !roll.data?.length ? <Empty>이 날짜에 수업이 없습니다.</Empty> : (
@@ -69,7 +66,6 @@ export default function Attendance() {
         </Card>
 
         <Absences who={who} onDone={refresh} />
-        <Holidays isAdmin={isAdmin} onDone={refresh} />
 
         <Card title="월별 출결 현황" action={<div className="flex shrink-0 items-center gap-2">
           <Button variant="outline" disabled={!summary.data?.length || exporting} onClick={exportXlsx}><Download size={14} />{exporting ? "만드는 중…" : "엑셀로 내보내기"}</Button>
@@ -197,39 +193,6 @@ function Absences({ who, onDone }: { who: (id: string) => string; onDone: () => 
             </li>))}
         </ul>)}
       {(add.error || remove.error) && <div className="mt-2"><Notice tone="red">{errText(add.error || remove.error)}</Notice></div>}
-    </Card>
-  );
-}
-
-function Holidays({ isAdmin, onDone }: { isAdmin: boolean; onDone: () => void }) {
-  const qc = useQueryClient();
-  const list = useQuery({ queryKey: ["attendance", "holidays"], queryFn: () => api<Holiday[]>("/org/holidays") });
-  const [f, setF] = useState({ date: "", name: "" });
-  const save = useMutation({
-    mutationFn: (rows: Holiday[]) => api<Holiday[]>("/org/holidays", { method: "PUT", json: { holidays: rows } }),
-    onSuccess: () => { setF({ date: "", name: "" }); qc.invalidateQueries({ queryKey: ["attendance", "holidays"] }); qc.invalidateQueries({ queryKey: ["timetable"] }); onDone(); },
-  });
-  const all = list.data ?? [];
-  const rows = all.filter((h) => h.scope !== "site").map(({ date, name }) => ({ date, name }));  // only the organization's own ones are saved here
-  const upcoming = all.filter((h) => h.date >= today().slice(0, 7));
-  return (
-    <Card title="기관 휴무일">
-      {isAdmin && (
-        <form className="mb-3 flex flex-wrap items-end gap-2" onSubmit={(e) => { e.preventDefault(); save.mutate([...rows, { date: f.date, name: f.name.trim() || "휴무" }]); }}>
-          <Label label="날짜"><Input type="date" required value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></Label>
-          <Label label="이름"><Input maxLength={40} placeholder="예: 한글날, 원내 행사" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Label>
-          <Button disabled={save.isPending}>추가</Button>
-        </form>)}
-      {!upcoming.length ? <Empty>등록된 휴무일이 없습니다.</Empty> : (
-        <div className="flex flex-wrap gap-2">
-          {upcoming.map((h) => (
-            <span key={h.date} className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 py-1 pl-3 pr-1.5 text-sm">
-              <b className="tabular-nums">{md(h.date)}</b>{h.name}
-              {h.scope === "site" ? <Badge tone="indigo">전체</Badge> : isAdmin && <button className="rounded-full p-0.5 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label={`${h.name} 삭제`} onClick={() => save.mutate(rows.filter((x) => x.date !== h.date))}><Trash2 size={13} /></button>}
-            </span>))}
-        </div>)}
-      <p className="mt-2 text-xs text-slate-500">휴무일에는 주간 시간표 수업이 생기지 않아요. ‘전체’ 휴무일은 사이트 관리자가 모든 기관에 정한 날이에요. {isAdmin ? "" : "기관 휴무일은 기관 관리자가 정해요."}</p>
-      {save.error && <div className="mt-2"><Notice tone="red">{errText(save.error)}</Notice></div>}
     </Card>
   );
 }
