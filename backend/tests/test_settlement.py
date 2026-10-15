@@ -1,5 +1,5 @@
 from app.services.billing import is_night, settlement, voucher_price
-from tests.conftest import H
+from tests.conftest import THERAPIST, H
 
 DAY = {"date": "2020-10-06", "start": "10:00"}    # 화요일 오전: 일반
 NIGHT = {"date": "2020-10-06", "start": "19:00"}  # 19:00 이후: 야간
@@ -75,3 +75,19 @@ def test_only_admins_and_accountants_see_settlement(client, repo, child):
     assert client.get("/settlement?month=2020-10", headers=H()).status_code == 403
     client.put("/org/accountants", headers=admin, json={"accountants": []})
     assert client.get("/settlement?month=2020-10", headers=acc).status_code == 403
+
+
+def test_voucher_grade_can_be_set_when_registering(client):
+    r = client.post("/children", headers=H(), json={"alias": "V-01", "display_name": "등급아동", "birth_date": "2022-01-01", "voucher_grade": "라"})
+    assert r.status_code == 201 and r.json()["voucher_grade"] == "라"
+    assert client.post("/children", headers=H(), json={"alias": "V-02", "display_name": "x", "birth_date": "2022-01-01", "voucher_grade": "바"}).status_code == 422
+    assert client.post("/children", headers=H(), json={"alias": "V-03", "display_name": "y", "birth_date": "2022-01-01"}).json()["voucher_grade"] is None
+
+
+def test_disability_registration_yes_no(client):
+    c = client.post("/children", headers=H(), json={"alias": "D-01", "display_name": "장애", "birth_date": "2022-01-01", "therapist": THERAPIST, "disability_registered": True}).json()
+    assert c["disability_registered"] is True
+    assert client.put(f"/children/{c['id']}/disability", headers=H(), json={"disability_registered": False}).json()["disability_registered"] is False
+    assert client.put(f"/children/{c['id']}/disability", headers=H(role="assistant", uid="x"), json={"disability_registered": True}).status_code == 403
+    assert client.put(f"/children/{c['id']}/disability", headers=H(), json={"disability_registered": "maybe"}).status_code == 422
+    assert client.post("/children", headers=H(), json={"alias": "D-02", "display_name": "x", "birth_date": "2022-01-01"}).json()["disability_registered"] is None

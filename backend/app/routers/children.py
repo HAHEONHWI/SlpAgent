@@ -19,6 +19,8 @@ class ChildIn(BaseModel):
     guardian_contact: str | None = None
     notes: str | None = None
     therapist: str | None = Field(default=None, max_length=20, description="담당(지정제공인력)")
+    voucher_grade: Literal["가", "나", "다", "라", "마"] | None = Field(default=None, description="발달재활 바우처 등급. None = 바우처 없음(유료)")
+    disability_registered: bool | None = Field(default=None, description="장애등록 여부 (Y/N). None = 미입력")
 
 
 def age_months(birth: str, on: date | None = None) -> int:
@@ -113,6 +115,18 @@ def set_voucher_grade(child_id: str, body: VoucherGradeIn, p: Principal = Depend
     child_or_404(repo, p, child_id)
     audit(repo, p, "update", "children", child_id, child_id)
     return repo.update("children", p.org_id, child_id, {"voucher_grade": body.voucher_grade})
+
+
+class DisabilityIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    disability_registered: bool | None = None
+
+
+@router.put("/{child_id}/disability")
+def set_disability(child_id: str, body: DisabilityIn, p: Principal = Depends(require_write), repo=Depends(get_repo)):
+    child_or_404(repo, p, child_id)
+    audit(repo, p, "update", "children", child_id, child_id)
+    return repo.update("children", p.org_id, child_id, {"disability_registered": body.disability_registered})
 
 
 @router.post("/{child_id}/archive")

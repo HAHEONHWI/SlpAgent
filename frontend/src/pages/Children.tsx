@@ -8,7 +8,11 @@ import { errText } from "../lib/hooks";
 import { useMe } from "../lib/me";
 import { Button, Card, Empty, Input, Label, Notice, PageTitle, Select, Table, Td } from "../components/ui";
 
-const GRADES = ["다", "가", "나", "라", "마"];
+// 장애등록 여부: Y / N / 미입력(null)
+const yn = (v: string) => (v === "Y" ? true : v === "N" ? false : null);
+const ynOf = (v?: boolean | null) => (v === true ? "Y" : v === false ? "N" : "");
+// 발달재활 바우처 등급과 월 본인부담금 (정산 기준과 같음)
+const GRADES: [string, string][] = [["다", "기초 · 면제"], ["가", "차상위 · 2만"], ["나", "65% 이하 · 4만"], ["라", "120% 이하 · 6만"], ["마", "180% 이하 · 8만"]];
 
 export default function Children() {
   const { children, setChildId, childId } = useChild();
@@ -25,16 +29,22 @@ export default function Children() {
     mutationFn: ({ id, voucher_grade }: { id: string; voucher_grade: string | null }) => api(`/children/${id}/voucher`, { method: "PUT", json: { voucher_grade } }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["children"] }); qc.invalidateQueries({ queryKey: ["settlement"] }); },
   });
+  const disability = useMutation({
+    mutationFn: ({ id, value }: { id: string; value: boolean | null }) => api(`/children/${id}/disability`, { method: "PUT", json: { disability_registered: value } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["children"] }),
+  });
   const choices = (current?: string | null) => (current && !therapists.includes(current) ? [...therapists, current] : therapists);
   const [del, setDel] = useState<{ id: string; display_name: string; alias: string } | null>(null);
   const trash = useMutation({
     mutationFn: (id: string) => api(`/children/${id}/archive`, { method: "POST" }),
     onSuccess: (_, id) => { if (id === childId) setChildId(null); setDel(null); qc.invalidateQueries({ queryKey: ["children"] }); qc.invalidateQueries({ queryKey: ["timetable"] }); qc.invalidateQueries({ queryKey: ["schedules"] }); },
   });
-  const [f, setF] = useState({ alias: "", display_name: "", birth_date: "", sex: "", therapist: "" });
+  const empty = { alias: "", display_name: "", birth_date: "", sex: "", therapist: "", voucher_grade: "", disability: "" };
+  const [f, setF] = useState(empty);
   const create = useMutation({
-    mutationFn: () => api("/children", { method: "POST", json: { ...f, sex: f.sex || null, therapist: f.therapist.trim() || null } }),
-    onSuccess: () => { setF({ alias: "", display_name: "", birth_date: "", sex: "", therapist: "" }); qc.invalidateQueries({ queryKey: ["children"] }); qc.invalidateQueries({ queryKey: ["org"] }); },
+    mutationFn: () => api("/children", { method: "POST", json: { alias: f.alias, display_name: f.display_name, birth_date: f.birth_date, sex: f.sex || null, therapist: f.therapist.trim() || null,
+      voucher_grade: f.voucher_grade || null, disability_registered: yn(f.disability) } }),
+    onSuccess: () => { setF(empty); qc.invalidateQueries({ queryKey: ["settlement"] }); qc.invalidateQueries({ queryKey: ["children"] }); qc.invalidateQueries({ queryKey: ["org"] }); },
   });
   return (
     <>
@@ -48,6 +58,10 @@ export default function Children() {
             <Label label="성별"><Select value={f.sex} onChange={(e) => setF({ ...f, sex: e.target.value })}><option value="">미입력</option><option>남</option><option>여</option></Select></Label>
             <Label label="담당 치료사"><Select value={f.therapist} onChange={(e) => setF({ ...f, therapist: e.target.value })}>
               <option value="">선택 안 함</option>{therapists.map((t) => <option key={t}>{t}</option>)}</Select></Label>
+            <Label label="장애등록 여부"><Select value={f.disability} onChange={(e) => setF({ ...f, disability: e.target.value })}>
+              <option value="">미입력</option><option value="Y">Y (등록)</option><option value="N">N (미등록)</option></Select></Label>
+            <Label label="바우처 등급"><Select value={f.voucher_grade} onChange={(e) => setF({ ...f, voucher_grade: e.target.value })}>
+              <option value="">바우처 없음 (유료)</option>{GRADES.map(([g, d]) => <option key={g} value={g}>{g}형 ({d})</option>)}</Select></Label>
             {create.error && <Notice tone="red">{errText(create.error)}</Notice>}
             <Button disabled={create.isPending}>등록</Button>
           </form>
@@ -55,18 +69,24 @@ export default function Children() {
         <Card title={`아동 목록 (${children.length})`} className="lg:col-span-2"
           action={canWrite && <Button variant="outline" onClick={() => setImporting(!importing)}><FileSpreadsheet size={14} />엑셀로 등록</Button>}>
           {children.length === 0 ? <Empty>{role === "therapist" ? "담당 아동이 없어요. 치료사는 담당 아동만 보여요. 기관 관리자가 기관 설정 › 치료사 목록에서 이 계정을 연결하고 아동의 담당 치료사로 지정하면 나타나요." : "등록된 아동이 없습니다."}</Empty> : (
-            <Table head={["가명", "이름", "생년월일", "성별", "나이", "담당", "바우처", ""]}>
+            <Table head={["가명", "이름", "생년월일", "성별", "나이", "장애등록", "바우처 등급", "담당", ""]}>
               {sorted.map((c) => (
-                <tr key={c.id}><Td>{c.alias}</Td><Td>{c.display_name}</Td><Td>{c.birth_date}</Td><Td>{(c as any).sex ?? "-"}</Td><Td>{ageLabel((c as any).age_months) || "-"}</Td><Td>{canWrite
+                <tr key={c.id}><Td>{c.alias}</Td><Td>{c.display_name}</Td><Td>{c.birth_date}</Td><Td>{(c as any).sex ?? "-"}</Td><Td>{ageLabel((c as any).age_months) || "-"}</Td>
+                  <Td>{canWrite
+                    ? <Select aria-label={`${c.display_name} 장애등록 여부`} className="w-16 min-w-16 py-1" value={ynOf((c as any).disability_registered)} disabled={disability.isPending}
+                        onChange={(e) => disability.mutate({ id: c.id, value: yn(e.target.value) })}>
+                        <option value="">-</option><option value="Y">Y</option><option value="N">N</option></Select>
+                    : ynOf((c as any).disability_registered) || "-"}</Td>
+                  <Td>{canWrite
+                    ? <Select aria-label={`${c.display_name} 바우처 등급`} className="w-24 min-w-24 py-1" value={(c as any).voucher_grade ?? ""} disabled={grade.isPending}
+                        onChange={(e) => grade.mutate({ id: c.id, voucher_grade: e.target.value || null })}>
+                        <option value="">없음</option>{GRADES.map(([g]) => <option key={g} value={g}>{g}형</option>)}</Select>
+                    : (c as any).voucher_grade ? `${(c as any).voucher_grade}형` : "-"}</Td>
+                  <Td>{canWrite
                   ? <Select aria-label={`${c.display_name} 담당 치료사`} className="w-28 min-w-28 py-1" value={(c as any).therapist ?? ""} disabled={assign.isPending}
                       onChange={(e) => assign.mutate({ id: c.id, therapist: e.target.value || null })}>
                       <option value="">-</option>{choices((c as any).therapist).map((t) => <option key={t}>{t}</option>)}</Select>
                   : (c as any).therapist ?? "-"}</Td>
-                  <Td>{canWrite
-                    ? <Select aria-label={`${c.display_name} 바우처 유형`} className="w-24 min-w-24 py-1" value={(c as any).voucher_grade ?? ""} disabled={grade.isPending}
-                        onChange={(e) => grade.mutate({ id: c.id, voucher_grade: e.target.value || null })}>
-                        <option value="">없음</option>{GRADES.map((g) => <option key={g} value={g}>{g}형</option>)}</Select>
-                    : (c as any).voucher_grade ? `${(c as any).voucher_grade}형` : "-"}</Td>
                   <Td><div className="flex gap-1">
                     <Button variant={c.id === childId ? "primary" : "outline"} onClick={() => setChildId(c.id)}>{c.id === childId ? "선택됨" : "선택"}</Button>
                     {canWrite && <Button variant="ghost" className="text-red-600" aria-label={`${c.display_name} 삭제`} onClick={() => { trash.reset(); setDel(c); }}><Trash2 size={14} /></Button>}
