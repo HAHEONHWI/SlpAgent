@@ -17,6 +17,19 @@ def _plus(hhmm: str, minutes: int) -> str:
 router = APIRouter(tags=["attendance"])
 
 
+def _scope(repo, p: Principal) -> set[str] | None:
+    """출결 관리: everyone but admins sees only their own 담당 아동."""
+    return child_scope(repo, p, all_but_admin=True)
+
+
+def _mine(repo, p: Principal, s: dict) -> dict:
+    """Another therapist's class: as if it did not exist."""
+    scope = _scope(repo, p)
+    if scope is not None and s.get("child_id") not in scope:
+        raise HTTPException(404, "schedule not found")
+    return s
+
+
 class AttendanceIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     status: Literal["present", "late", "absent", "excused", "makeup"]
@@ -30,6 +43,7 @@ def mark(sid: str, body: AttendanceIn, p: Principal = Depends(require_write), re
         s = repo.get("schedules", p.org_id, sid)
     except NotFound:
         raise HTTPException(404, "schedule not found")
+    _mine(repo, p, s)
     if s.get("status") == "cancelled":
         raise HTTPException(409, "cancelled schedules have no attendance")
     data = {**body.model_dump(), "schedule_id": sid, "child_id": s["child_id"], "date": s["date"],
@@ -66,7 +80,7 @@ def day(on: date, p: Principal = Depends(current_principal), repo=Depends(get_re
     d = on.isoformat()
     marks = {m["schedule_id"]: m for m in repo.list("attendance", p.org_id, date=d)}
     absences = _absences(repo, p.org_id)
-    rows = in_scope([s for s in repo.list("schedules", p.org_id, date=d) if s.get("status") != "cancelled"], child_scope(repo, p))
+    rows = in_scope([s for s in repo.list("schedules", p.org_id, date=d) if s.get("status") != "cancelled"], _scope(repo, p))
     out = []
     for s in sorted(rows, key=lambda s: s["start"]):
         moved_to = None
@@ -91,7 +105,7 @@ def org_summary(month: str = Query(pattern=r"^\d{4}-\d{2}$"), p: Principal = Dep
     marks = {m["schedule_id"]: m for m in repo.list("attendance", p.org_id) if m.get("date", "").startswith(month)}
     absences = _absences(repo, p.org_id)
     by_child: dict[str, list[dict]] = {}
-    for s in in_scope(repo.list("schedules", p.org_id), child_scope(repo, p)):
+    for s in in_scope(repo.list("schedules", p.org_id), _scope(repo, p)):
         if s.get("date", "").startswith(month) and s.get("status") != "cancelled":
             by_child.setdefault(s["child_id"], []).append(effective(s, marks.get(s["id"]), absences))
     return [{"child_id": c, "scheduled": sum(1 for st in states if st["status"] != "moved"), **_summary(states)}
@@ -101,6 +115,8 @@ def org_summary(month: str = Query(pattern=r"^\d{4}-\d{2}$"), p: Principal = Dep
 @router.get("/children/{child_id}/attendance")
 def child_attendance(child_id: str, month: str | None = None, p: Principal = Depends(current_principal), repo=Depends(get_repo)):
     child_or_404(repo, p, child_id)
+    if (scope := _scope(repo, p)) is not None and child_id not in scope:
+        raise HTTPException(404, "child not found")
     if month:
         from .timetable import sync_month
         sync_month(repo, p.org_id, month)
@@ -122,6 +138,7 @@ def clear_mark(sid: str, p: Principal = Depends(require_write), repo=Depends(get
         m = repo.get("attendance", p.org_id, sid)
     except NotFound:
         return
+    _mine(repo, p, m)
     repo.delete("attendance", p.org_id, sid)
     audit(repo, p, "clear_attendance", "attendance", sid, m.get("child_id"))
 
@@ -137,7 +154,7 @@ class MoveIn(BaseModel):
 
 def _schedule(repo, p: Principal, sid: str) -> dict:
     try:
-        return repo.get("schedules", p.org_id, sid)
+        return _mine(repo, p, repo.get("schedules", p.org_id, sid))
     except NotFound:
         raise HTTPException(404, "schedule not found")
 
@@ -196,7 +213,7 @@ class AbsenceIn(BaseModel):
 
 @router.get("/absences")
 def list_absences(child_id: str | None = None, p: Principal = Depends(current_principal), repo=Depends(get_repo)):
-    return in_scope(_absences(repo, p.org_id, child_id), child_scope(repo, p))
+    return in_scope(_absences(repo, p.org_id, child_id), _scope(repo, p))
 
 
 @router.post("/absences", status_code=201)
@@ -220,6 +237,7 @@ def delete_absence(aid: str, p: Principal = Depends(require_write), repo=Depends
         a = repo.get("absences", p.org_id, aid)
     except NotFound:
         raise HTTPException(404, "absence not found")
+    child_or_404(repo, p, a["child_id"])
     repo.delete("absences", p.org_id, aid)
     audit(repo, p, "delete", "absences", aid, a["child_id"])
 

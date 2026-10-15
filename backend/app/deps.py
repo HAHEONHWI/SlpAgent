@@ -24,9 +24,10 @@ def my_therapist_name(repo: Repo, p: Principal) -> str:
         return ""
 
 
-def child_scope(repo: Repo, p: Principal) -> set[str] | None:
-    """Children a non-admin therapist may see: their own 담당 아동. None = no restriction (admins, assistants)."""
-    if p.role != "therapist":
+def child_scope(repo: Repo, p: Principal, *, all_but_admin: bool = False) -> set[str] | None:
+    """Children a non-admin therapist may see: their own 담당 아동. None = no restriction (admins, and assistants
+    unless all_but_admin: then every non-admin account sees only the children it is 담당 of)."""
+    if p.role == "admin" or (p.role != "therapist" and not all_but_admin):
         return None
     name = my_therapist_name(repo, p)
     return {c["id"] for c in repo.list("children", p.org_id) if name and (c.get("therapist") or "").strip() == name}
