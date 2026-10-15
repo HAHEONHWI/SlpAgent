@@ -48,3 +48,13 @@ def child_or_404(repo: Repo, p: Principal, child_id: str) -> dict:
     if scope is not None and child_id not in scope:  # another therapist's child: as if it did not exist
         raise HTTPException(404, "child not found")
     return child
+
+
+def can_settle(repo: Repo, p: Principal) -> bool:
+    """정산: organization admins and the accounts an admin made 회계 담당."""
+    if p.role == "admin":
+        return True
+    try:
+        return p.uid in (repo.get("organizations", p.org_id, p.org_id).get("accountants") or [])
+    except NotFound:
+        return False

@@ -5,6 +5,7 @@ import { errText } from "../lib/hooks";
 import { Button, Card, Empty, Input, Label, Notice, PageTitle, Table, Td } from "../components/ui";
 import { useAuth } from "../lib/auth";
 import TherapistRoster from "../components/TherapistRoster";
+import Accountants from "../components/Accountants";
 
 export default function Settings() {
   const qc = useQueryClient();
@@ -42,6 +43,7 @@ export default function Settings() {
         </form>
       </Card>
       <TherapistRoster />
+      <Accountants />
       <AuditLog />
     </>
   );

@@ -161,3 +161,32 @@ def therapists(p: Principal = Depends(current_principal), repo=Depends(get_repo)
     ensure_in_roster(repo, p.org_id, [c.get("therapist") for c in repo.list("children", p.org_id) if not c.get("archived")])
     names = [t["name"] for t in roster(repo, p.org_id)]
     return names or _name_suggestions(repo, p.org_id)
+
+
+# ---- 회계 담당: who besides admins may see 정산 ----------------------------------------------------------
+
+class AccountantsIn(BaseModel):
+    accountants: list[str] = Field(default_factory=list, max_length=20, description="member uids")
+
+
+@router.get("/accountants")
+def get_accountants(p: Principal = Depends(current_principal), repo=Depends(get_repo)):
+    if p.role != "admin":
+        raise HTTPException(403, "admin only")
+    return {"accountants": _org_doc(repo, p.org_id).get("accountants") or []}
+
+
+@router.put("/accountants")
+def put_accountants(body: AccountantsIn, p: Principal = Depends(current_principal), repo=Depends(get_repo)):
+    if p.role != "admin":
+        raise HTTPException(403, "admin only")
+    members = {u["uid"] for u in repo.list("users", p.org_id)}
+    uids = list(dict.fromkeys(body.accountants))
+    if any(u not in members for u in uids):
+        raise HTTPException(422, "이 기관의 계정이 아닙니다")
+    if _org_doc(repo, p.org_id):
+        repo.update("organizations", p.org_id, p.org_id, {"accountants": uids})
+    else:
+        repo.create("organizations", p.org_id, {"name": "", "accountants": uids}, doc_id=p.org_id)
+    audit(repo, p, "set_accountants", "organizations", p.org_id)
+    return {"accountants": uids}

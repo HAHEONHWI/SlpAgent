@@ -11,7 +11,7 @@ import Footer from "./Footer";
 import ChildPicker from "./ChildPicker";
 import { Button, Select } from "./ui";
 
-const MENU: { to: string; label: string; icon: typeof LayoutDashboard; soon?: boolean }[] = [
+const MENU: { to: string; label: string; icon: typeof LayoutDashboard; soon?: boolean; settle?: boolean }[] = [
   { to: "/", label: "대시보드", icon: LayoutDashboard },
   { to: "/ai", label: "AI 대화", icon: Sparkles },
   { to: "/children", label: "아동 관리", icon: Users },
@@ -28,7 +28,7 @@ const MENU: { to: string; label: string; icon: typeof LayoutDashboard; soon?: bo
   { to: "/knowledge", label: "AI 지식자료실", icon: Library },
   { to: "/schedule", label: "일정 관리", icon: CalendarDays },
   { to: "/attendance", label: "출결 관리", icon: UserCheck },
-  { to: "/settlement", label: "정산", icon: Wallet },
+  { to: "/settlement", label: "정산", icon: Wallet, settle: true },  // 기관 관리자와 회계 담당만
   { to: "/notices", label: "공지사항", icon: Megaphone },
   { to: "/settings", label: "기관 설정", icon: Settings },
 ];
@@ -44,12 +44,13 @@ export default function Layout() {
   const seen = seenAt(me?.uid); // re-read on every render (route changes), so visiting 공지사항 clears the badge
   const unread = pathname === "/notices" ? 0 : notices.filter((n) => n.created_at > seen).length;
   const { childId, child, children, setChildId } = useChild();
+  const menu = MENU.filter((m) => !m.settle || me?.can_settle);
   return (
     <div className="flex h-dvh overflow-hidden bg-slate-50 print:block print:h-auto print:overflow-visible print:bg-white">
       <aside className="sticky top-0 hidden print:!hidden h-full w-60 shrink-0 flex-col border-r border-slate-200 bg-white md:flex">
         <Link to="/" title="메인으로" className="block px-4 py-3"><BrandLogo className="mx-auto w-40" /></Link>
         <nav aria-label="주요 메뉴" className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-4">
-          {MENU.map(({ to, label, icon: I, soon }) => (
+          {menu.map(({ to, label, icon: I, soon }) => (
             <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) =>
               `flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors ${isActive ? "bg-indigo-50 font-semibold text-indigo-800" : "text-slate-600 hover:bg-slate-100"}`}>
               <I size={16} /> <span className="flex-1">{label}</span>{soon && <span className="text-[10px] text-slate-400">준비중</span>}
@@ -84,7 +85,7 @@ export default function Layout() {
             <nav id="mobile-menu" aria-label="주요 메뉴" className="max-h-full overflow-y-auto border-b border-slate-200 bg-white p-3 shadow-lg" onClick={(e) => e.stopPropagation()}>
               <Link to="/" className="mb-2 flex items-center gap-2 px-1"><BrandLogo className="w-16" />{me?.org_name && <span className="truncate text-sm font-medium text-slate-700">{me.org_name}</span>}</Link>
               <div className="grid grid-cols-3 gap-1.5">
-                {MENU.map(({ to, label, icon: I }) => (
+                {menu.map(({ to, label, icon: I }) => (
                   <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) =>
                     `flex flex-col items-center gap-1 rounded-lg px-1 py-2.5 text-center text-xs leading-tight transition-colors ${isActive ? "bg-indigo-50 font-semibold text-indigo-800" : "text-slate-600 hover:bg-slate-100"}`}>
                     <I size={18} /><span className="[word-break:keep-all]">{label}</span>

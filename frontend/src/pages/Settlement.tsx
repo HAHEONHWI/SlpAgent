@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { Download } from "lucide-react";
 import { api } from "../lib/api";
 import { useChild } from "../lib/child";
+import { useMe } from "../lib/me";
 import { errText } from "../lib/hooks";
 import { Badge, Button, Card, Empty, Input, Notice, PageTitle, Table, Td } from "../components/ui";
 
@@ -19,6 +20,12 @@ const sum = (rows: Row[], k: keyof Row) => rows.reduce((t, r) => t + (Number(r[k
 const HEAD = ["아동", "유형", "일반", "야간", "서류상 금액", "정부지원금", "본인부담금", "청구", "환불", "유료", "유료 금액", "보호자 청구"];
 
 export default function Settlement() {
+  const me = useMe().data;
+  if (me && !me.can_settle) return <><PageTitle title="정산" /><Notice>정산은 기관 관리자와 기관 관리자가 정한 회계 담당만 볼 수 있어요.</Notice></>;
+  return <SettlementView />;
+}
+
+function SettlementView() {
   const { children } = useChild();
   const [month, setMonth] = useState(today().slice(0, 7));
   const q = useQuery({ queryKey: ["settlement", month], queryFn: () => api<Data>(`/settlement?month=${month}`) });

@@ -1,34 +1,42 @@
 """정산: per child and month, 발달재활 바우처 (유형별 본인부담금, 덜 쓴 만큼 환불) and 유료 classes.
 Class counts come from 출결 (what actually happened); all amounts from services.billing."""
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from ..auth import Principal, current_principal
-from ..deps import child_scope, get_repo
+from ..deps import can_settle, get_repo
 from ..repo.base import NotFound
 from ..services import billing
 from ..services.attendance_state import effective, held
 from .voucher_doc import _service_minutes, month_data
 
+
+
+def settler(p: Principal = Depends(current_principal), repo=Depends(get_repo)) -> Principal:
+    """Only admins and 회계 담당 see 정산 (for every child of the organization)."""
+    if not can_settle(repo, p):
+        raise HTTPException(403, "정산은 기관 관리자와 회계 담당만 볼 수 있습니다")
+    return p
+
+
 router = APIRouter(tags=["settlement"])
 
 
 @router.get("/settlement/grades")
-def grades():
+def grades(p: Principal = Depends(settler)):
     return {"total": billing.VOUCHER_TOTAL, "day_price": billing.DAY_PRICE, "night_price": billing.NIGHT_PRICE,
             "grades": [{"grade": g, "copay": c, "support": billing.VOUCHER_TOTAL - c} for g, c in billing.VOUCHER_COPAY.items()]}
 
 
 @router.get("/settlement")
-def month_settlement(month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"), p: Principal = Depends(current_principal), repo=Depends(get_repo)):
+def month_settlement(month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"), p: Principal = Depends(settler), repo=Depends(get_repo)):
     try:
         paid_price = repo.get("organizations", p.org_id, p.org_id).get("paid_price")
     except NotFound:
         paid_price = None
-    scope = child_scope(repo, p, all_but_admin=True)
     minutes = _service_minutes(repo, p.org_id)
     absences = repo.list("absences", p.org_id)
     rows = []
     for c in repo.list("children", p.org_id):
-        if c.get("archived") or (scope is not None and c["id"] not in scope):
+        if c.get("archived"):
             continue
         visits, _ = month_data(repo, p, c["id"], month, minutes)  # held classes except 추가(유료); later days count as planned
         marks = {m["schedule_id"]: m for m in repo.list("attendance", p.org_id, child_id=c["id"])}

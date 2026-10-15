@@ -229,6 +229,7 @@ def me(identity: Identity = Depends(current_identity), repo=Depends(get_repo)):
     out = identity.model_dump()
     out["name"] = None
     out["therapist_name"] = None  # the 치료사 목록 entry linked to this account
+    out["can_settle"] = False
     if identity.org_id:
         try:
             linked = repo.get("organizations", identity.org_id, identity.org_id).get("therapists") or []
@@ -240,9 +241,12 @@ def me(identity: Identity = Depends(current_identity), repo=Depends(get_repo)):
         except NotFound:
             pass
         try:
-            out["org_name"] = repo.get("organizations", identity.org_id, identity.org_id).get("name")
+            org_doc = repo.get("organizations", identity.org_id, identity.org_id)
+            out["org_name"] = org_doc.get("name")
         except NotFound:
-            out["org_name"] = None
+            org_doc, out["org_name"] = {}, None
+        # 정산 is for admins and the 회계 담당 an admin picked
+        out["can_settle"] = identity.role == "admin" or identity.uid in (org_doc.get("accountants") or [])
     req = _request(repo, identity.uid)
     out["name"] = out["name"] or (req or {}).get("therapist_name")
     out["signup"] = {k: req.get(k) for k in ("status", "org_name", "therapist_name", "reason", "created_at", "org_id")} if req else None
