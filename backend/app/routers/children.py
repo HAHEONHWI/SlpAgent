@@ -1,3 +1,4 @@
+from typing import Literal
 from datetime import date, datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -100,6 +101,18 @@ def set_therapist(child_id: str, body: TherapistIn, p: Principal = Depends(requi
     audit(repo, p, "update", "children", child_id, child_id)
     ensure_in_roster(repo, p.org_id, [body.therapist])
     return repo.update("children", p.org_id, child_id, {"therapist": (body.therapist or "").strip() or None})
+
+
+class VoucherGradeIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    voucher_grade: Literal["가", "나", "다", "라", "마"] | None = Field(default=None, description="발달재활 바우처 유형. None = 바우처 없음(유료)")
+
+
+@router.put("/{child_id}/voucher")
+def set_voucher_grade(child_id: str, body: VoucherGradeIn, p: Principal = Depends(require_write), repo=Depends(get_repo)):
+    child_or_404(repo, p, child_id)
+    audit(repo, p, "update", "children", child_id, child_id)
+    return repo.update("children", p.org_id, child_id, {"voucher_grade": body.voucher_grade})
 
 
 @router.post("/{child_id}/archive")

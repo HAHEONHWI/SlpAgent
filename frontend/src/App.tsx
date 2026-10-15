@@ -21,6 +21,7 @@ const Voucher = lazy(() => import("./pages/Voucher"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Schedule = lazy(() => import("./pages/Schedule"));
 const Attendance = lazy(() => import("./pages/Attendance"));
+const Settlement = lazy(() => import("./pages/Settlement"));
 const Knowledge = lazy(() => import("./pages/Knowledge"));
 const Analysis = lazy(() => import("./pages/Analysis"));
 const Activities = lazy(() => import("./pages/Activities"));
@@ -63,6 +64,7 @@ export default function App() {
         <Route path="knowledge" element={page(<Knowledge />)} />
         <Route path="schedule" element={page(<Schedule />)} />
         <Route path="attendance" element={page(<Attendance />)} />
+        <Route path="settlement" element={page(<Settlement />)} />
         <Route path="settings" element={page(<Settings />)} />
         <Route path="account" element={page(<Account />)} />
         <Route path="notices" element={page(<Notices />)} />

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
-import { Bell, History, Megaphone, Menu, X, BookOpen, Brain, CalendarDays, ClipboardList, FileText, LayoutDashboard, LineChart, ListChecks, NotebookPen, Settings, Sparkles, Stethoscope, Users, Library, LogOut, UserCheck, UserCog } from "lucide-react";
+import { Bell, History, Megaphone, Menu, X, BookOpen, Brain, CalendarDays, ClipboardList, FileText, LayoutDashboard, LineChart, ListChecks, NotebookPen, Settings, Sparkles, Stethoscope, Users, Library, LogOut, UserCheck, UserCog, Wallet } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { useChild } from "../lib/child";
 import { useMe } from "../lib/me";
@@ -28,6 +28,7 @@ const MENU: { to: string; label: string; icon: typeof LayoutDashboard; soon?: bo
   { to: "/knowledge", label: "AI 지식자료실", icon: Library },
   { to: "/schedule", label: "일정 관리", icon: CalendarDays },
   { to: "/attendance", label: "출결 관리", icon: UserCheck },
+  { to: "/settlement", label: "정산", icon: Wallet },
   { to: "/notices", label: "공지사항", icon: Megaphone },
   { to: "/settings", label: "기관 설정", icon: Settings },
 ];

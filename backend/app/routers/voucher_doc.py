@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ..auth import Principal, current_principal, require_write
 from ..deps import audit, child_or_404, get_repo
 from ..repo.base import NotFound
-from ..services import voucher_hwpx as vh
+from ..services import billing, voucher_hwpx as vh
 from ..services.attendance_state import effective, held, other_notes
 
 router = APIRouter(tags=["voucher"])
@@ -106,11 +106,13 @@ def month_data(repo, p: Principal, child_id: str, month: str, minutes: int) -> t
 def voucher_visits(child_id: str, month: str, p: Principal = Depends(current_principal), repo=Depends(get_repo)):
     if not re.match(MONTH, month):
         raise HTTPException(422, "month must be YYYY-MM")
-    child_or_404(repo, p, child_id)
+    child = child_or_404(repo, p, child_id)
     minutes = _service_minutes(repo, p.org_id)
     org = _org(repo, p.org_id)
     visits, other = month_data(repo, p, child_id, month, minutes)
-    return {"month": month, "minutes": minutes, "unit_price": org.get("unit_price"), "visits": visits,
+    grade = child.get("voucher_grade")
+    return {"month": month, "minutes": minutes, "unit_price": billing.voucher_price(visits) if grade else org.get("unit_price"),
+            "copay": billing.VOUCHER_COPAY.get(grade or ""), "visits": visits,
             "other": [{"date": d, "text": t} for d, t in other]}
 
 
@@ -155,7 +157,8 @@ def voucher_hwpx(child_id: str, body: VoucherHwpxIn, p: Principal = Depends(requ
     child = child_or_404(repo, p, child_id)
     org = _org(repo, p.org_id)
     minutes = _service_minutes(repo, p.org_id)
-    price = body.unit_price if body.unit_price is not None else org.get("unit_price")
+    grade = child.get("voucher_grade")
+    copay = body.copay if body.copay is not None else billing.VOUCHER_COPAY.get(grade or "")
     birth = date.fromisoformat(child["birth_date"]) if child.get("birth_date") else None
     files: list[tuple[str, bytes]] = []
     for m in body.months:
@@ -168,8 +171,10 @@ def voucher_hwpx(child_id: str, body: VoucherHwpxIn, p: Principal = Depends(requ
                   for v in rows]
         if any((v.day.year, v.day.month) != (year, mon) for v in visits):
             raise HTTPException(422, f"{m.month}에 다른 달 날짜가 섞여 있습니다")
+        # 서류상 단가: entered, else 52,000 (일반) / 65,000 (야간) for a 바우처 child, else the organization's price
+        price = body.unit_price if body.unit_price is not None else billing.voucher_price(rows) if grade else org.get("unit_price")
         data = vh.VoucherInput(org_name=org.get("name", ""), child_name=child["display_name"], birth_date=birth, year=year,
-                               month=mon, visits=visits, written_on=m.written_on, unit_price=price, copay=body.copay,
+                               month=mon, visits=visits, written_on=m.written_on, unit_price=price, copay=copay,
                                phone=body.phone, other=other)
         try:
             content = vh.render(data)

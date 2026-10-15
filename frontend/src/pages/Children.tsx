@@ -8,6 +8,8 @@ import { errText } from "../lib/hooks";
 import { useMe } from "../lib/me";
 import { Button, Card, Empty, Input, Label, Notice, PageTitle, Select, Table, Td } from "../components/ui";
 
+const GRADES = ["다", "가", "나", "라", "마"];
+
 export default function Children() {
   const { children, setChildId, childId } = useChild();
   const qc = useQueryClient();
@@ -18,6 +20,10 @@ export default function Children() {
   const assign = useMutation({
     mutationFn: ({ id, therapist }: { id: string; therapist: string | null }) => api(`/children/${id}/therapist`, { method: "PUT", json: { therapist } }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["children"] }); qc.invalidateQueries({ queryKey: ["org"] }); },
+  });
+  const grade = useMutation({
+    mutationFn: ({ id, voucher_grade }: { id: string; voucher_grade: string | null }) => api(`/children/${id}/voucher`, { method: "PUT", json: { voucher_grade } }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["children"] }); qc.invalidateQueries({ queryKey: ["settlement"] }); },
   });
   const choices = (current?: string | null) => (current && !therapists.includes(current) ? [...therapists, current] : therapists);
   const [del, setDel] = useState<{ id: string; display_name: string; alias: string } | null>(null);
@@ -49,13 +55,18 @@ export default function Children() {
         <Card title={`아동 목록 (${children.length})`} className="lg:col-span-2"
           action={canWrite && <Button variant="outline" onClick={() => setImporting(!importing)}><FileSpreadsheet size={14} />엑셀로 등록</Button>}>
           {children.length === 0 ? <Empty>{role === "therapist" ? "담당 아동이 없어요. 치료사는 담당 아동만 보여요. 기관 관리자가 기관 설정 › 치료사 목록에서 이 계정을 연결하고 아동의 담당 치료사로 지정하면 나타나요." : "등록된 아동이 없습니다."}</Empty> : (
-            <Table head={["가명", "이름", "생년월일", "성별", "나이", "담당", ""]}>
+            <Table head={["가명", "이름", "생년월일", "성별", "나이", "담당", "바우처", ""]}>
               {sorted.map((c) => (
                 <tr key={c.id}><Td>{c.alias}</Td><Td>{c.display_name}</Td><Td>{c.birth_date}</Td><Td>{(c as any).sex ?? "-"}</Td><Td>{ageLabel((c as any).age_months) || "-"}</Td><Td>{canWrite
-                  ? <Select aria-label={`${c.display_name} 담당 치료사`} className="w-28 py-1" value={(c as any).therapist ?? ""} disabled={assign.isPending}
+                  ? <Select aria-label={`${c.display_name} 담당 치료사`} className="w-28 min-w-28 py-1" value={(c as any).therapist ?? ""} disabled={assign.isPending}
                       onChange={(e) => assign.mutate({ id: c.id, therapist: e.target.value || null })}>
                       <option value="">-</option>{choices((c as any).therapist).map((t) => <option key={t}>{t}</option>)}</Select>
                   : (c as any).therapist ?? "-"}</Td>
+                  <Td>{canWrite
+                    ? <Select aria-label={`${c.display_name} 바우처 유형`} className="w-24 min-w-24 py-1" value={(c as any).voucher_grade ?? ""} disabled={grade.isPending}
+                        onChange={(e) => grade.mutate({ id: c.id, voucher_grade: e.target.value || null })}>
+                        <option value="">없음</option>{GRADES.map((g) => <option key={g} value={g}>{g}형</option>)}</Select>
+                    : (c as any).voucher_grade ? `${(c as any).voucher_grade}형` : "-"}</Td>
                   <Td><div className="flex gap-1">
                     <Button variant={c.id === childId ? "primary" : "outline"} onClick={() => setChildId(c.id)}>{c.id === childId ? "선택됨" : "선택"}</Button>
                     {canWrite && <Button variant="ghost" className="text-red-600" aria-label={`${c.display_name} 삭제`} onClick={() => { trash.reset(); setDel(c); }}><Trash2 size={14} /></Button>}
