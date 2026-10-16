@@ -22,18 +22,24 @@ def settler(p: Principal = Depends(current_principal), repo=Depends(get_repo)) -
 router = APIRouter(tags=["settlement"])
 
 
+def _org(repo, org_id: str) -> dict:
+    try:
+        return repo.get("organizations", org_id, org_id)
+    except NotFound:
+        return {}
+
+
 @router.get("/settlement/grades")
-def grades(p: Principal = Depends(settler)):
-    return {"total": billing.VOUCHER_TOTAL, "day_price": billing.DAY_PRICE, "night_price": billing.NIGHT_PRICE,
+def grades(p: Principal = Depends(settler), repo=Depends(get_repo)):
+    day, night = billing.voucher_prices(_org(repo, p.org_id))
+    return {"total": billing.VOUCHER_TOTAL, "day_price": day, "night_price": night,
             "grades": [{"grade": g, "copay": c, "support": billing.VOUCHER_TOTAL - c} for g, c in billing.VOUCHER_COPAY.items()]}
 
 
 @router.get("/settlement")
 def month_settlement(month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"), p: Principal = Depends(settler), repo=Depends(get_repo)):
-    try:
-        paid_price = repo.get("organizations", p.org_id, p.org_id).get("paid_price")
-    except NotFound:
-        paid_price = None
+    org = _org(repo, p.org_id)
+    paid_price, (day_price, night_price) = org.get("paid_price"), billing.voucher_prices(org)
     # one read of the month for the whole organization, then split per child (not one pass per child)
     sync_month(repo, p.org_id, month)
     first, last = month_bounds(month)
@@ -52,12 +58,12 @@ def month_settlement(month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"), p: 
             continue
         data = by_child.get(c["id"], {"schedules": [], "sessions": []})
         visits = held_visits(data["schedules"], marks, absences, data["sessions"], month)  # 추가(유료) excluded
-        paid = sum(1 for s in data["schedules"] if s.get("extra") == "paid"
-                   and held(effective(s, marks.get(s["id"]), absences, today="9999-12-31")))
+        paid = [s for s in data["schedules"] if s.get("extra") == "paid"
+                and held(effective(s, marks.get(s["id"]), absences, today="9999-12-31"))]
         grade = c.get("voucher_grade")
         if not grade and not visits and not paid:
             continue
         # a child without a 바우처 유형 pays for every class at the 유료 price
-        voucher, paid = (visits, paid) if grade else ([], paid + len(visits))
-        rows.append({"child_id": c["id"], **billing.settlement(grade, voucher, paid, paid_price)})
-    return {"month": month, "paid_price": paid_price, "rows": rows}
+        voucher, paid = (visits, paid) if grade else ([], paid + visits)
+        rows.append({"child_id": c["id"], **billing.settlement(grade, voucher, paid, paid_price, day_price, night_price, org.get("paid_night_price"))})
+    return {"month": month, "paid_price": paid_price, "paid_night_price": org.get("paid_night_price"), "rows": rows}

@@ -72,8 +72,8 @@ function SettlementView() {
           {q.error && <Notice tone="red">{errText(q.error)}</Notice>}
           {exportError && <div className="mt-2"><Notice tone="red">{exportError}</Notice></div>}
           {rows.some((r) => r.over_budget) && <div className="mt-2"><Notice tone="red">⚠ 표시된 아동은 서류상 금액이 월 26만원을 넘어요. 넘는 수업은 바우처로 결제되지 않으니 유료로 바꾸거나 확인해 주세요.</Notice></div>}
-          {rows.some((r) => r.paid_sessions && r.paid_amount == null) && <div className="mt-2"><Notice>유료 수업 단가가 없어 유료 금액을 계산하지 못했어요. <Link to="/settings" className="underline">기관 설정</Link>에서 유료 수업 회당 금액을 넣어 주세요.</Notice></div>}
-          <p className="mt-2 text-xs text-slate-500">야간은 19:00 이후 시작하거나 토요일인 수업(시간표의 회색 칸)이에요. 본인부담금은 일반 수업 1회에 1/5, 야간 수업 1회에 1/4씩 쓰고, 덜 쓴 만큼 환불해요. 바우처 유형이 없는 아동은 모든 수업이 유료로 계산돼요.</p>
+          {rows.some((r) => r.paid_sessions && r.paid_amount == null) && <div className="mt-2"><Notice>유료 수업 단가가 없어 유료 금액을 계산하지 못했어요. <Link to="/settings" className="underline">기관 설정</Link>에서 일반(유료) 단가를 넣어 주세요.</Notice></div>}
+          <p className="mt-2 text-xs text-slate-500">야간은 19:00 이후 시작하거나 토요일인 수업(시간표의 회색 칸)이에요. 본인부담금은 쓴 바우처 금액만큼(서류상 금액 ÷ 26만원) 받고 덜 쓴 만큼 환불해요. 바우처 유형이 없는 아동은 모든 수업이 유료로 계산되고, 유료 야간 수업은 일반(유료) 야간 단가를 써요.</p>
         </Card>
 
         {g && (
@@ -81,7 +81,7 @@ function SettlementView() {
             <Table head={["유형", "바우처 지원금", "본인부담금", "합계"]}>
               {g.grades.map((x) => <tr key={x.grade}><Td>{x.grade}형</Td><Td>{won(x.support)}</Td><Td>{x.copay ? won(x.copay) : "면제"}</Td><Td>{won(g.total)}</Td></tr>)}
             </Table>
-            <p className="mt-2 text-xs text-slate-500">서류상 회당 단가: 일반 {won(g.day_price)}원(월 5회), 야간 {won(g.night_price)}원(월 4회). 보건복지부 발달재활서비스 안내(2026-04-02 수정) 기준이에요.</p>
+            <p className="mt-2 text-xs text-slate-500">바우처 회당 단가: 일반 {won(g.day_price)}원, 야간 {won(g.night_price)}원 (<Link to="/settings" className="underline">기관 설정</Link>에서 바꿀 수 있어요. 기본 52,000원·65,000원 = 26만원을 월 5회·4회로 나눈 값). 유형별 금액은 보건복지부 발달재활서비스 안내(2026-04-02 수정) 기준이에요.</p>
           </Card>)}
       </div>
     </>

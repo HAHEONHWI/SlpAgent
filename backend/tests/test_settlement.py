@@ -1,4 +1,4 @@
-from app.services.billing import is_night, settlement, voucher_price
+from app.services.billing import is_night, settlement, voucher_price, voucher_prices
 from tests.conftest import THERAPIST, H
 
 DAY = {"date": "2020-10-06", "start": "10:00"}    # 화요일 오전: 일반
@@ -10,6 +10,19 @@ def test_night_is_seven_pm_or_saturday():
     assert not is_night(DAY["date"], DAY["start"]) and is_night(NIGHT["date"], NIGHT["start"]) and is_night(SAT["date"], SAT["start"])
     assert not is_night("2020-10-06", "18:50")
     assert voucher_price([DAY] * 5) == 52_000 and voucher_price([SAT] * 4) == 65_000
+
+
+def test_voucher_prices_come_from_org_settings():
+    assert voucher_prices({}) == (52_000, 65_000)
+    assert voucher_prices({"unit_price": 50_000, "night_price": 70_000}) == (50_000, 70_000)
+    assert voucher_price([SAT] * 3, 50_000, 70_000) == 70_000
+    # 본인부담금 follows what was spent: 마형 8만, 야간 2회 × 70,000 = 14만 / 26만
+    s = settlement("마", [SAT] * 2, 0, None, 50_000, 70_000)
+    assert (s["voucher_amount"], s["copay_charged"]) == (140_000, 43_076)
+    # 일반(유료) 야간 수업은 따로 정한 야간 금액, 정하지 않았으면 일반 금액
+    s = settlement(None, [], [DAY, NIGHT, SAT], 50_000, paid_night_price=60_000)
+    assert (s["paid_sessions"], s["paid_night_sessions"], s["paid_amount"]) == (3, 2, 170_000)
+    assert settlement(None, [], [DAY, NIGHT], 50_000)["paid_amount"] == 100_000
 
 
 def test_copay_is_refunded_for_classes_not_used():

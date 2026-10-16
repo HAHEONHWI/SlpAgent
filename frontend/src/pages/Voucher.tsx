@@ -20,7 +20,7 @@ function Inner({ childId }: { childId: string }) {
         <div className="mb-3 grid grid-cols-3 gap-2">
           <Label label="월"><Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} /></Label>
           <Label label="바우처 한도(분, 기본=기관 설정)"><Input type="number" placeholder={org.data?.voucher_minutes?.toString() ?? ""} value={vm} onChange={(e) => setVm(e.target.value)} /></Label>
-          <Label label="회기 단가(원, 기본=기관 설정)"><Input type="number" placeholder={org.data?.unit_price?.toString() ?? ""} value={price} onChange={(e) => setPrice(e.target.value)} /></Label>
+          <Label label="바우처 단가(원, 기본=기관 설정)"><Input type="number" placeholder={org.data?.unit_price?.toString() ?? ""} value={price} onChange={(e) => setPrice(e.target.value)} /></Label>
         </div>
         {d && <>{row("완료 회기 수", d.session_count)}{row("총 제공시간(분)", d.total_minutes)}{row("바우처 사용(분)", d.voucher_minutes)}{row("추가구매(분)", d.additional_minutes)}{row("총 이용금액(원)", d.total_amount?.toLocaleString())}
           {d.amount_note && <p className="mt-2 text-xs text-amber-700">{d.amount_note}</p>}</>}

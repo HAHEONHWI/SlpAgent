@@ -122,7 +122,7 @@ def voucher_visits(child_id: str, month: str, p: Principal = Depends(current_pri
     org = _org(repo, p.org_id)
     visits, other = month_data(repo, p, child_id, month, minutes)
     grade = child.get("voucher_grade")
-    return {"month": month, "minutes": minutes, "unit_price": billing.voucher_price(visits) if grade else org.get("unit_price"),
+    return {"month": month, "minutes": minutes, "unit_price": billing.voucher_price(visits, *billing.voucher_prices(org)),
             "copay": billing.VOUCHER_COPAY.get(grade or ""), "visits": visits,
             "other": [{"date": d, "text": t} for d, t in other]}
 
@@ -183,7 +183,7 @@ def voucher_hwpx(child_id: str, body: VoucherHwpxIn, p: Principal = Depends(requ
         if any((v.day.year, v.day.month) != (year, mon) for v in visits):
             raise HTTPException(422, f"{m.month}에 다른 달 날짜가 섞여 있습니다")
         # 서류상 단가: entered, else 52,000 (일반) / 65,000 (야간) for a 바우처 child, else the organization's price
-        price = body.unit_price if body.unit_price is not None else billing.voucher_price(rows) if grade else org.get("unit_price")
+        price = body.unit_price if body.unit_price is not None else billing.voucher_price(rows, *billing.voucher_prices(org))
         data = vh.VoucherInput(org_name=org.get("name", ""), child_name=child["display_name"], birth_date=birth, year=year,
                                month=mon, visits=visits, written_on=m.written_on, unit_price=price, copay=copay,
                                phone=body.phone, other=other)

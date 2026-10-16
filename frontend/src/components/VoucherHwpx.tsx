@@ -61,7 +61,7 @@ export default function VoucherHwpx({ childId, month }: { childId: string; month
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         <Label label="시작 월"><Input type="month" value={from} onChange={(e) => { setFrom(e.target.value); if (e.target.value > to) setTo(e.target.value); }} /></Label>
         <Label label="끝 월 (최대 12개월)"><Input type="month" value={to} min={from} max={addMonths(from, 11)} onChange={(e) => setTo(e.target.value)} /></Label>
-        <Label label="회기 단가(원)"><Input type="number" min={0} placeholder={data?.unit_price ? data.unit_price.toLocaleString() : "양식 값"} value={opt.unit_price} onChange={(e) => setOpt({ ...opt, unit_price: e.target.value })} /></Label>
+        <Label label="바우처 단가(원)"><Input type="number" min={0} placeholder={data?.unit_price ? data.unit_price.toLocaleString() : "양식 값"} value={opt.unit_price} onChange={(e) => setOpt({ ...opt, unit_price: e.target.value })} /></Label>
         <Label label="본인부담금(원)"><Input type="number" min={0} placeholder={data?.copay != null ? `${data.copay.toLocaleString()} (바우처 유형)` : "비우면 빈칸"} value={opt.copay} onChange={(e) => setOpt({ ...opt, copay: e.target.value })} /></Label>
         <Label label="기관 전화"><Input placeholder="비우면 양식 값" value={opt.phone} onChange={(e) => setOpt({ ...opt, phone: e.target.value })} /></Label>
       </div>

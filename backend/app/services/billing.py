@@ -59,9 +59,16 @@ VOUCHER_COPAY: dict[str, int] = {
     "라": 60_000,  # 기준 중위소득 65% 초과 ~ 120% 이하
     "마": 80_000,  # 기준 중위소득 120% 초과 ~ 180% 이하
 }
-# 일반 수업은 월 5회, 야간 수업(19:00 이후 시작 또는 토요일)은 월 4회로 26만원: 서류상 회당 단가
+# 일반 수업은 월 5회, 야간 수업(19:00 이후 시작 또는 토요일)은 월 4회로 26만원: 서류상 회당 단가.
+# 기본값이고, 기관 설정에 바우처 단가·야간 바우처 단가가 있으면 그 값을 씁니다.
 DAY_SESSIONS, NIGHT_SESSIONS = 5, 4
 DAY_PRICE, NIGHT_PRICE = VOUCHER_TOTAL // DAY_SESSIONS, VOUCHER_TOTAL // NIGHT_SESSIONS  # 52,000 / 65,000
+
+
+def voucher_prices(org: dict) -> tuple[int, int]:
+    """(일반, 야간) 회당 바우처 단가 from 기관 설정 (unit_price, night_price); unset = 52,000 / 65,000."""
+    day, night = org.get("unit_price"), org.get("night_price")
+    return (DAY_PRICE if day is None else day), (NIGHT_PRICE if night is None else night)
 
 
 def is_night(day: str, start: str) -> bool:
@@ -69,26 +76,33 @@ def is_night(day: str, start: str) -> bool:
     return start >= "19:00" or datetime.strptime(day, "%Y-%m-%d").isoweekday() == 6
 
 
-def voucher_price(classes: list[dict]) -> int:
-    """서류상 회당 단가 for a month: 65,000 when most of its classes are 야간, else 52,000."""
+def voucher_price(classes: list[dict], day_price: int = DAY_PRICE, night_price: int = NIGHT_PRICE) -> int:
+    """서류상 회당 단가 for a month: the 야간 price when most of its classes are 야간, else the 일반 price."""
     night = sum(1 for c in classes if is_night(c["date"], c["start"]))
-    return NIGHT_PRICE if classes and night * 2 > len(classes) else DAY_PRICE
+    return night_price if classes and night * 2 > len(classes) else day_price
 
 
-def settlement(grade: str | None, voucher_classes: list[dict], paid_sessions: int, paid_price: int | None) -> dict:
-    """One child's month. voucher_classes: held 바우처 classes ({'date','start'}).
-    본인부담금 is monthly: each 일반 class uses 1/5 of it and each 야간 class 1/4; what is not used is refunded."""
+def settlement(grade: str | None, voucher_classes: list[dict], paid_classes: list[dict] | int, paid_price: int | None,
+               day_price: int = DAY_PRICE, night_price: int = NIGHT_PRICE, paid_night_price: int | None = None) -> dict:
+    """One child's month. voucher_classes / paid_classes: held classes ({'date','start'}); a bare count of paid
+    classes counts them all as 일반. 야간 유료 classes cost paid_night_price (unset = the 일반 유료 price).
+    본인부담금 is monthly and used in proportion to the voucher spent (사용액 ÷ 월 26만원; with the default prices
+    each 일반 class is 1/5 and each 야간 class 1/4); what is not used is refunded."""
     day = sum(1 for c in voucher_classes if not is_night(c["date"], c["start"]))
     night = len(voucher_classes) - day
-    paid_amount = int(Decimal(paid_price) * paid_sessions) if paid_price is not None else None
-    out: dict = {"grade": grade, "day_sessions": day, "night_sessions": night, "paid_sessions": paid_sessions,
+    paid = [{"date": "2000-01-03", "start": "00:00"}] * paid_classes if isinstance(paid_classes, int) else paid_classes
+    paid_sessions = len(paid)
+    paid_night = sum(1 for c in paid if is_night(c["date"], c["start"]))
+    pn = paid_price if paid_night_price is None else paid_night_price
+    paid_amount = None if paid_price is None else int(Decimal(paid_price) * (paid_sessions - paid_night) + Decimal(pn) * paid_night)
+    out: dict = {"grade": grade, "day_sessions": day, "night_sessions": night, "paid_sessions": paid_sessions, "paid_night_sessions": paid_night,
                  "copay": None, "copay_charged": None, "copay_refund": None, "voucher_amount": None,
                  "support": None, "over_budget": False, "paid_amount": paid_amount}
     if grade in VOUCHER_COPAY:
         copay = VOUCHER_COPAY[grade]
-        used = min(Fraction(day, DAY_SESSIONS) + Fraction(night, NIGHT_SESSIONS), Fraction(1))
+        amount = day * day_price + night * night_price
+        used = min(Fraction(amount, VOUCHER_TOTAL), Fraction(1))
         charged = int(copay * used)
-        amount = day * DAY_PRICE + night * NIGHT_PRICE
         out.update(copay=copay, copay_charged=charged, copay_refund=copay - charged, voucher_amount=amount,
                    support=min(amount, VOUCHER_TOTAL) - charged, over_budget=amount > VOUCHER_TOTAL)
     out["guardian_total"] = None if paid_sessions and paid_amount is None else (out["copay_charged"] or 0) + (paid_amount or 0)

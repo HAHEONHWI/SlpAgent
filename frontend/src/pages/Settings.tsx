@@ -10,15 +10,16 @@ import Accountants from "../components/Accountants";
 export default function Settings() {
   const qc = useQueryClient();
   const org = useQuery({ queryKey: ["org"], queryFn: () => api<any>("/org") });
-  const [f, setF] = useState({ name: "", min: "", max: "", unit_price: "", voucher_minutes: "", paid_price: "" });
+  const [f, setF] = useState({ name: "", min: "", max: "", unit_price: "", night_price: "", voucher_minutes: "", paid_price: "", paid_night_price: "" });
   useEffect(() => {
     const o = org.data; if (!o) return;
-    setF({ name: o.name ?? "", min: o.behavior_scale?.min?.toString() ?? "", max: o.behavior_scale?.max?.toString() ?? "", unit_price: o.unit_price?.toString() ?? "", voucher_minutes: o.voucher_minutes?.toString() ?? "", paid_price: o.paid_price?.toString() ?? "" });
+    setF({ name: o.name ?? "", min: o.behavior_scale?.min?.toString() ?? "", max: o.behavior_scale?.max?.toString() ?? "", unit_price: o.unit_price?.toString() ?? "", night_price: o.night_price?.toString() ?? "", voucher_minutes: o.voucher_minutes?.toString() ?? "", paid_price: o.paid_price?.toString() ?? "", paid_night_price: o.paid_night_price?.toString() ?? "" });
   }, [org.data]);
   const save = useMutation({
     mutationFn: () => api("/org", { method: "PUT", json: {
       name: f.name, behavior_scale: f.min !== "" && f.max !== "" ? { min: Number(f.min), max: Number(f.max) } : null,
-      unit_price: f.unit_price === "" ? null : Number(f.unit_price), voucher_minutes: f.voucher_minutes === "" ? null : Number(f.voucher_minutes), paid_price: f.paid_price === "" ? null : Number(f.paid_price) } }),
+      unit_price: f.unit_price === "" ? null : Number(f.unit_price), voucher_minutes: f.voucher_minutes === "" ? null : Number(f.voucher_minutes), paid_price: f.paid_price === "" ? null : Number(f.paid_price),
+      night_price: f.night_price === "" ? null : Number(f.night_price), paid_night_price: f.paid_night_price === "" ? null : Number(f.paid_night_price) } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["org"] }),
   });
   const set = (k: keyof typeof f) => (e: any) => setF({ ...f, [k]: e.target.value });
@@ -33,8 +34,16 @@ export default function Settings() {
             <div className="grid grid-cols-2 gap-2"><Input type="number" placeholder="최소" value={f.min} onChange={set("min")} /><Input type="number" placeholder="최대" value={f.max} onChange={set("max")} /></div>
             <p className="mt-1 text-[11px] text-slate-500">설정하지 않으면 ABC 관찰에서 강도를 입력할 수 없습니다.</p>
           </div>
-          <Label label="회기당 금액(원)"><Input type="number" min={0} value={f.unit_price} onChange={set("unit_price")} /></Label>
-          <Label label="유료 수업 회당 금액(원)"><Input type="number" min={0} value={f.paid_price} onChange={set("paid_price")} placeholder="추가(유료)·바우처 없는 아동" /></Label>
+          <div>
+            <p className="mb-1 text-xs font-medium text-slate-600">수업 1회 금액(원)</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Label label="바우처 단가"><Input type="number" min={0} value={f.unit_price} onChange={set("unit_price")} placeholder="52,000" /></Label>
+              <Label label="바우처 야간 단가"><Input type="number" min={0} value={f.night_price} onChange={set("night_price")} placeholder="65,000" /></Label>
+              <Label label="일반(유료) 단가"><Input type="number" min={0} value={f.paid_price} onChange={set("paid_price")} /></Label>
+              <Label label="일반(유료) 야간 단가"><Input type="number" min={0} value={f.paid_night_price} onChange={set("paid_night_price")} placeholder="비우면 일반 단가" /></Label>
+            </div>
+            <p className="mt-1 text-[11px] text-slate-500">야간은 19:00 이후 시작하거나 토요일인 수업이에요. 바우처 단가를 비우면 52,000원·65,000원(26만원을 월 5회·4회로 나눈 값)을 써요. 일반(유료)은 추가(유료) 수업과 바우처 등급이 없는 아이의 수업이에요.</p>
+          </div>
           <Label label="바우처 월 한도(분)"><Input type="number" min={0} value={f.voucher_minutes} onChange={set("voucher_minutes")} /></Label>
           <Notice>금액·시간 계산은 이 값을 사용해 서버 코드가 수행합니다. 값을 비우면 금액은 계산되지 않습니다.</Notice>
           {save.error && <Notice tone="red">{errText(save.error)}</Notice>}
