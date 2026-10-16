@@ -6,12 +6,13 @@ import { useChild } from "../lib/child";
 import { errText } from "../lib/hooks";
 import { EXTRA, type Extra } from "../lib/extraClass";
 import ChildPicker from "../components/ChildPicker";
+import EditClassForm from "../components/EditClassForm";
 import { Badge, Button, Card, Empty, Input, Label, Notice, PageTitle, Table, Td } from "../components/ui";
 
 type State = { status: string | null; auto: boolean; reason: string | null };
 type Mark = { status: string; minutes_late?: number | null; note?: string | null };
-type Row = { schedule_id: string; child_id: string; start: string; end: string; therapist: string; attendance: Mark | null; state: State;
-  moved_to: { date: string; start: string } | null; moved_from: string | null; extra?: Extra | null };
+type Row = { schedule_id: string; child_id: string; date: string; start: string; end: string; therapist: string; attendance: Mark | null; state: State;
+  moved_to: { date: string; start: string } | null; moved_from: string | null; extra?: Extra | null; source?: string | null };
 type Summary = { child_id: string; scheduled: number; present: number; late: number; absent: number; excused: number; makeup: number;
   auto: number; upcoming: number; moved: number; rate_pct: number | null };
 type Absence = { id: string; child_id: string; start: string; end: string; reason: string | null };
@@ -116,7 +117,7 @@ function AddClass({ day, onDone }: { day: string; onDone: () => void }) {
 }
 
 function RollRow({ r, who, onDone }: { r: Row; who: string; onDone: () => void }) {
-  const [note, setNote] = useState(""), [late, setLate] = useState("");
+  const [note, setNote] = useState(""), [late, setLate] = useState(""), [editing, setEditing] = useState(false);
   const [moving, setMoving] = useState(false), [to, setTo] = useState({ date: "", start: r.start, reason: "" });
   const mark = useMutation({
     mutationFn: (status: string) => api(`/schedules/${r.schedule_id}/attendance`, { method: "PUT", json: { status, minutes_late: status === "late" && late ? Number(late) : null, note: note.trim() || null } }),
@@ -150,7 +151,9 @@ function RollRow({ r, who, onDone }: { r: Row; who: string; onDone: () => void }
           <Button variant={st === "late" ? "primary" : "outline"} disabled={mark.isPending} onClick={() => mark.mutate("late")}>지각</Button>
           {r.attendance ? <Button variant="ghost" disabled={clear.isPending} onClick={() => clear.mutate()}><Undo2 size={14} />기본(출석)으로</Button>
             : !r.moved_from && <Button variant="ghost" onClick={() => { move.reset(); setMoving(!moving); }}>보강 잡기</Button>}
+          {r.source !== "timetable" && <Button variant="ghost" onClick={() => setEditing(!editing)}>시간 수정</Button>}
         </div>)}
+      {editing && <EditClassForm c={{ id: r.schedule_id, date: r.date, start: r.start, end: r.end, extra: r.extra }} onCancel={() => setEditing(false)} onDone={() => { setEditing(false); onDone(); }} />}
       {st === "moved" && <div className="mt-2"><Button variant="ghost" disabled={unmove.isPending} onClick={() => unmove.mutate()}><Undo2 size={14} />옮기기 취소</Button></div>}
       {moving && (
         <form className="mt-2 flex flex-wrap items-end gap-2 rounded-lg bg-slate-50 p-3" onSubmit={(e) => { e.preventDefault(); move.mutate(); }}>

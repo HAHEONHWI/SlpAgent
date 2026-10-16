@@ -6,6 +6,7 @@ import { errText } from "../lib/hooks";
 import Timetable from "../components/Timetable";
 import OrgHolidays from "../components/OrgHolidays";
 import ChildPicker from "../components/ChildPicker";
+import EditClassForm from "../components/EditClassForm";
 import { EXTRA } from "../lib/extraClass";
 import { Badge, Button, Card, Empty, Input, Label, Notice, PageTitle, Select, Table, Td } from "../components/ui";
 
@@ -31,6 +32,7 @@ function DatedSchedule() {
   const list = useQuery({ queryKey: ["schedules", month], queryFn: () => api<any[]>(`/schedules?month=${month}`) });
   const refresh = () => qc.invalidateQueries({ queryKey: ["schedules"] });
   const create = useMutation({ mutationFn: () => api("/schedules", { method: "POST", json: { ...f, end: f.end || null, therapist: f.therapist.trim() || null, note: f.note || null } }), onSuccess: refresh });
+  const [editing, setEditing] = useState<string | null>(null);
   const cancel = useMutation({ mutationFn: (id: string) => api(`/schedules/${id}/cancel`, { method: "POST" }), onSuccess: refresh });
   const alias = (id: string) => children.find((c) => c.id === id)?.alias ?? "-";
   const set = (k: keyof typeof f) => (e: any) => setF({ ...f, [k]: e.target.value });
@@ -53,10 +55,14 @@ function DatedSchedule() {
         <Card title="일정 목록" className="lg:col-span-2" action={<div className="w-44 shrink-0"><Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} aria-label="월" /></div>}>
           {!list.data?.length ? <Empty>이 달에 등록된 일정이 없습니다.</Empty> : (
             <Table head={["날짜", "시간", "아동", "치료사", "상태", ""]}>
-              {list.data.map((s) => (
-                <tr key={s.id}><Td>{s.date}</Td><Td>{s.start}–{s.end}</Td><Td>{alias(s.child_id)}{s.extra && <span className="ml-1.5"><Badge tone={s.extra === "paid" ? "amber" : "indigo"}>{EXTRA[s.extra as keyof typeof EXTRA]}</Badge></span>}</Td><Td>{s.therapist}</Td>
+              {list.data.map((s) => editing === s.id ? (
+                <tr key={s.id}><td colSpan={6} className="px-2"><EditClassForm c={s} onCancel={() => setEditing(null)} onDone={() => { setEditing(null); refresh(); }} /></td></tr>
+              ) : (
+                <tr key={s.id}><Td>{s.date}</Td><Td>{s.start}–{s.end}</Td><Td>{alias(s.child_id)}{s.extra && <div className="mt-0.5"><Badge tone={s.extra === "paid" ? "amber" : "indigo"}>{EXTRA[s.extra as keyof typeof EXTRA]}</Badge></div>}</Td><Td>{s.therapist}</Td>
                   <Td><Badge tone={s.status === "scheduled" ? "indigo" : "slate"}>{s.status === "scheduled" ? "예정" : "취소"}</Badge></Td>
-                  <Td>{s.status === "scheduled" && <Button variant="ghost" onClick={() => cancel.mutate(s.id)}>취소</Button>}</Td></tr>))}
+                  <Td>{s.status === "scheduled" && <div className="flex flex-col items-start">
+                    {!s.timetable_entry_id && <Button variant="ghost" className="px-2 py-1" onClick={() => setEditing(s.id)}>수정</Button>}
+                    <Button variant="ghost" className="px-2 py-1" onClick={() => cancel.mutate(s.id)}>취소</Button></div>}</Td></tr>))}
             </Table>)}
           {cancel.error && <div className="mt-2"><Notice tone="red">{errText(cancel.error)}</Notice></div>}
         </Card>

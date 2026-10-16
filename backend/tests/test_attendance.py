@@ -127,3 +127,23 @@ def test_extra_classes_voucher_and_paid(client, child):
     assert mv["makeup"]["extra"] == "paid"
     visits = client.get(f"/children/{cid}/voucher-visits?month=2020-10", headers=H()).json()
     assert [x["date"] for x in visits["visits"]] == ["2020-10-29"] and visits["other"] == []
+
+
+def test_added_class_time_can_be_fixed(client, child):
+    cid = child["id"]
+    a = client.post("/schedules", headers=H(), json={"child_id": cid, "date": "2020-10-29", "start": "15:00", "extra": "voucher"}).json()
+    other = client.post("/schedules", headers=H(), json={"child_id": cid, "date": "2020-10-29", "start": "17:00", "extra": "paid"}).json()
+    client.put(f"/schedules/{a['id']}/attendance", headers=H(), json={"status": "late", "minutes_late": 5})
+    # wrong time: keeps the 40-minute length and the attendance mark follows
+    r = client.put(f"/schedules/{a['id']}", headers=H(), json={"date": "2020-10-30", "start": "16:10"})
+    assert r.status_code == 200 and (r.json()["date"], r.json()["start"], r.json()["end"]) == ("2020-10-30", "16:10", "16:50")
+    day = client.get("/attendance/day?on=2020-10-30", headers=H()).json()
+    assert [(d["start"], d["state"]["status"]) for d in day] == [("16:10", "late")]
+    # the kind can be switched, and the default note follows it
+    r = client.put(f"/schedules/{a['id']}", headers=H(), json={"date": "2020-10-30", "start": "16:10", "extra": "paid"}).json()
+    assert (r["extra"], r["note"]) == ("paid", "추가(유료)")
+    assert client.put(f"/schedules/{a['id']}", headers=H(), json={"date": "2020-10-29", "start": "16:50"}).status_code == 409  # clashes with 17:00
+    assert client.put(f"/schedules/{a['id']}", headers=H(), json={"date": "2020-10-30", "start": "16:10", "end": "16:00"}).status_code == 422
+    assert client.put(f"/schedules/{a['id']}", headers=H(uid="u2"), json={"date": "2020-10-30", "start": "09:00"}).status_code == 404
+    assert client.put(f"/schedules/{a['id']}", headers=H(role="assistant", uid="u3"), json={"date": "2020-10-30", "start": "09:00"}).status_code == 403
+    assert other

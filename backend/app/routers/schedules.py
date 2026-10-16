@@ -78,3 +78,45 @@ def cancel(sid: str, p: Principal = Depends(require_write), repo=Depends(get_rep
         raise HTTPException(404)
     audit(repo, p, "cancel", "schedules", sid, s["child_id"])
     return repo.update("schedules", p.org_id, sid, {"status": "cancelled"})
+
+
+class ScheduleEdit(BaseModel):
+    date: date
+    start: str = Field(pattern=r"^\d{2}:\d{2}$")
+    end: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$", description="omitted = keep the class length")
+    extra: Literal["voucher", "paid"] | None = Field(default=None, description="omitted = keep the kind")
+
+
+@router.put("/{sid}")
+def edit(sid: str, body: ScheduleEdit, p: Principal = Depends(require_write), repo=Depends(get_repo)):
+    """Fix an added class (수업 추가 or 보강) entered with the wrong day or time. Timetable classes follow the
+    weekly timetable and are changed there."""
+    try:
+        s = repo.get("schedules", p.org_id, sid)
+    except NotFound:
+        raise HTTPException(404, "schedule not found")
+    child_or_404(repo, p, s["child_id"])  # another therapist's class: as if it did not exist
+    if s.get("timetable_entry_id"):
+        raise HTTPException(409, "시간표 수업은 주간 시간표에서 바꾸세요")
+    if s.get("status") != "scheduled":
+        raise HTTPException(409, "옮겼거나 취소된 수업은 고칠 수 없습니다")
+    from .timetable import _add
+    end = body.end or _add(body.start, minutes_between(s["start"], s["end"]))
+    try:
+        minutes_between(body.start, end)
+    except ValueError:
+        raise HTTPException(422, "끝 시간이 시작 시간보다 빨라요")
+    d = {"date": body.date.isoformat(), "start": body.start, "end": end}
+    for o in repo.list("schedules", p.org_id, date=d["date"], status="scheduled"):
+        if o["id"] != sid and _overlap(o, d) and (o.get("therapist") == s.get("therapist") or o["child_id"] == s["child_id"]):
+            raise HTTPException(409, f"시간 충돌: {o['start']}–{o['end']} ({o.get('therapist')})")
+    if s.get("extra") and body.extra and body.extra != s["extra"]:
+        d["extra"] = body.extra
+        if s.get("note") in EXTRA.values():  # the default note follows the kind
+            d["note"] = EXTRA[body.extra]
+    try:  # an attendance mark keeps a copy of the day and time
+        repo.update("attendance", p.org_id, sid, {k: d[k] for k in ("date", "start", "end")})
+    except NotFound:
+        pass
+    audit(repo, p, "update", "schedules", sid, s["child_id"])
+    return repo.update("schedules", p.org_id, sid, d)
