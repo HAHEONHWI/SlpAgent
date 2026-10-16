@@ -26,6 +26,21 @@ def test_recent_records_follow_clinical_dates_and_limit_results(repo, child):
     assert [record["date"] for record in records] == [f"2026-10-{day:02}" for day in range(12, 2, -1)]
 
 
+def test_recent_records_limit_each_source_to_the_global_result_limit(repo, child):
+    limits = []
+    list_latest = repo.list_latest
+
+    def track_limit(collection, org_id, field, limit, **filters):
+        limits.append(limit)
+        return list_latest(collection, org_id, field, limit, **filters)
+
+    repo.list_latest = track_limit
+    runner = ToolRunner(repo, Principal(uid="u1", org_id="orgA", role="therapist"), child["id"])
+
+    assert runner.run("get_recent_records", {}) == []
+    assert limits == [10, 10, 10]
+
+
 def test_recent_records_include_sessions_consultations_and_approved_recordings(repo, child):
     session = repo.create("therapy_sessions", "orgA", {
         "child_id": child["id"], "date": "2026-10-01", "status": "completed", "minutes": 40,

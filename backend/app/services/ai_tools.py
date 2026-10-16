@@ -135,7 +135,7 @@ class ToolRunner:
         # with headroom for unfinished sessions and unapproved drafts that are skipped.
         child_id = self._need_child()
         child_or_404(self.repo, self.p, child_id)
-        latest = lambda col: self.repo.list_latest(col, self.p.org_id, "date", RECENT_LIMIT * 2, child_id=child_id)
+        latest = lambda col: self.repo.list_latest(col, self.p.org_id, "date", RECENT_LIMIT, child_id=child_id)
         records: list[RecentRecord] = []
         for s in latest("therapy_sessions"):
             if s.get("status") != "completed":
