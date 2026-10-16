@@ -184,7 +184,8 @@ def move(sid: str, body: MoveIn, p: Principal = Depends(require_write), repo=Dep
            "therapist": s.get("therapist"), "note": "보강", "status": "scheduled", "source": "makeup", "moved_from": sid}
     if s.get("extra"):  # a moved 추가 수업 stays the same kind
         new["extra"] = s["extra"]
-    for o in repo.list("schedules", p.org_id, date=new["date"], status="scheduled"):
+    from .schedules import busy
+    for o in busy(repo, p.org_id, new["date"]):
         if o["start"] < new["end"] and new["start"] < o["end"] and (o.get("therapist") == new["therapist"] or o["child_id"] == new["child_id"]):
             raise HTTPException(409, f"시간 충돌: {o['start']}–{o['end']} ({o.get('therapist')})")
     doc = repo.create("schedules", p.org_id, new)

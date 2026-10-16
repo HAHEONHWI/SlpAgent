@@ -33,6 +33,18 @@ def _overlap(a, b) -> bool:
     return a["start"] < b["end"] and b["start"] < a["end"]
 
 
+def busy(repo, org_id: str, day: str) -> list[dict]:
+    """Classes that take up a therapist's and a child's time that day: a class marked 결석·사유결석 (or in a
+    장기결강 period) frees the slot, so another class can be added there."""
+    from ..services.attendance_state import effective
+    rows = repo.list("schedules", org_id, date=day, status="scheduled")
+    if not rows:
+        return []
+    marks = {m["schedule_id"]: m for m in repo.list("attendance", org_id, date=day)}
+    absences = [a for a in repo.list("absences", org_id) if a["start"] <= day <= a["end"]]
+    return [s for s in rows if effective(s, marks.get(s["id"]), absences, today="9999-12-31")["status"] not in ("absent", "excused")]
+
+
 @router.post("", status_code=201)
 def create(body: ScheduleIn, p: Principal = Depends(require_write), repo=Depends(get_repo)):
     child = child_or_404(repo, p, body.child_id)
@@ -47,7 +59,7 @@ def create(body: ScheduleIn, p: Principal = Depends(require_write), repo=Depends
         d.update(source="extra", note=d["note"] or EXTRA[d["extra"]])
     else:
         d.pop("extra")
-    for s in repo.list("schedules", p.org_id, date=d["date"], status="scheduled"):
+    for s in busy(repo, p.org_id, d["date"]):
         if _overlap(s, d) and (s.get("therapist") == d["therapist"] or s["child_id"] == d["child_id"]):
             raise HTTPException(409, f"시간 충돌: {s['start']}–{s['end']} ({s.get('therapist')})")
     doc = repo.create("schedules", p.org_id, {**d, "status": "scheduled"})
@@ -107,7 +119,7 @@ def edit(sid: str, body: ScheduleEdit, p: Principal = Depends(require_write), re
     except ValueError:
         raise HTTPException(422, "끝 시간이 시작 시간보다 빨라요")
     d = {"date": body.date.isoformat(), "start": body.start, "end": end}
-    for o in repo.list("schedules", p.org_id, date=d["date"], status="scheduled"):
+    for o in busy(repo, p.org_id, d["date"]):
         if o["id"] != sid and _overlap(o, d) and (o.get("therapist") == s.get("therapist") or o["child_id"] == s["child_id"]):
             raise HTTPException(409, f"시간 충돌: {o['start']}–{o['end']} ({o.get('therapist')})")
     if s.get("extra") and body.extra and body.extra != s["extra"]:

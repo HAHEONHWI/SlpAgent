@@ -147,3 +147,13 @@ def test_added_class_time_can_be_fixed(client, child):
     assert client.put(f"/schedules/{a['id']}", headers=H(uid="u2"), json={"date": "2020-10-30", "start": "09:00"}).status_code == 404
     assert client.put(f"/schedules/{a['id']}", headers=H(role="assistant", uid="u3"), json={"date": "2020-10-30", "start": "09:00"}).status_code == 403
     assert other
+
+
+def test_absent_class_frees_the_time_slot(client, child):
+    cid = child["id"]
+    a = client.post("/schedules", headers=H(), json={"child_id": cid, "date": "2020-10-29", "start": "16:30", "extra": "voucher"}).json()
+    other = client.post("/children", headers=H(), json={"alias": "E-08", "display_name": "김하성", "birth_date": "2022-01-01", "therapist": child["therapist"]}).json()
+    clash = {"child_id": other["id"], "date": "2020-10-29", "start": "16:30", "extra": "voucher"}
+    assert client.post("/schedules", headers=H(), json=clash).status_code == 409  # same therapist, same time
+    client.put(f"/schedules/{a['id']}/attendance", headers=H(), json={"status": "excused", "note": "유치원소풍"})
+    assert client.post("/schedules", headers=H(), json=clash).status_code == 201  # 사유결석 frees the slot
