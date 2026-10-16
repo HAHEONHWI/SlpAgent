@@ -112,6 +112,24 @@ def test_child_bulk_import_skips_duplicates(client, child):
     assert client.post("/children/import", headers=H(), json={"rows": [{"alias": "x", "display_name": "y", "birth_date": "2022-13-01"}]}).status_code == 422
 
 
+def test_child_bulk_import_can_overwrite(client, child):
+    # same name and birth date = the same child: the file's code, 담당 and 등급 replace what is there; blank cells keep it
+    rows = [{"alias": "E-17", "display_name": "테스트아동", "birth_date": "2022-03-15", "therapist": "조미진", "voucher_grade": "나"},
+            {"alias": "E-18", "display_name": "새아동", "birth_date": "2021-01-01", "voucher_grade": "마"}]
+    r = client.post("/children/import", headers=H(), json={"rows": rows}).json()
+    assert (r["created"], r["updated"], [s["reason"] for s in r["skipped"]]) == (1, 0, ["이미 등록됨"])  # without overwrite: untouched
+    r = client.post("/children/import", headers=H(role="admin"), json={"rows": rows, "overwrite": True}).json()
+    assert (r["created"], r["updated"], r["skipped"]) == (0, 1, [])
+    c = client.get(f"/children/{child['id']}", headers=H(role="admin")).json()
+    assert (c["alias"], c["therapist"], c["voucher_grade"], c["guardian_contact"]) == ("E-17", "조미진", "나", "010-0000-0000")
+    # a code another child already uses is not taken over
+    clash = [{"alias": "E-18", "display_name": "테스트아동", "birth_date": "2022-03-15"}]
+    assert client.post("/children/import", headers=H(role="admin"), json={"rows": clash, "overwrite": True}).json()["skipped"][0]["reason"] == "아이코드 중복"
+    # a therapist cannot overwrite another therapist's child
+    other = [{"alias": "X-1", "display_name": "새아동", "birth_date": "2021-01-01", "therapist": "남"}]
+    assert client.post("/children/import", headers=H(uid="u2"), json={"rows": other, "overwrite": True}).json()["updated"] == 0
+
+
 def test_therapist_choices_and_assignment(client, child):
     client.put("/timetable/config", headers=H(role="admin"), json={"teachers": [{"id": "t", "name": "박선생", "short": "하", "color": "#2563eb"}]})
     r = client.put(f"/children/{child['id']}/therapist", headers=H(role="admin"), json={"therapist": "박선생"})

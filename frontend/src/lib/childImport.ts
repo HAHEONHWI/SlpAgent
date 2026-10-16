@@ -1,6 +1,8 @@
 /** Reading a children list from a spreadsheet. Everything here runs in the browser: a 주민번호-style
  * "YYMMDD-N" cell is reduced to the birth date and sex, and the digit itself is never sent or stored. */
-export type ImportRow = { line: number; alias: string; display_name: string; birth_date: string; sex: "남" | "여" | null; therapist: string | null; error: string | null };
+export type Grade = "가" | "나" | "다" | "라" | "마";
+export type ImportRow = { line: number; alias: string; display_name: string; birth_date: string; sex: "남" | "여" | null; therapist: string | null;
+  voucher_grade: Grade | null; error: string | null };
 
 const COLUMNS = {
   name: /대상자명|아동명|아동\s*이름|^이름$|성명/,
@@ -8,6 +10,13 @@ const COLUMNS = {
   code: /아이\s*코드|가명|코드/,
   therapist: /지정\s*제공\s*인력|제공\s*인력|담당|치료사|선생/,
   sex: /성별/,
+  grade: /등급|바우처|유형/,
+};
+
+/** "나형", "나", " 나 형 " -> 나; anything else (blank, 유료) -> null. */
+const gradeOf = (v: unknown): Grade | null => {
+  const m = String(v ?? "").replace(/\s/g, "").match(/^([가나다라마])형?$/);
+  return m ? (m[1] as Grade) : null;
 };
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -47,9 +56,9 @@ export async function readRows(file: File): Promise<unknown[][]> {
   return (await readSheet(file)) as unknown[][];
 }
 
-export type Field = "name" | "birth" | "code" | "therapist" | "sex";
+export type Field = "name" | "birth" | "code" | "therapist" | "sex" | "grade";
 export type Mapping = Record<Field, number>; // column index, -1 = not used
-export const FIELD_LABEL: Record<Field, string> = { name: "이름", birth: "생년월일", code: "아이코드", therapist: "담당 치료사", sex: "성별" };
+export const FIELD_LABEL: Record<Field, string> = { name: "이름", birth: "생년월일", code: "아이코드", therapist: "담당 치료사", sex: "성별", grade: "바우처 등급" };
 
 /** Find the header row and guess which column holds what; the user can correct the guess. */
 export function detect(rows: unknown[][]): { headerAt: number; head: string[]; map: Mapping } | null {
@@ -59,8 +68,8 @@ export function detect(rows: unknown[][]): { headerAt: number; head: string[]; m
   const taken: number[] = [];
   const col = (re: RegExp) => { const i = head.findIndex((h, j) => !taken.includes(j) && re.test(h)); if (i >= 0) taken.push(i); return i; };
   // most specific first, so "아이코드" is never mistaken for the name or birth column and vice versa
-  const name = col(COLUMNS.name), birth = col(COLUMNS.birth), therapist = col(COLUMNS.therapist), sex = col(COLUMNS.sex), code = col(COLUMNS.code);
-  return { headerAt, head, map: { name, birth, code, therapist, sex } };
+  const name = col(COLUMNS.name), birth = col(COLUMNS.birth), therapist = col(COLUMNS.therapist), sex = col(COLUMNS.sex), grade = col(COLUMNS.grade), code = col(COLUMNS.code);
+  return { headerAt, head, map: { name, birth, code, therapist, sex, grade } };
 }
 
 export function toChildren(rows: unknown[][], headerAt: number, map: Mapping, existingCodes: string[]): ImportRow[] {
@@ -81,6 +90,7 @@ export function toChildren(rows: unknown[][], headerAt: number, map: Mapping, ex
     out.push({
       line: headerAt + i + 2, alias: alias.slice(0, 40), display_name: display_name.slice(0, 40), birth_date: b.birth ?? "",
       sex: b.sex ?? (map.sex >= 0 ? sexOf(r[map.sex]) : null), therapist: t ? t.slice(0, 20) : null,
+      voucher_grade: map.grade >= 0 ? gradeOf(r[map.grade]) : null,
       error: !b.birth ? "생년월일을 읽지 못했어요" : b.birth > new Date().toISOString().slice(0, 10) ? "생년월일이 미래예요" : null,
     });
   });

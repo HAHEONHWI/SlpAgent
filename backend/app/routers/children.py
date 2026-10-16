@@ -40,6 +40,10 @@ def create_child(body: ChildIn, p: Principal = Depends(require_write), repo=Depe
 class ImportIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     rows: list[ChildIn] = Field(min_length=1, max_length=500)
+    overwrite: bool = Field(default=False, description="update children already registered (same name and birth date) from the file")
+
+
+IMPORT_FIELDS = ("alias", "therapist", "voucher_grade", "sex", "disability_registered")  # a blank cell keeps what is there
 
 
 @router.post("/import")
@@ -48,26 +52,40 @@ def import_children(body: ImportIn, p: Principal = Depends(require_write), repo=
     birth date) are skipped, so re-uploading the same file is harmless. Only birth date and sex arrive here:
     the client derives them from 주민번호 앞자리와 성별 자리 and never sends the number itself."""
     existing = repo.list("children", p.org_id)
-    codes = {c["alias"].strip().lower() for c in existing}
-    people = {(c["display_name"].strip(), c["birth_date"]) for c in existing}
-    created, skipped = [], []
+    code_of = {c["alias"].strip().lower(): c["id"] for c in existing}
+    person = {(c["display_name"].strip(), c["birth_date"]): c for c in existing}
+    scope = child_scope(repo, p)  # a therapist overwrites only their own children
+    created, updated, skipped = [], [], []
     for i, row in enumerate(body.rows):
         d = {**row.model_dump(mode="json"), "archived": False}
         d["alias"], d["display_name"] = d["alias"].strip(), d["display_name"].strip()
         who = (d["display_name"], d["birth_date"])
-        if d["alias"].lower() in codes or who in people:
-            gone = any(c.get("archived") and (c["alias"].strip().lower() == d["alias"].lower() or (c["display_name"].strip(), c["birth_date"]) == who) for c in existing)
-            same_person = who in people
+        same = person.get(who)
+        owner = code_of.get(d["alias"].lower())
+        if same and body.overwrite and not same.get("archived") and (scope is None or same["id"] in scope):
+            if owner and owner != same["id"]:
+                skipped.append({"row": i, "alias": d["alias"], "display_name": d["display_name"], "reason": "아이코드 중복"})
+                continue
+            change = {k: d[k] for k in IMPORT_FIELDS if d.get(k) not in (None, "") and d[k] != same.get(k)}
+            if change:
+                code_of.pop(same["alias"].strip().lower(), None)
+                same.update(repo.update("children", p.org_id, same["id"], change))
+                code_of[same["alias"].strip().lower()] = same["id"]
+                audit(repo, p, "update", "children", same["id"], same["id"])
+                updated.append(same["id"])
+            continue
+        if owner or same:
+            gone = (same or {}).get("archived") or any(c.get("archived") and c["id"] == owner for c in existing)
             skipped.append({"row": i, "alias": d["alias"], "display_name": d["display_name"],
-                            "reason": "삭제된 아동에 있음" if gone else "이미 등록됨" if same_person else "아이코드 중복"})
+                            "reason": "삭제된 아동에 있음" if gone else "이미 등록됨" if same else "아이코드 중복"})
             continue
         doc = repo.create("children", p.org_id, d)
-        codes.add(d["alias"].lower())
-        people.add(who)
+        code_of[d["alias"].lower()] = doc["id"]
+        person[who] = doc
         created.append(doc["id"])
     audit(repo, p, "import", "children", f"{len(created)} rows")
     ensure_in_roster(repo, p.org_id, [r.therapist for r in body.rows])
-    return {"created": len(created), "skipped": skipped}
+    return {"created": len(created), "updated": len(updated), "skipped": skipped}
 
 
 @router.get("")
