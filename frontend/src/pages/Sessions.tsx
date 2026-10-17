@@ -6,7 +6,7 @@ import { errText, useClassSlot, useCreate, useRecords } from "../lib/hooks";
 import RequireChild from "../components/RequireChild";
 import RecordingConsultation from "../components/RecordingConsultation";
 import RecordingRecords from "../components/RecordingRecords";
-import { Badge, Button, Card, Empty, Input, Label, Notice, PageTitle, Select, Textarea } from "../components/ui";
+import { Badge, Button, Card, Empty, Input, Label, Notice, PageTitle, Section, Select, Textarea } from "../components/ui";
 
 // 수업 기록 = what used to be two screens (회기별 치료기록 + 보호자 상담): after each class the therapist writes what was
 // done and what was told to the parent. Activity accuracy / utterances are optional details saved as a session record.
@@ -56,11 +56,11 @@ function Inner({ childId }: { childId: string }) {
   const days = [...new Set([...(consultations.data ?? []).map((c) => c.date), ...(sessions.data ?? []).map((s) => s.date)])].sort().reverse();
   const busy = saveConsult.isPending || saveSession.isPending;
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
-      <Card title="수업 기록 쓰기">
+    <div className="grid items-start gap-10 lg:grid-cols-2">
+      <Section title="수업 기록 쓰기">
         <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); submit(); }}>
-          <Label label="날짜"><Input type="date" value={f.date} onChange={set("date")} required /></Label>
-          <div className="grid grid-cols-2 gap-2"><Label label="시작 (선택)"><Input type="time" value={f.start} onChange={set("start")} /></Label><Label label="종료 (선택)"><Input type="time" value={f.end} onChange={set("end")} /></Label></div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3"><div className="col-span-2 sm:col-span-1"><Label label="날짜"><Input type="date" value={f.date} onChange={set("date")} required /></Label></div>
+            <Label label="시작 (선택)"><Input type="time" value={f.start} onChange={set("start")} /></Label><Label label="종료 (선택)"><Input type="time" value={f.end} onChange={set("end")} /></Label></div>
           <Label label="담당 치료사">{therapists.length
             ? <Select value={f.counselor} onChange={set("counselor")} required><option value="">선택</option>{therapists.map((t) => <option key={t}>{t}</option>)}</Select>
             : <Input value={f.counselor} onChange={set("counselor")} required />}</Label>
@@ -71,28 +71,33 @@ function Inner({ childId }: { childId: string }) {
             <Label label="주제 (쉼표 구분, 선택)"><Input value={f.topics} onChange={set("topics")} placeholder="예: 발음, 어휘" /></Label>
             <Label label="참여자 (쉼표 구분, 선택)"><Input value={f.participants} onChange={set("participants")} placeholder="예: 어머니" /></Label>
           </div>
-          <button type="button" className="flex items-center gap-1 text-sm text-indigo-700" onClick={() => setDetails(!details)} aria-expanded={details}>
-            {details ? <ChevronDown size={14} /> : <ChevronRight size={14} />}활동 정확도·발화·관찰 기록 (선택)</button>
+          <div className="flex items-center gap-2 pt-3">
+            <button type="button" className="flex items-center gap-1 text-lg font-semibold" onClick={() => setDetails(!details)} aria-expanded={details}>
+              {details ? <ChevronDown size={16} /> : <ChevronRight size={16} />}활동 행 <span className="text-sm font-normal text-slate-500">정확도·발화·관찰 (선택)</span></button>
+            {details && <Button type="button" variant="outline" className="ml-auto" onClick={() => setActs([...acts, { ...blankA }])}>행 추가</Button>}
+          </div>
           {details && (
-            <div className="space-y-2 rounded-lg bg-slate-50 p-2">
-              {acts.map((a, i) => (
-                <div key={i} className="space-y-2 rounded-md border border-slate-200 bg-white p-2">
-                  <Input placeholder="활동 내용" value={a.name} onChange={(e) => upd(i, "name", e.target.value)} />
-                  <div className="grid grid-cols-3 gap-2"><Input type="number" min={0} placeholder="정반응" value={a.correct} onChange={(e) => upd(i, "correct", e.target.value)} /><Input type="number" min={0} placeholder="전체 시행" value={a.trials} onChange={(e) => upd(i, "trials", e.target.value)} /><Input placeholder="촉진" value={a.prompt_level} onChange={(e) => upd(i, "prompt_level", e.target.value)} /></div>
-                </div>))}
-              <Button type="button" variant="ghost" onClick={() => setActs([...acts, { ...blankA }])}>+ 활동 추가</Button>
+            <div className="space-y-3">
+              <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b border-slate-300 text-left text-[11px] tracking-[.08em] text-slate-500">
+                <th className="px-1 py-2 font-semibold">활동</th><th className="px-1 py-2 font-semibold">정반응</th><th className="px-1 py-2 font-semibold">전체 시행</th><th className="px-1 py-2 font-semibold">촉진</th></tr></thead>
+                <tbody className="divide-y divide-slate-200">{acts.map((a, i) => (
+                  <tr key={i}><td className="min-w-40 px-1 py-1.5"><Input placeholder="활동 내용" value={a.name} onChange={(e) => upd(i, "name", e.target.value)} /></td>
+                    <td className="w-20 px-1 py-1.5"><Input type="number" min={0} aria-label="정반응" value={a.correct} onChange={(e) => upd(i, "correct", e.target.value)} /></td>
+                    <td className="w-20 px-1 py-1.5"><Input type="number" min={0} aria-label="전체 시행" value={a.trials} onChange={(e) => upd(i, "trials", e.target.value)} /></td>
+                    <td className="w-24 px-1 py-1.5"><Input aria-label="촉진" value={a.prompt_level} onChange={(e) => upd(i, "prompt_level", e.target.value)} /></td></tr>))}</tbody></table></div>
               <Label label="아동의 실제 발화 (줄바꿈 구분)"><Textarea value={f.utterances} onChange={set("utterances")} /></Label>
               <Label label="관찰 행동 (줄바꿈 구분)"><Textarea value={f.behaviors} onChange={set("behaviors")} /></Label>
               <p className="text-xs text-slate-500">활동 정확도는 발달 분석·경과 그래프에 쓰여요. 저장하려면 시작·종료 시간이 필요해요.</p>
             </div>)}
           {err && <Notice tone="red">{err}</Notice>}
-          <Button disabled={busy}>{busy ? "저장 중…" : "저장"}</Button>
+          <div className="pt-2"><Button disabled={busy}>{busy ? "저장 중…" : "기록 저장"}</Button></div>
         </form>
-      </Card>
+      </Section>
 
-      <div className="space-y-3 lg:col-span-2">
+      <div className="min-w-0 space-y-3">
         <RecordingConsultation childId={childId} defaultKind="consultation" />
         <RecordingRecords childId={childId} />
+        <h3 className="pt-6 text-xl font-semibold">지난 수업 기록</h3>
         {consultations.error || sessions.error ? <Notice tone="red">{errText(consultations.error || sessions.error)}</Notice>
           : !days.length ? <Card><Empty>{consultations.isLoading || sessions.isLoading ? "불러오는 중…" : "수업 기록이 없습니다."}</Empty></Card>
           : days.map((d) => {
@@ -118,7 +123,7 @@ function Inner({ childId }: { childId: string }) {
                     {c.transcript && <details className="mt-2 text-sm"><summary className="cursor-pointer text-indigo-700">녹취록</summary><p className="mt-1 max-h-64 overflow-y-auto whitespace-pre-wrap rounded-md bg-slate-50 p-3 text-slate-700">{c.transcript}</p></details>}
                   </div>))}
                 {ss.map((s) => (
-                  <div key={s.id} className="mt-2 rounded-md bg-slate-50 p-2 text-sm">
+                  <div key={s.id} className="mt-2 rounded-xl bg-slate-100 p-3 text-sm">
                     <p className="mb-1 text-xs font-semibold text-slate-500">활동 기록 {s.start}–{s.end} ({s.minutes}분)</p>
                     <ul>{s.activities.map((a, i) => <li key={i}>{a.name}: {a.correct}/{a.trials} ({s.activity_accuracy[i]?.accuracy_pct ?? "-"}%){a.prompt_level && ` · 촉진: ${a.prompt_level}`}</li>)}</ul>
                     {s.utterances.length > 0 && <p className="mt-1 text-xs text-slate-600">발화: {s.utterances.join(" / ")}</p>}

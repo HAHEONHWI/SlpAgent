@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Mic } from "lucide-react";
+import { Upload } from "lucide-react";
 import { api } from "../lib/api";
 import { errText, useClassSlot } from "../lib/hooks";
 import { resumableUpload, type UploadTarget } from "../lib/upload";
-import { Badge, Button, Card, Input, Label, Notice, Select, Textarea } from "./ui";
+import { Badge, Button, Card, Input, Label, Notice, Section, Segmented, Textarea } from "./ui";
 
 type Job = {
   id: string; status: string; kind: string; meta: { date: string; counselor: string }; filename: string; upload_size: number;
@@ -28,6 +28,9 @@ const WAIT: Record<string, string> = {
   groq_unavailable: "받아쓰기 서비스가 일시적으로 응답하지 않아 다시 시도합니다.", fallback_unavailable: "예비 받아쓰기도 일시적으로 사용할 수 없어 다시 시도합니다.",
   retry_backoff: "잠시 후 다시 시도합니다.", stt_not_available: "받아쓰기 서비스를 사용할 수 없어 대기합니다.",
 };
+// 처리 단계 표시: 업로드 → 압축·분할 → 받아쓰기 → 요약 (상태에서 어느 단계인지 계산)
+const STEPS = ["업로드", "압축·분할", "받아쓰기", "요약"];
+const STEP_AT: Record<string, number> = { uploading: 0, queued: 1, transcribing: 2, waiting: 2, merging: 2, summarizing: 3, draft_ready: 3, approved: 4, rejected: 4 };
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const mb = (b?: number) => (b ? `${(b / 1024 / 1024).toFixed(1)}MB` : "-");
 const mins = (s?: number) => (s ? `${Math.round(s / 60)}분` : "-");
@@ -65,16 +68,19 @@ export default function RecordingConsultation({ childId, defaultKind = "consulta
     onSuccess: () => { setFile(null); setInputKey((k) => k + 1); setForm((f) => ({ ...f, consent: false })); },
   });
   return (
-    <div className="space-y-3">
-      <Card title="녹음 파일로 기록 만들기" action={<Mic size={16} className="text-slate-400" aria-hidden />}>
+    <div className="space-y-4">
+      <Section title="녹음 파일로 기록 만들기">
         <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); start.mutate(); }}>
-          <Label label={`녹음 파일 (m4a, mp3, wav 등 · ${MAX_MB}MB 이하 · 최대 3시간)`}>
-            <Input key={inputKey} type="file" accept="audio/*,.m4a,.mp3,.wav,.webm,.ogg,.flac,.aac" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required />
-          </Label>
+          <Segmented aria-label="종류" value={form.kind} onChange={(kind) => setForm({ ...form, kind })} items={[["session", "치료 회기"], ["consultation", "보호자 상담"]]} />
+          <label className="flex cursor-pointer flex-wrap items-center gap-3 rounded-[20px] border-[1.5px] border-dashed border-slate-300 p-4 hover:bg-slate-100">
+            <Upload size={20} aria-hidden />
+            <span className="min-w-0 flex-1 text-sm">{file ? <b className="break-all font-semibold">{file.name}</b> : "녹음 파일을 선택하세요"}
+              <span className="block text-xs text-slate-500">m4a, mp3, wav 등 · {MAX_MB}MB 이하 · 최대 3시간</span></span>
+            <span className="rounded-full border border-slate-300 px-3.5 py-1.5 text-sm font-semibold">파일 선택</span>
+            <input key={inputKey} type="file" className="sr-only" aria-label="녹음 파일" accept="audio/*,.m4a,.mp3,.wav,.webm,.ogg,.flac,.aac" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required />
+          </label>
           {fileError && <Notice tone="red">{fileError}</Notice>}
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-            <Label label="종류"><Select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value as "session" | "consultation" })}>
-              <option value="session">치료 회기</option><option value="consultation">보호자 상담</option></Select></Label>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
             <Label label="날짜"><Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required /></Label>
             <Label label="시작 (선택)"><Input type="time" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} /></Label>
             <Label label="종료 (선택)"><Input type="time" value={form.end} onChange={(e) => setForm({ ...form, end: e.target.value })} /></Label>
@@ -93,7 +99,7 @@ export default function RecordingConsultation({ childId, defaultKind = "consulta
           {start.error && <Notice tone="red">{errText(start.error)}</Notice>}
           <Button disabled={!file || !!fileError || !form.consent || start.isPending}>{start.isPending ? "올리는 중…" : "올리고 받아쓰기 시작"}</Button>
         </form>
-      </Card>
+      </Section>
       {jobs.data?.filter((j) => j.status !== "cancelled").slice(0, 5).map((j) => <JobCard key={j.id} job={j} childId={childId} />)}
     </div>
   );
@@ -106,10 +112,18 @@ function JobCard({ job, childId }: { job: Job; childId: string }) {
   const retry = useMutation({ mutationFn: () => api(`/recordings/${job.id}/retry`, { method: "POST" }), onSuccess: refresh });
   const [label, tone] = STATUS[job.status] ?? [job.status, "slate"];
   const active = !["draft_ready", "approved", "rejected", "failed", "cancelled"].includes(job.status);
+  const at = STEP_AT[job.status];
   const pct = job.chunk_count ? Math.round(((job.chunks_done ?? 0) / job.chunk_count) * 100) : 0;
   return (
     <Card title={`${job.kind === "session" ? "회기" : "상담"} 녹음 · ${job.meta.date}`} action={<Badge tone={tone}>{label}</Badge>}>
       <div className="space-y-2 text-sm">
+        {at !== undefined && (
+          <div className="grid grid-cols-4 gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200">
+            {STEPS.map((l, i) => (
+              <div key={l} className={`px-3 py-2 text-xs ${i === at ? "bg-indigo-100" : "bg-white"}`}>
+                <div className={`font-semibold ${i === at ? "text-indigo-700" : ""}`}>{i < at ? "완료" : i === at ? (job.status === "draft_ready" ? "검토 대기" : "진행 중") : "대기"}</div><div>{l}</div>
+              </div>))}
+          </div>)}
         <p className="text-xs text-slate-500">{job.filename} · 길이 {mins(job.duration_seconds)} · 원본 {mb(job.original_size ?? job.upload_size)} → 변환 {mb(job.compressed_size)}</p>
         {(job.status === "transcribing" || job.status === "waiting") && job.chunk_count ? (
           <div><div className="h-2 w-full overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-indigo-600" style={{ width: `${pct}%` }} /></div>
@@ -152,7 +166,7 @@ function Review({ job, childId }: { job: Job; childId: string }) {
   });
   if (!draft.data) return draft.isLoading ? <p className="text-xs text-slate-400">초안을 불러오는 중…</p> : <Notice>이 녹음의 기록은 이미 승인되었거나 반려되었습니다.</Notice>;
   return (
-    <div className="space-y-3 rounded-lg border border-amber-300 p-3">
+    <div className="space-y-3 rounded-3xl bg-slate-100 p-4">
       <Notice>AI가 만든 <b>미승인 초안</b>입니다. 녹취록과 대조해 고친 뒤 승인하세요. 녹음에서 확인되지 않은 항목은 "확인되지 않음"으로 두었습니다.</Notice>
       <details>
         <summary className="cursor-pointer text-sm text-indigo-700">녹취록 보기·수정</summary>

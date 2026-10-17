@@ -27,9 +27,10 @@ export default function Notices() {
   return (
     <>
       <PageTitle title="공지사항" sub="사이트 공지와 우리 기관 공지를 함께 보여요. 고정된 공지가 맨 위에 와요." />
-      {isAdmin && !editing && <div className="mb-3"><Button onClick={() => { save.reset(); setEditing("new"); }}><Plus size={14} />기관 공지 쓰기</Button></div>}
+      {!editing && <div className="mb-5 flex flex-wrap items-center gap-3"><span className="text-[13px] text-slate-500">사이트 공지와 기관 공지를 함께 표시합니다</span>
+        {isAdmin && <Button className="ml-auto" onClick={() => { save.reset(); setEditing("new"); }}><Plus size={14} />기관 공지 쓰기</Button>}</div>}
       {isAdmin && editing && (
-        <Card title={editing === "new" ? "기관 공지 쓰기" : "기관 공지 수정"} className="mb-4">
+        <Card title={editing === "new" ? "기관 공지 쓰기" : "기관 공지 수정"} className="mb-6 bg-slate-100">
           <NoticeEditor key={editing === "new" ? "new" : editing.id} initial={editing === "new" ? undefined : editing} busy={save.isPending} onSave={(d) => save.mutate(d)} onCancel={() => setEditing(null)} />
           {save.error && <div className="mt-2"><Alert tone="red">{errText(save.error)}</Alert></div>}
         </Card>)}

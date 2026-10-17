@@ -65,3 +65,37 @@ export const Empty = ({ children }: { children: ReactNode }) => <p className="py
 // API error notice; 404 from endpoints the server has not shipped yet shows a soft notice instead.
 export const ErrorNotice = ({ error }: { error: unknown }) => !error ? null : error instanceof ApiError && error.status === 404
   ? <Notice>서버가 아직 이 기능을 지원하지 않습니다.</Notice> : <Notice tone="red">{error instanceof Error ? error.message : String(error)}</Notice>;
+/** Page-level tabs: flush-left labels with an accent underline on the current one. */
+export function Tabs<T extends string>({ value, onChange, items, className }: { value: T; onChange: (v: T) => void; items: [T, ReactNode][]; className?: string }) {
+  return (
+    <div role="tablist" className={clsx("mb-6 flex overflow-x-auto border-b border-slate-200 [scrollbar-width:none]", className)}>
+      {items.map(([id, label]) => (
+        <button key={id} type="button" role="tab" aria-selected={value === id} onClick={() => onChange(id)}
+          className={clsx("h-11 shrink-0 whitespace-nowrap px-5 text-sm font-semibold transition-colors hover:bg-slate-100", value === id ? "text-indigo-600 shadow-[inset_0_-3px_0_var(--color-indigo-600)]" : "text-slate-900")}>{label}</button>))}
+    </div>
+  );
+}
+/** Pill segmented choice; the chosen option fills with the accent (or ink, via `tone`). */
+export function Segmented<T extends string>({ value, onChange, items, tone, disabled, className, "aria-label": ariaLabel }: {
+  value: T; onChange: (v: T) => void; items: [T, ReactNode][]; tone?: (v: T) => "accent" | "ink"; disabled?: boolean; className?: string; "aria-label"?: string;
+}) {
+  return (
+    <div role="radiogroup" aria-label={ariaLabel} className={clsx("inline-flex overflow-hidden rounded-full border border-slate-300", className)}>
+      {items.map(([id, label], i) => (
+        <button key={id} type="button" role="radio" aria-checked={value === id} disabled={disabled} onClick={() => onChange(id)}
+          className={clsx("whitespace-nowrap px-3 py-1.5 text-[13px] transition-colors disabled:opacity-45", i > 0 && "border-l border-slate-300",
+            value === id ? (tone?.(id) === "ink" ? "bg-slate-900 text-slate-50" : "bg-indigo-600 text-slate-50") : "hover:bg-slate-900/[.06]")}>{label}</button>))}
+    </div>
+  );
+}
+/** An unboxed page section: a heading, an optional action on the right, then content. */
+export const Section = ({ title, action, children, className }: { title: ReactNode; action?: ReactNode; children: ReactNode; className?: string }) => (
+  <section className={clsx("min-w-0", className)}>
+    <div className="mb-4 flex flex-wrap items-center gap-3"><h3 className="text-xl font-semibold leading-tight md:text-[25px]">{title}</h3>{action && <div className="ml-auto flex flex-wrap items-center gap-2">{action}</div>}</div>
+    {children}
+  </section>
+);
+/** Dashed placeholder box for "nothing here yet" areas. */
+export const Placeholder = ({ children }: { children: ReactNode }) => (
+  <div className="rounded-[20px] border-[1.5px] border-dashed border-slate-300 px-6 py-12 text-sm text-slate-500">{children}</div>
+);

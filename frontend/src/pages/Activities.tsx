@@ -5,7 +5,7 @@ import { useChild } from "../lib/child";
 import { errText } from "../lib/hooks";
 import RequireChild from "../components/RequireChild";
 import { ApprovedHistory, DraftView, type Draft } from "../components/DraftView";
-import { Button, Card, Input, Label, Notice, PageTitle, Textarea } from "../components/ui";
+import { Button, Input, Label, Notice, PageTitle, Placeholder, Section, Textarea } from "../components/ui";
 
 const SECTIONS: [string, string][] = [["purpose", "활동 목적"], ["materials", "준비물"], ["sequence", "진행 순서"], ["modeling_examples", "언어적 모델링 예시"],
   ["response_elicitation", "반응 유도 방법"], ["difficulty_adjustments", "난이도 조절"], ["measurement", "수행 측정 방법"], ["parent_linkage", "보호자 연계 활동"]];
@@ -23,8 +23,8 @@ function Inner({ childId }: { childId: string }) {
   });
   const set = (k: keyof typeof f) => (e: any) => setF({ ...f, [k]: e.target.value });
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
-      <Card title="활동 조건">
+    <div className="grid items-start gap-10 lg:grid-cols-2">
+      <Section title="활동 조건">
         <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); setDraft(null); run.mutate(); }}>
           <p className="text-xs text-slate-500">아동 연령: {ageLabel(child?.age_months)} (생년월일에서 자동 계산)</p>
           <Label label="목표 영역"><Input value={f.goal_area} onChange={set("goal_area")} placeholder="예: 2음절 단어 모방" required /></Label>
@@ -36,12 +36,12 @@ function Inner({ childId }: { childId: string }) {
             <Label label="촉진 수준"><Input value={f.prompting_level} onChange={set("prompting_level")} placeholder="예: 모델링" required /></Label>
           </div>
           {run.error && <Notice tone="red">{errText(run.error)}</Notice>}
-          <Button disabled={run.isPending}>{run.isPending ? "생성 중…" : "AI 활동 초안 생성"}</Button>
+          <div className="pt-2"><Button disabled={run.isPending}>{run.isPending ? "생성 중…" : "AI 활동 초안 생성"}</Button></div>
         </form>
-      </Card>
-      <div className="space-y-4 lg:col-span-2">
+      </Section>
+      <div className="min-w-0 space-y-6">
         {draft ? <DraftView draft={draft} sections={SECTIONS} onDone={() => setDraft(null)} />
-          : <Notice>조건을 입력하고 생성하면 활동 초안이 여기에 표시됩니다. 승인 전에는 저장되지 않습니다.</Notice>}
+          : <Placeholder>조건을 입력하고 생성하면 활동 초안이 여기에 표시됩니다. 승인 전에는 저장되지 않습니다.</Placeholder>}
         <ApprovedHistory path={`/children/${childId}/therapy-activities`} sections={SECTIONS} kindLabel="치료활동" />
       </div>
     </div>

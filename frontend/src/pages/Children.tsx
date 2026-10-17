@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileSpreadsheet, RotateCcw, Trash2 } from "lucide-react";
+import { FileSpreadsheet, Plus, RotateCcw, Trash2 } from "lucide-react";
 import ChildImport from "../components/ChildImport";
 import { ageLabel, api } from "../lib/api";
 import { useChild } from "../lib/child";
@@ -19,6 +19,8 @@ export default function Children() {
   const qc = useQueryClient();
   const role = useMe().data?.role, canWrite = role === "admin" || role === "therapist";
   const [importing, setImporting] = useState(false);
+  const [formOpen, setFormOpen] = useState<boolean | null>(null);  // null: open only while there are no children
+  const showForm = formOpen ?? children.length === 0;
   const therapists = useQuery({ queryKey: ["org", "therapists"], queryFn: () => api<string[]>("/org/therapists") }).data ?? [];
   const sorted = [...children].sort((a, b) => a.alias.localeCompare(b.alias, "ko", { numeric: true }) || a.display_name.localeCompare(b.display_name, "ko"));
   const assign = useMutation({
@@ -49,9 +51,15 @@ export default function Children() {
   return (
     <>
       <PageTitle title="아동 관리" sub="최소 정보만 수집합니다. 가명코드만 AI에 전달되며 이름·연락처는 전송되지 않습니다." />
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card title="아동 등록">
-          <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); create.mutate(); }}>
+      <div className="mb-5 flex flex-wrap items-center gap-2">
+        <Button onClick={() => setFormOpen(!showForm)} aria-expanded={showForm}><Plus size={14} />아동 등록</Button>
+        {canWrite && <Button variant="outline" onClick={() => setImporting(!importing)}><FileSpreadsheet size={14} />엑셀로 한꺼번에 등록</Button>}
+        <span className="ml-auto text-[13px] text-slate-500">아동 {children.length}명</span>
+      </div>
+      {showForm && (
+        <div className="mb-7 rounded-3xl bg-slate-100 p-5 shadow-sm">
+          <form onSubmit={(e) => { e.preventDefault(); create.mutate(); }}>
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3">
             <Label label="가명코드 (예: A-01)"><Input value={f.alias} onChange={(e) => setF({ ...f, alias: e.target.value })} required /></Label>
             <Label label="이름"><Input value={f.display_name} onChange={(e) => setF({ ...f, display_name: e.target.value })} required /></Label>
             <Label label="생년월일"><Input type="date" value={f.birth_date} onChange={(e) => setF({ ...f, birth_date: e.target.value })} required /></Label>
@@ -62,16 +70,16 @@ export default function Children() {
               <option value="">미입력</option><option value="Y">Y (등록)</option><option value="N">N (미등록)</option></Select></Label>
             <Label label="바우처 등급"><Select value={f.voucher_grade} onChange={(e) => setF({ ...f, voucher_grade: e.target.value })}>
               <option value="">바우처 없음 (유료)</option>{GRADES.map(([g, d]) => <option key={g} value={g}>{g}형 ({d})</option>)}</Select></Label>
-            {create.error && <Notice tone="red">{errText(create.error)}</Notice>}
-            <Button disabled={create.isPending}>등록</Button>
+            </div>
+            {create.error && <div className="mt-3"><Notice tone="red">{errText(create.error)}</Notice></div>}
+            <div className="mt-4 flex gap-2"><Button disabled={create.isPending}>등록</Button><Button type="button" variant="outline" onClick={() => setFormOpen(false)}>닫기</Button></div>
           </form>
-        </Card>
-        <Card title={`아동 목록 (${children.length})`} className="lg:col-span-2"
-          action={canWrite && <Button variant="outline" onClick={() => setImporting(!importing)}><FileSpreadsheet size={14} />엑셀로 등록</Button>}>
+        </div>)}
+      <div>
           {children.length === 0 ? <Empty>{role === "therapist" ? "담당 아동이 없어요. 치료사는 담당 아동만 보여요. 기관 관리자가 기관 설정 › 치료사 목록에서 이 계정을 연결하고 아동의 담당 치료사로 지정하면 나타나요." : "등록된 아동이 없습니다."}</Empty> : (
             <Table head={["가명", "이름", "생년월일", "성별", "나이", "장애등록", "바우처 등급", "담당", ""]}>
               {sorted.map((c) => (
-                <tr key={c.id}><Td>{c.alias}</Td><Td>{c.display_name}</Td><Td>{c.birth_date}</Td><Td>{(c as any).sex ?? "-"}</Td><Td>{ageLabel((c as any).age_months) || "-"}</Td>
+                <tr key={c.id} className={c.id === childId ? "bg-indigo-100/70" : undefined}><Td className="font-semibold">{c.alias}</Td><Td>{c.display_name}</Td><Td>{c.birth_date}</Td><Td>{(c as any).sex ?? "-"}</Td><Td>{ageLabel((c as any).age_months) || "-"}</Td>
                   <Td>{canWrite
                     ? <Select aria-label={`${c.display_name} 장애등록 여부`} className="w-16 min-w-16 py-1" value={ynOf((c as any).disability_registered)} disabled={disability.isPending}
                         onChange={(e) => disability.mutate({ id: c.id, value: yn(e.target.value) })}>
@@ -94,13 +102,12 @@ export default function Children() {
               ))}
             </Table>
           )}
-        </Card>
       </div>
       {importing && <ChildImport onClose={() => setImporting(false)} />}
       <Trash isAdmin={role === "admin"} canWrite={canWrite} />
       {del && (
         <div className="fixed inset-0 z-30 flex items-end justify-center bg-slate-900/30 p-2 sm:items-center" onClick={() => setDel(null)}>
-          <div role="dialog" aria-label="아동 삭제" className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div role="dialog" aria-label="아동 삭제" className="w-full max-w-sm rounded-3xl bg-slate-100 p-5 shadow-lg" onClick={(e) => e.stopPropagation()}>
             <p className="text-base font-semibold">{del.display_name} ({del.alias}) 아동을 삭제할까요?</p>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-600">
               <li>아동 목록과 주간 시간표에서 빠지고, 오늘 이후 예정된 일정은 취소돼요.</li>
@@ -132,7 +139,7 @@ function Trash({ isAdmin, canWrite }: { isAdmin: boolean; canWrite: boolean }) {
   });
   if (!list.data?.length) return null;
   return (
-    <Card title={`삭제된 아동 (${list.data.length})`} className="mt-4">
+    <Card title={`휴지통 · 삭제된 아동 (${list.data.length})`} className="mt-10">
       <Table head={["가명", "이름", "삭제한 날", ""]}>
         {list.data.map((c) => (
           <tr key={c.id} className="text-slate-500"><Td>{c.alias}</Td><Td>{c.display_name}</Td><Td>{c.archived_at?.slice(0, 10) ?? "-"}</Td>
