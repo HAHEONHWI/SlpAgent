@@ -3,6 +3,7 @@ import { ChevronDown, Search, X } from "lucide-react";
 import clsx from "clsx";
 import { useChild } from "../lib/child";
 import { useMe } from "../lib/me";
+import { ageLabel } from "../lib/api";
 
 const CHO = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ";
 /** "가나다" -> "ㄱㄴㄷ" so typing initial consonants finds a child. */
@@ -20,10 +21,13 @@ type Props = {
   placeholder?: string;
   className?: string;
   "aria-label"?: string;
+  /** "header": the larger top-bar picker with the child's initial and age. */
+  variant?: "field" | "header";
 };
 
 /** Searchable child picker (name, code, or 초성), used everywhere a child is chosen. */
-export default function ChildPicker({ value, onChange, emptyLabel, placeholder = "아동 이름·코드 검색", className, ...rest }: Props) {
+export default function ChildPicker({ value, onChange, emptyLabel, placeholder = "아동 이름·코드 검색", className, variant = "field", ...rest }: Props) {
+  const header = variant === "header";
   const { children } = useChild();
   const [open, setOpen] = useState(false), [q, setQ] = useState(""), [hi, setHi] = useState(0);
   const box = useRef<HTMLDivElement>(null), input = useRef<HTMLInputElement>(null), list = useRef<HTMLUListElement>(null);
@@ -69,16 +73,27 @@ export default function ChildPicker({ value, onChange, emptyLabel, placeholder =
 
   return (
     <div ref={box} className={clsx("relative", className)}>
-      {!open ? (
+      {!open && header ? (
         <button type="button" onClick={show} aria-haspopup="listbox" aria-label={rest["aria-label"] ?? "아동 선택"}
-          className="flex w-full items-center gap-2 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-left text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          className={clsx("flex h-11 w-full items-center gap-3 rounded-2xl border border-slate-200 px-2 text-left text-slate-900 sm:px-3", selected ? "bg-indigo-100" : "bg-slate-50 hover:bg-slate-100")}>
+          <span className={clsx("grid size-7 shrink-0 place-items-center rounded-full text-xs font-semibold", selected ? "bg-indigo-600 text-slate-50" : "bg-slate-100")}>{selected ? selected.display_name[0] : "–"}</span>
+          <span className="flex min-w-0 flex-1 flex-col leading-tight">
+            <span className="text-[10px] uppercase tracking-[.1em] opacity-60">아동 선택</span>
+            <span className="truncate text-sm font-semibold">{selected ? `${selected.alias} ${selected.display_name}` : emptyLabel ?? "선택 안 함"}</span>
+          </span>
+          {selected && selected.age_months != null && <span className="hidden shrink-0 rounded-full border border-indigo-600 bg-slate-50 px-2.5 py-0.5 text-[11px] text-indigo-600 lg:inline">만 {ageLabel(selected.age_months)}</span>}
+          <ChevronDown size={16} className="shrink-0" />
+        </button>
+      ) : !open ? (
+        <button type="button" onClick={show} aria-haspopup="listbox" aria-label={rest["aria-label"] ?? "아동 선택"}
+          className="flex min-h-9 w-full items-center gap-2 rounded-[14px] border border-slate-300/80 bg-slate-100/70 px-3 py-1.5 text-left text-sm hover:border-slate-400 focus:outline-none focus-visible:border-indigo-600">
           <span className={clsx("min-w-0 flex-1 truncate", !selected && "text-slate-500")}>
             {selected ? <>{selected.display_name} <span className="text-slate-500">· {selected.alias}</span></> : emptyLabel ?? "아동 선택"}
           </span>
           <ChevronDown size={14} className="shrink-0 text-slate-400" />
         </button>
       ) : (
-        <div className="flex items-center gap-2 rounded-md border border-indigo-500 bg-white px-2.5 py-1.5 ring-2 ring-indigo-500">
+        <div className={clsx("flex items-center gap-2 border border-indigo-600 bg-white px-3 ring-2 ring-indigo-600/15", header ? "h-11 rounded-2xl" : "min-h-9 rounded-[14px] py-1.5")}>
           <Search size={14} className="shrink-0 text-slate-400" />
           <input ref={input} value={q} onChange={(e) => { setQ(e.target.value); setOpen(true); }} onKeyDown={key} placeholder={placeholder}
             role="combobox" aria-expanded aria-controls={id} aria-autocomplete="list" aria-label={rest["aria-label"] ?? "아동 검색"}
@@ -87,14 +102,14 @@ export default function ChildPicker({ value, onChange, emptyLabel, placeholder =
         </div>
       )}
       {open && (
-        <ul ref={list} id={id} role="listbox" className="absolute left-0 right-0 z-40 mt-1 max-h-72 min-w-56 overflow-y-auto rounded-md border border-slate-200 bg-white py-1 shadow-lg">
+        <ul ref={list} id={id} role="listbox" className={clsx("absolute left-0 z-40 mt-1 overflow-y-auto bg-slate-50 py-1 shadow-md", header ? "max-h-[420px] w-[min(420px,calc(100vw-24px))] rounded-3xl" : "right-0 max-h-72 min-w-56 rounded-2xl border border-slate-200")}>
           {options.length === 0 && <li className="px-3 py-2 text-sm text-slate-400">‘{q}’에 맞는 아동이 없어요</li>}
           {options.map((o, i) => (<Fragment key={o.id ?? "none"}>
             {o.group && o.group !== options[i - 1]?.group && (
-              <li role="presentation" className="sticky top-0 bg-slate-50 px-3 pb-0.5 pt-1.5 text-[11px] font-semibold text-slate-500">{o.group}</li>)}
+              <li role="presentation" className="sticky top-0 bg-slate-100 px-4 pb-1 pt-1.5 text-[11px] font-semibold text-slate-500">{o.group}</li>)}
             <li role="option" aria-selected={o.id === value}
               onMouseDown={(e) => { e.preventDefault(); pick(o.id); }} onMouseEnter={() => setHi(i)}
-              className={clsx("flex cursor-pointer items-baseline gap-2 px-3 py-1.5 text-sm", i === hi && "bg-indigo-50", o.id === value && "font-semibold text-indigo-800", o.id === null && "text-slate-500")}>
+              className={clsx("flex cursor-pointer items-baseline gap-2 border-b border-slate-200 px-4 text-sm last:border-b-0", header ? "py-2.5" : "py-1.5", i === hi && "bg-slate-100", o.id === value && "bg-indigo-100 font-semibold", o.id === null && "font-semibold")}>
               <span className="truncate">{o.label}</span>{o.sub && <span className="truncate text-xs text-slate-500">{o.sub}</span>}
             </li></Fragment>))}
         </ul>)}

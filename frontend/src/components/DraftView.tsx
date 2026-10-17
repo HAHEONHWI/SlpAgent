@@ -20,7 +20,7 @@ export function ClaimList({ claims }: { claims: Claim[] }) {
       {claims.map((c, i) => (
         <li key={i} className="text-sm">
           <p>{typeof c === "string" ? c : c.text}</p>
-          <div className="mt-1 flex flex-wrap gap-1">{(c?.evidence ?? []).map((e, j) => <span key={j} className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">근거: {evLabel(e)}</span>)}</div>
+          <div className="mt-1 flex flex-wrap gap-1">{(c?.evidence ?? []).map((e, j) => <span key={j} className="rounded-full bg-slate-200/70 px-2 py-0.5 text-[11px] text-slate-700">근거: {evLabel(e)}</span>)}</div>
         </li>
       ))}
     </ul>
@@ -36,16 +36,28 @@ export function DraftView({ draft, sections, onDone }: { draft: Draft; sections:
   return (
     <div className="space-y-4">
       <Notice>AI가 만든 <b>미승인 초안</b>입니다. 진단이 아니며, 근거를 원자료와 대조한 뒤 승인하세요. 수정이 필요하면 AI 대화의 승인 대기 목록에서 내용을 고칠 수 있습니다.</Notice>
-      {sections.map(([key, label]) => {
-        const v = draft.payload[key];
-        if (v === undefined) return null;
-        return <Card key={key} title={label}>{Array.isArray(v) ? <ClaimList claims={v} /> : <ClaimList claims={[v]} />}</Card>;
-      })}
-      <div className="flex items-center gap-2">
-        <Badge tone="amber">미승인 초안</Badge>
-        <Button onClick={() => approve.mutate()} disabled={approve.isPending}>검토 완료 · 승인</Button>
-        <Button variant="ghost" onClick={() => reject.mutate()} disabled={reject.isPending}>반려</Button>
-      </div>
+      <section className="overflow-hidden rounded-3xl bg-slate-100 shadow-sm">
+        <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
+          <span className="rounded-full border border-indigo-600 px-2.5 py-0.5 text-[11px] text-indigo-600">AI 초안</span>
+          <span className="ml-auto"><Badge tone="indigo">미승인 초안</Badge></span>
+        </div>
+        <div className="flex flex-col gap-3 p-4">
+          {sections.map(([key, label]) => {
+            const v = draft.payload[key];
+            if (v === undefined) return null;
+            return (
+              <div key={key} className="grid gap-x-3 gap-y-1 border-t border-slate-200 pt-3 first:border-t-0 first:pt-0 sm:grid-cols-[96px_minmax(0,1fr)]">
+                <h3 className="text-[11px] font-semibold tracking-[.08em] text-slate-500">{label}</h3>
+                {Array.isArray(v) ? <ClaimList claims={v} /> : <ClaimList claims={[v]} />}
+              </div>);
+          })}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 border-t border-slate-200 px-4 py-3">
+          <Button onClick={() => approve.mutate()} disabled={approve.isPending}>검토 완료 · 승인</Button>
+          <Button variant="outline" onClick={() => reject.mutate()} disabled={reject.isPending}>반려</Button>
+          <span className="ml-auto text-xs text-slate-500">승인 전에는 기록에 반영되지 않습니다</span>
+        </div>
+      </section>
       {(approve.error || reject.error) && <Notice tone="red">{errText(approve.error || reject.error)}</Notice>}
     </div>
   );
@@ -68,7 +80,7 @@ export function ApprovedHistory({ path, sections, kindLabel }: { path: string; s
                 <Badge tone="green">승인됨</Badge><span className="font-medium">{kindLabel}</span>
                 <span className="text-slate-500">{it.created_at.slice(0, 16).replace("T", " ")}</span>
                 {it.approved_by && <span className="text-xs text-slate-400">승인: {it.approved_by}</span>}
-                <span className="ml-auto text-xs text-indigo-600">{open === it.id ? "접기" : "펼치기"}</span>
+                <span className="ml-auto text-xs font-semibold text-indigo-700">{open === it.id ? "접기" : "펼치기"}</span>
               </button>
               {open === it.id && (
                 <div className="mt-3 space-y-3">

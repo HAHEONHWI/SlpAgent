@@ -27,9 +27,9 @@ function Inner({ childId, initial }: { childId: string; initial: Mode }) {
   const m = MODES[mode];
   return (
     <div className="space-y-4">
-      <div className="flex gap-1 rounded-lg bg-slate-100 p-1 text-sm w-fit">
+      <div className="flex gap-1 rounded-full bg-slate-100 p-1 text-sm w-fit">
         {(Object.keys(MODES) as Mode[]).map((k) => (
-          <button key={k} onClick={() => { setMode(k); setDraft(null); run.reset(); }} className={`rounded-md px-3 py-1.5 ${k === mode ? "bg-white font-semibold shadow-sm" : "text-slate-600"}`}>{MODES[k].label}</button>))}
+          <button key={k} onClick={() => { setMode(k); setDraft(null); run.reset(); }} className={`rounded-full px-3 py-1.5 ${k === mode ? "bg-white font-semibold shadow-sm" : "text-slate-600"}`}>{MODES[k].label}</button>))}
       </div>
       <Card title={m.label}>
         <p className="mb-3 text-sm text-slate-600">저장된 {m.needs}만 근거로 사용합니다. 서로 다른 검사의 점수는 합산하지 않으며, 기록에 없는 사실은 만들지 않습니다.{mode === "behavior" && " 자폐·행동장애를 진단하지 않고, 강압적 중재는 제안하지 않습니다."}</p>

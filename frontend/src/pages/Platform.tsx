@@ -47,10 +47,10 @@ export default function Platform() {
         <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
           {[["승인 대기", s?.pending_signups], ["기관", s?.organizations], ["사용자", s?.users], ["아동", s?.children], ["최근 30일 회기", s?.sessions_30d], ["최근 30일 가입 신청", s?.signups_30d]].map(([k, v]) => kpi(k as string, v))}
         </div>
-        <div className="flex max-w-full gap-1 overflow-x-auto rounded-lg bg-slate-100 p-1 text-sm sm:w-fit" role="tablist">
+        <div className="flex max-w-full gap-1 overflow-x-auto rounded-full bg-slate-100 p-1 text-sm sm:w-fit" role="tablist">
           {TABS.map(([k, l]) => (
             <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
-              className={`shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 sm:px-4 ${tab === k ? "bg-white font-semibold shadow-sm" : "text-slate-600"}`}>{l}</button>))}
+              className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 sm:px-4 ${tab === k ? "bg-white font-semibold shadow-sm" : "text-slate-600"}`}>{l}</button>))}
         </div>
         {tab === "signups" && <Signups orgs={orgs.data ?? []} />}
         {tab === "orgs" && <Orgs orgs={orgs.data ?? []} />}

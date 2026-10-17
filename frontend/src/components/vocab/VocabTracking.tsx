@@ -9,9 +9,9 @@ export type VocabRecord = {
 export const STATUS: Record<string, string> = { not_observed: "미관찰", emerging: "출현 중", with_prompt: "촉진 시 가능", independent: "독립 사용" };
 export const MOD: Record<string, string> = { receptive: "수용", expressive: "표현" };
 const SERIES = [
-  { key: "emerging", color: "#f59e0b" },
-  { key: "with_prompt", color: "#6366f1" },
-  { key: "independent", color: "#16a34a" },
+  { key: "emerging", color: "#f2bfa6" },
+  { key: "with_prompt", color: "#d9694a" },
+  { key: "independent", color: "#8a2f18" },
 ] as const;
 const TONE: Record<string, "slate" | "amber" | "indigo" | "green"> = { not_observed: "slate", emerging: "amber", with_prompt: "indigo", independent: "green" };
 
@@ -45,7 +45,7 @@ function ModalityChart({ modality, rows }: { modality: string; rows: VocabRecord
       {data.length < 2 ? <Empty>관찰일이 2개 이상 기록되면 변화 그래프가 표시됩니다.</Empty> : (
         <div className="h-64"><ResponsiveContainer>
           <BarChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#ece2d5" />
             <XAxis dataKey="date" fontSize={11} />
             <YAxis allowDecimals={false} fontSize={11} />
             <Tooltip /><Legend wrapperStyle={{ fontSize: 12 }} />

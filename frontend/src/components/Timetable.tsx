@@ -78,7 +78,7 @@ export default function Timetable() {
             className={`h-7 border border-slate-300 px-1 text-center text-[13px] leading-tight ${edit ? "cursor-pointer hover:outline hover:outline-2 hover:outline-indigo-400" : ""}`}
             onClick={edit ? () => setCell({ day, slot, teacher: t }) : undefined}>
             {items.map((e) => (
-              <span key={e.id} className={`block font-semibold ${e.highlight ? "rounded bg-yellow-200 px-1" : ""}`} style={{ color: t.color }}
+              <span key={e.id} className={`block font-semibold ${e.highlight ? "rounded-md bg-indigo-600 px-1 !text-slate-50" : ""}`} style={{ color: t.color }}
                 title={[e.note, e.valid_from && `${e.valid_from}부터`, e.valid_to && `${e.valid_to}까지`].filter(Boolean).join(" · ")}>
                 {e.child_id ? childName(e.child_id) : e.label}{e.note && <span className="font-normal">({e.note})</span>}
               </span>))}
@@ -118,10 +118,10 @@ export default function Timetable() {
                 <button key={d} role="tab" aria-selected={shown[0] === d} onClick={() => setPhoneDay(d)}
                   className={`rounded-md py-1.5 text-sm ${shown[0] === d ? "bg-indigo-600 font-semibold text-white" : "bg-slate-100 text-slate-700"}`}>{DAY[d]}</button>))}
             </div>)}
-          <div className="tt-sheet overflow-x-auto rounded-lg border border-slate-300 bg-white">
+          <div className="tt-sheet overflow-x-auto rounded-2xl border border-slate-300 bg-white">
             <table className={`w-full border-collapse ${phone ? "" : "min-w-[720px]"}`}>
               <thead>
-                <tr className="bg-yellow-100 text-sm">
+                <tr className="bg-slate-100 text-sm">
                   <th className="w-16 border border-slate-300 py-1" /><th className="w-12 border border-slate-300 py-1">담당</th>
                   {shown.map((d) => <th key={d} className="border border-slate-300 py-1" style={d >= 6 ? WEEKEND : undefined}>{DAY[d]}{phone && "요일"}</th>)}
                 </tr>
@@ -182,8 +182,8 @@ function CellEditor({ cell, entries, cfg, isAdmin, closedHere, onClose, onSaved 
         {closedHere ? <Notice>닫아 둔 칸입니다.</Notice> : (
           <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); save.mutate(); }}>
             <p className="text-sm font-medium text-slate-700">{editing ? "수정" : "아동 넣기"}</p>
-            <div className="grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1 text-sm">
-              {(["child", "label"] as const).map((m) => <button type="button" key={m} onClick={() => setF({ ...f, mode: m })} className={`rounded-md py-1 ${f.mode === m ? "bg-white font-semibold shadow-sm" : "text-slate-600"}`}>{m === "child" ? "등록된 아동" : "이름만 입력"}</button>)}
+            <div className="grid grid-cols-2 gap-1 rounded-full bg-slate-100 p-1 text-sm">
+              {(["child", "label"] as const).map((m) => <button type="button" key={m} onClick={() => setF({ ...f, mode: m })} className={`rounded-full py-1 ${f.mode === m ? "bg-white font-semibold shadow-sm" : "text-slate-600"}`}>{m === "child" ? "등록된 아동" : "이름만 입력"}</button>)}
             </div>
             {f.mode === "child"
               ? <ChildPicker value={f.child_id || null} onChange={(id) => setF({ ...f, child_id: id ?? "" })} aria-label="아동" />

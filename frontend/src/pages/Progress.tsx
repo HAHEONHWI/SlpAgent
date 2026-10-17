@@ -3,7 +3,7 @@ import { useRecords } from "../lib/hooks";
 import RequireChild from "../components/RequireChild";
 import { Card, Empty, Notice, PageTitle } from "../components/ui";
 
-const COLORS = ["#4f46e5", "#0891b2", "#d97706", "#059669", "#db2777", "#7c3aed"];
+const COLORS = ["#c85a36", "#4f7a5a", "#c49a3a", "#5b7a99", "#8e5a7a", "#6b5c50"];
 
 function Inner({ childId }: { childId: string }) {
   const list = useRecords<any>(childId, "sessions");

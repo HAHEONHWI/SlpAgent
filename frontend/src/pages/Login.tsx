@@ -37,17 +37,17 @@ export default function Login() {
     <div className="grid min-h-screen place-items-center p-4">
       <Card className="w-full max-w-sm">
         <BrandLogo className="mx-auto mb-4 w-44" />
-        <div className="mb-4 grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1 text-sm">
+        <div className="mb-4 grid grid-cols-2 gap-1 rounded-full bg-slate-100 p-1 text-sm">
           {(["login", "signup"] as const).map((t) => (
-            <button key={t} onClick={() => { setTab(t); setErr(null); setSent(""); }} className={`rounded-md py-1.5 ${tab === t || (t === "login" && tab === "reset") ? "bg-white font-semibold shadow-sm" : "text-slate-600"}`}>{t === "login" ? "로그인" : "회원가입"}</button>))}
+            <button key={t} onClick={() => { setTab(t); setErr(null); setSent(""); }} className={`rounded-full py-1.5 ${tab === t || (t === "login" && tab === "reset") ? "bg-white font-semibold shadow-sm" : "text-slate-600"}`}>{t === "login" ? "로그인" : "회원가입"}</button>))}
         </div>
         {tab === "reset" ? (
           sent ? (
             <div className="space-y-3">
-              <div role="status" className="flex gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900">
-                <MailCheck size={18} className="mt-0.5 shrink-0 text-emerald-600" aria-hidden />
+              <div role="status" className="flex gap-3 rounded-xl bg-green-100 px-4 py-3 text-green-800">
+                <MailCheck size={18} className="mt-0.5 shrink-0 text-green-700" aria-hidden />
                 <div><p className="text-sm font-semibold">메일을 확인해 주세요</p>
-                  <p className="mt-0.5 text-sm text-emerald-800/90"><b>{sent}</b>(으)로 가입된 계정이 있으면 비밀번호 재설정 링크를 보냈어요. 몇 분 안에 오지 않으면 스팸함도 확인해 주세요.</p></div>
+                  <p className="mt-0.5 text-sm text-green-800/90"><b>{sent}</b>(으)로 가입된 계정이 있으면 비밀번호 재설정 링크를 보냈어요. 몇 분 안에 오지 않으면 스팸함도 확인해 주세요.</p></div>
               </div>
               <Button className="w-full" onClick={() => { setTab("login"); setSent(""); }}>로그인으로 돌아가기</Button>
             </div>

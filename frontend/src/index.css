@@ -3,54 +3,61 @@
 @theme {
   --font-sans: "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
 
-  --color-slate-50: #faf7f2;
-  --color-slate-100: #f3eee6;
-  --color-slate-200: #ece5da;
-  --color-slate-300: #ddd3c5;
-  --color-slate-400: #9c9183;
-  --color-slate-500: #6b6359;
-  --color-slate-600: #61574c;
-  --color-slate-700: #4b4339;
-  --color-slate-800: #352f29;
-  --color-slate-900: #2b2722;
-  --color-slate-950: #201c18;
+  /* Claude Design "SLP Agent" palette: warm paper ground, brown ink, one terracotta accent.
+     `slate` is the neutral ink ramp and `indigo` the accent ramp, so existing classes pick it up. */
+  --color-white: #fffdf9;
+  --color-slate-50: #fcf8f2;
+  --color-slate-100: #f6eee4;
+  --color-slate-200: #ece2d5;
+  --color-slate-300: #ddcfbf;
+  --color-slate-400: #a8998b;
+  --color-slate-500: #7f7064;
+  --color-slate-600: #6b5c50;
+  --color-slate-700: #5a4c42;
+  --color-slate-800: #4f4239;
+  --color-slate-900: #4a3d35;
+  --color-slate-950: #2e2520;
 
-  --color-indigo-50: #eff7f2;
-  --color-indigo-100: #dcece2;
-  --color-indigo-200: #c1ddce;
-  --color-indigo-300: #9bc8b0;
-  --color-indigo-400: #6eae91;
-  --color-indigo-500: #4b9879;
-  --color-indigo-600: #2f7f6c;
-  --color-indigo-700: #286b5c;
-  --color-indigo-800: #225849;
-  --color-indigo-900: #194438;
+  --color-indigo-50: #fef6f1;
+  --color-indigo-100: #fdeee6;
+  --color-indigo-200: #f9dccd;
+  --color-indigo-300: #f2bfa6;
+  --color-indigo-400: #e8967a;
+  --color-indigo-500: #d9694a;
+  --color-indigo-600: #c85a36;
+  --color-indigo-700: #a93b20;
+  --color-indigo-800: #8a2f18;
+  --color-indigo-900: #6a2412;
 
   --color-amber-50: #fff8ec;
-  --color-amber-100: #fff0d8;
-  --color-amber-200: #f4dfb7;
-  --color-amber-700: #96652b;
-  --color-amber-800: #79501f;
-  --color-amber-900: #5b3b18;
+  --color-amber-100: #fbefd6;
+  --color-amber-200: #f1ddb3;
+  --color-amber-700: #8f6326;
+  --color-amber-800: #744e1d;
+  --color-amber-900: #573a17;
 
-  --color-green-100: #e4f3e9;
-  --color-green-700: #34734c;
-  --color-green-800: #285c3d;
+  --color-green-100: #e6f1e4;
+  --color-green-700: #3d6e43;
+  --color-green-800: #2f5734;
 
-  --color-red-50: #fff2ef;
-  --color-red-100: #ffe3dc;
-  --color-red-200: #f5c9be;
-  --color-red-600: #b94d3f;
-  --color-red-700: #983c32;
-  --color-red-800: #78342d;
+  /* Danger stays a deeper crimson so it reads apart from the terracotta accent. */
+  --color-red-50: #fdf0ef;
+  --color-red-100: #fae0dd;
+  --color-red-200: #f1c2bd;
+  --color-red-500: #c8342a;
+  --color-red-600: #b3261e;
+  --color-red-700: #8f1f19;
+  --color-red-800: #6f1914;
 
   --radius-sm: 0.5rem;
-  --radius-md: 0.625rem;
-  --radius-lg: 1rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 0.875rem;
   --radius-xl: 1.25rem;
   --radius-2xl: 1.5rem;
-  --shadow-sm: 0 2px 8px rgb(73 57 38 / 6%), 0 1px 2px rgb(73 57 38 / 4%);
-  --shadow-md: 0 12px 32px rgb(73 57 38 / 9%), 0 2px 8px rgb(73 57 38 / 5%);
+  --radius-3xl: 1.75rem;
+  --shadow-sm: 0 2px 24px rgb(120 80 50 / 9%);
+  --shadow-md: 0 6px 24px rgb(120 80 50 / 12%);
+  --shadow-lg: 0 14px 44px rgb(120 80 50 / 16%);
 }
 
 :root {
@@ -63,7 +70,12 @@ body {
   @apply bg-slate-50 text-slate-900 antialiased;
   min-width: 320px;
   margin: 0;
+  letter-spacing: -0.005em;
 }
+
+h1, h2, h3, h4 { letter-spacing: -0.015em; }
+
+:focus-visible { outline: 2px solid var(--color-indigo-600); outline-offset: 2px; }
 
 ::selection {
   background: var(--color-indigo-200);
