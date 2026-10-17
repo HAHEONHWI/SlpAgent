@@ -9,8 +9,8 @@ SLP Agent is a Korean-language assistant for speech-language therapists. Backend
 - `backend/app/auth.py`, `deps.py`, `rate_limit.py`: Firebase authentication, organization-scoped dependencies, and per-process request limits.
 - `backend/app/repo/`: memory and Firestore repository implementations.
 - `backend/app/routers/`: authenticated API routes.
-- `backend/app/services/`: AI, assessment, billing, knowledge, and document services.
-- `backend/app/data/assessments/`: local-only assessment item-bank JSON (git-ignored, docker-ignored). Production reads `ASSESSMENT_DATA_DIR`, mounted read-only from a private bucket. `backend/tests/fixtures/assessments/` holds a synthetic fixture only.
+- `backend/app/services/`: AI, licensed-test registry (`assessment_defs`), billing, knowledge, and document services.
+- 검사 결과 입력(발달검사 관리) was removed. Saved `assessments` records are kept untouched (purged with the child) but no route, AI tool, analysis or document reads them. 검사 서류 reach the AI only as `knowledge_documents` pages, retrievable by organizations licensed for that test. `backend/app/data/assessments/` (old item banks) stays local-only and git/docker-ignored.
 - `backend/tests/`: pytest suite.
 - `backend/scripts/`: local ingest, OCR, and admin utilities.
 - `docs/`: plans, operations, retention, and privacy procedures.
@@ -25,12 +25,12 @@ cd backend && .venv/bin/uvicorn app.main:app --reload
 ```
 
 Run source extraction locally with `cd backend && .venv/bin/python scripts/extract_text.py ../reference-docs ../extracted`. OCR uses the local macOS Vision script: `swift backend/scripts/ocr_scans.swift reference-docs extracted extracted/ocr`.
-Build banks locally with `./backend/.venv/bin/python backend/scripts/build_assessment_banks.py extracted backend/app/data/assessments reference-docs`.
+Local dev: set `LOCAL_KNOWLEDGE_DIR=../extracted` in `backend/.env` (development + memory storage only) to load extracted 검사 서류 into `LOCAL_KNOWLEDGE_ORGS` (default `orgA,demo`) at startup. Remote ingest: `cd backend && .venv/bin/python -m scripts.ingest_knowledge ORG_ID ../extracted --allow-reference-text-upload`, only after rights review.
 
 ## Development rules
 
 - Read `docs/PLAN.md` and relevant tests before changes.
-- Do not invent scores, developmental ages, percentiles, item text, or norms. `norm_tables_loaded` stays false until an official norm source is loaded.
+- Do not invent scores, developmental ages, percentiles, item text, or norms.
 - Do not auto-complete unreadable pages or tables. Mark them `needs_review` and keep them out of retrieval.
 - AI output is a draft. Persist it to `ai_analyses` with `status=draft`; therapist approval is required before clinical records change.
 - Calculate time, counts, and money only in `backend/app/services/billing.py`.

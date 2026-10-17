@@ -45,7 +45,10 @@ class Settings(BaseSettings):
     rate_limit_requests: int = Field(default=120, ge=1, le=10000)
     rate_limit_window_seconds: int = Field(default=60, ge=1, le=3600)
     dev_seed: bool = False
-    assessment_data_dir: str = ""  # item banks hold copyrighted item text: keep out of git/images; mount privately in production
+    # Development + memory storage only: load locally extracted 검사 서류 (../extracted) as AI knowledge at startup.
+    # Relative paths resolve from backend/. Extracted text is copyrighted and never leaves this machine.
+    local_knowledge_dir: str = ""
+    local_knowledge_orgs: str = "orgA,demo"  # dev orgs that receive the pages and a license for their tests
 
     @model_validator(mode="after")
     def _no_dev_auth_in_prod(self):

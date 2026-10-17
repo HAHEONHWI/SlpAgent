@@ -1,9 +1,0 @@
-{
-  "test_code": "PRES",
-  "norm_tables_loaded": false,
-  "_comment": "SYNTHETIC fixture for tests and schema reference. Not real test content. Real item banks are local-only (see docs/assessment-extraction.md).",
-  "items": [
-    {"item_id": "synthetic-01", "source_item_number": "1", "domain": "synthetic-domain", "age_range": null, "prompt": "SYNTHETIC ITEM A", "response_options": [], "source": {"file": "synthetic.pdf", "page": 1}, "needs_review": true},
-    {"item_id": "synthetic-02", "source_item_number": "2", "domain": "synthetic-domain", "age_range": null, "prompt": "SYNTHETIC ITEM B", "response_options": ["A", "B"], "source": {"file": "synthetic.pdf", "page": 1}, "needs_review": true}
-  ]
-}

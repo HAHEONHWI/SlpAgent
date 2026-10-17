@@ -15,7 +15,7 @@ from tests.conftest import H
 def test_five_document_types_render_as_draft_docx():
     data = {"month": "2026-10", "organization": {"name": "Test Org"},
             "child": {"alias": "A-01", "display_name": "Test", "birth_date": "2022-01-01"},
-            "sessions": [], "schedules": [], "plans": [], "assessments": [], "consultations": [],
+            "sessions": [], "schedules": [], "plans": [], "consultations": [],
             "billing": {"session_count": 0, "total_minutes": 0, "voucher_minutes": None,
                         "additional_minutes": None, "total_amount": None}}
     settings = NS(pdf_font_path="", hwpx_template_path="")

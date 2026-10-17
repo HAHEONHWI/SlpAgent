@@ -8,9 +8,10 @@ import { Button, Card, Notice, PageTitle } from "../components/ui";
 
 const MODES = {
   integrated: {
-    label: "통합 발달 분석", path: "analysis/integrated", kind: "integrated_analysis", needs: "검사 기록",
-    sections: [["assessment_overview", "평가 개요"], ["age_and_assessment_dates", "생활연령 및 검사일"], ["strengths", "강점 영역"], ["support_needs", "지원 필요 영역"],
-      ["shared_observations", "검사 간 공통 관찰"], ["inconsistencies", "검사 간 불일치"], ["additional_assessment_needs", "추가 평가 필요 사항"], ["candidate_treatment_goals", "치료목표 후보"]],
+    label: "통합 발달 분석", path: "analysis/integrated", kind: "integrated_analysis", needs: "회기·ABC 관찰·어휘 기록",
+    // assessment_overview / age_and_assessment_dates: approved analyses made before 검사 removal
+    sections: [["record_overview", "기록 개요"], ["assessment_overview", "평가 개요"], ["age_and_record_dates", "생활연령 및 기록일"], ["age_and_assessment_dates", "생활연령 및 검사일"],
+      ["strengths", "강점 영역"], ["support_needs", "지원 필요 영역"], ["shared_observations", "기록 간 공통 관찰"], ["inconsistencies", "기록 간 불일치"], ["additional_assessment_needs", "추가 평가 필요 사항"], ["candidate_treatment_goals", "치료목표 후보"]],
   },
   behavior: {
     label: "행동 패턴 분석", path: "analysis/behavior", kind: "behavior_analysis", needs: "ABC 관찰 기록",
@@ -32,7 +33,7 @@ function Inner({ childId, initial }: { childId: string; initial: Mode }) {
           <button key={k} onClick={() => { setMode(k); setDraft(null); run.reset(); }} className={`rounded-full px-3 py-1.5 ${k === mode ? "bg-white font-semibold shadow-sm" : "text-slate-600"}`}>{MODES[k].label}</button>))}
       </div>
       <Card title={m.label}>
-        <p className="mb-3 text-sm text-slate-600">저장된 {m.needs}만 근거로 사용합니다. 서로 다른 검사의 점수는 합산하지 않으며, 기록에 없는 사실은 만들지 않습니다.{mode === "behavior" && " 자폐·행동장애를 진단하지 않고, 강압적 중재는 제안하지 않습니다."}</p>
+        <p className="mb-3 text-sm text-slate-600">저장된 {m.needs}만 근거로 사용합니다. 검사 점수·규준을 만들지 않으며, 기록에 없는 사실은 만들지 않습니다.{mode === "behavior" && " 자폐·행동장애를 진단하지 않고, 강압적 중재는 제안하지 않습니다."}</p>
         <Button onClick={() => { setDraft(null); run.mutate(); }} disabled={run.isPending}>{run.isPending ? "분석 중…" : "AI 초안 생성"}</Button>
         {run.error && <div className="mt-3"><Notice tone="red">{errText(run.error)}</Notice></div>}
       </Card>

@@ -11,7 +11,7 @@ from typing import Literal, TypedDict
 from . import knowledge
 from .privacy import sanitize_external_value
 
-READ = {"get_child_profile", "get_assessment_history", "get_assessment_responses", "get_treatment_goals",
+READ = {"get_child_profile", "get_treatment_goals",
         "get_session_history", "get_recent_records", "get_behavior_observations", "get_vocabulary_progress", "search_clinical_knowledge"}
 WRITE = {"generate_treatment_plan", "generate_session_note", "draft_parent_guidance"}
 RECENT_LIMIT = 10  # get_recent_records: newest records handed to the model
@@ -24,15 +24,13 @@ def _obj(props: dict, req: list[str] | None = None) -> dict:
 _S, _STR = {"type": "string"}, {"type": "string"}
 SPECS = [
     ("get_child_profile", "아동 가명코드·월령·성별 조회(실명·연락처 제외)", _obj({})),
-    ("get_assessment_history", "아동의 검사 이력(검사명, 평가일, 월령, 원점수)", _obj({})),
-    ("get_assessment_responses", "특정 검사의 문항별 응답", _obj({"assessment_id": _S}, ["assessment_id"])),
     ("get_treatment_goals", "현재 활성 치료목표(승인된 것만)와 버전", _obj({})),
     ("get_session_history", "회기 기록(날짜, 활동별 정반응/시행, 발화, 승인된 기록문)", _obj({})),
     ("get_recent_records", "선택 아동의 최근 회기·상담·승인 녹음 요약 통합 조회(날짜 최신순 10건, 녹취 원문 제외)", _obj({})),
     ("get_behavior_observations", "ABC 행동 관찰 기록", _obj({})),
     ("get_vocabulary_progress", "어휘 습득 상태", _obj({"modality": {"type": "string", "enum": ["receptive", "expressive"]}})),
     ("search_clinical_knowledge", "기관 지식자료실 검색(문서명·페이지 반환)", _obj({"query": _S, "test_code": _S}, ["query"])),
-    ("generate_treatment_plan", "치료계획 초안 제안 저장(미승인 초안). 각 목표에 근거(검사명/문항/평가일)를 basis에 기재",
+    ("generate_treatment_plan", "치료계획 초안 제안 저장(미승인 초안). 각 목표에 근거(회기·관찰 기록과 날짜)를 basis에 기재",
      _obj({"goals": {"type": "array", "items": _obj({"kind": {"type": "string", "enum": ["long", "short"]}, "text": _S,
                                                      "measure": _S, "criterion": _S, "basis": _S}, ["kind", "text", "measure", "criterion", "basis"])},
            "rationale": _S}, ["goals", "rationale"])),
@@ -109,16 +107,6 @@ class ToolRunner:
     def get_child_profile(self):
         c = self.repo.get("children", self.p.org_id, self._need_child())
         return {"alias": c["alias"], "age_months": age_months(c["birth_date"]), "sex": c.get("sex")}
-
-    def get_assessment_history(self):
-        return [{"id": a["id"], "test": a["test_code"], "assessed_on": a["assessed_on"], "age_months": a["age_months_at_test"],
-                 "raw_total": a.get("raw_total"), "derived_scores": a["derived_scores"]["status"]} for a in self._rows("assessments")]
-
-    def get_assessment_responses(self, assessment_id):
-        a = self.repo.get("assessments", self.p.org_id, assessment_id)
-        if a["child_id"] != self._need_child():
-            raise ValueError("assessment belongs to another child")
-        return {"test": a["test_code"], "assessed_on": a["assessed_on"], "items": a["items"], "observations": a.get("observations")}
 
     def get_treatment_goals(self):
         plans = [x for x in self._rows("treatment_plans") if x["status"] == "active"]

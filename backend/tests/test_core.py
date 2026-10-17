@@ -17,17 +17,6 @@ def test_assistant_is_read_only(client, child):
     assert client.get("/children", headers=H(role="assistant")).status_code == 200
 
 
-def test_assessment_never_invents_scores(client, child):
-    r = client.post(f"/children/{child['id']}/assessments", headers=H(), json={
-        "test_code": "PRES", "assessed_on": "2026-09-01", "examiner": "김", "raw_total": 12,
-        "items": [{"item_id": "수용-1", "response": "2/3"}]})
-    d = r.json()
-    assert r.status_code == 201 and d["age_months_at_test"] == 53
-    assert d["derived_scores"]["percentile"] is None and d["derived_scores"]["status"] == "norm_unavailable"
-    assert client.post(f"/children/{child['id']}/assessments", headers=H(), json={
-        "test_code": "FAKE", "assessed_on": "2026-09-01", "examiner": "김"}).status_code == 422
-
-
 def test_behavior_intensity_needs_org_scale(client, repo, child):
     body = {"observed_at": "2026-10-01T10:00:00", "antecedent": "a", "behavior": "b", "consequence": "c", "observer": "김", "intensity": 3}
     assert client.post(f"/children/{child['id']}/behavior", headers=H(), json=body).status_code == 422

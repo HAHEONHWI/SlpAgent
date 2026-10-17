@@ -11,7 +11,6 @@ import { Button, Notice } from "./components/ui";
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Chat = lazy(() => import("./pages/Chat"));
 const Children = lazy(() => import("./pages/Children"));
-const Assessments = lazy(() => import("./pages/Assessments"));
 const Behavior = lazy(() => import("./pages/Behavior"));
 const Vocabulary = lazy(() => import("./pages/Vocabulary"));
 const Plans = lazy(() => import("./pages/Plans"));
@@ -51,7 +50,6 @@ export default function App() {
         <Route index element={page(<Dashboard />)} />
         <Route path="ai" element={page(<Chat />)} />
         <Route path="children" element={page(<Children />)} />
-        <Route path="assessments" element={page(<Assessments />)} />
         <Route path="analysis" element={page(<Analysis />)} />
         <Route path="behavior" element={page(<Behavior />)} />
         <Route path="vocabulary" element={page(<Vocabulary />)} />

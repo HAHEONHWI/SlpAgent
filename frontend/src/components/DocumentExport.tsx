@@ -7,9 +7,9 @@ import { errText } from "../lib/hooks";
 import { Badge, Button, Empty, ErrorNotice, Label, Notice, Select } from "./ui";
 
 // 바우처 서류 = the 발달재활 서비스 제공 기록지 HWPX (기록지·별지·일정표 in one file), filled from records.
-const TYPES: Record<string, string> = { voucher: "바우처 서류", progress_report: "치료 경과보고서", assessment_summary: "평가 결과 요약서", parent_consultation: "보호자 상담기록" };
-// Listed-only types: older voucher drafts and documents approved in AI chat.
-const LABELS: Record<string, string> = { ...TYPES, service_record: "서비스 제공기록지", schedule: "서비스 일정표", parent_guidance: "보호자 안내문 (승인됨)" };
+const TYPES: Record<string, string> = { voucher: "바우처 서류", progress_report: "치료 경과보고서", parent_consultation: "보호자 상담기록" };
+// Listed-only types: older voucher drafts, 평가 결과 요약서 made before 검사 removal, and documents approved in AI chat.
+const LABELS: Record<string, string> = { ...TYPES, assessment_summary: "평가 결과 요약서", service_record: "서비스 제공기록지", schedule: "서비스 일정표", parent_guidance: "보호자 안내문 (승인됨)" };
 type Doc = { id: string; type: string; month: string | null; format: string | null; status: string; created_at?: string; approved_at?: string | null; download_url?: string; expires_at?: string; hwpx_validation?: string | null };
 type Link = { download_url: string; expires_at: string };
 

@@ -21,15 +21,9 @@ class FakeClient:
         return NS(output=[NS(type="message")], output_text="최종 답변")
 
 
-def _setup(client, child):
-    client.post(f"/children/{child['id']}/assessments", headers=H(), json={
-        "test_code": "SELSI", "assessed_on": "2026-09-01", "examiner": "김", "items": [{"item_id": "5", "response": 1}]})
-    return client.get(f"/children/{child['id']}/assessments", headers=H()).json()[0]
-
-
 def test_write_tool_creates_unapproved_draft_only(client, repo, child):
     P = Principal(uid="u1", org_id="orgA", role="therapist")
-    fc = FakeClient([("generate_treatment_plan", {"goals": [{"kind": "short", "text": "t", "measure": "m", "criterion": "c", "basis": "SELSI 2026-09-01"}], "rationale": "r"})])
+    fc = FakeClient([("generate_treatment_plan", {"goals": [{"kind": "short", "text": "t", "measure": "m", "criterion": "c", "basis": "회기기록 2026-09-01"}], "rationale": "r"})])
     res = agent.run_chat(fc, "m", [{"role": "user", "content": "계획"}],
                          ToolRunner(repo, P, child["id"], allowed_tools=frozenset(READ | WRITE)),
                          allow_tools=True, mode="clinical")
@@ -45,10 +39,9 @@ def test_write_tool_creates_unapproved_draft_only(client, repo, child):
 
 
 def test_tools_cannot_cross_child_or_org(client, repo, child):
-    a = _setup(client, child)
-    other = client.post("/children", json={"alias": "B", "display_name": "b", "birth_date": "2021-01-01"}, headers=H()).json()
     P = Principal(uid="u1", org_id="orgA", role="therapist")
-    assert "error" in ToolRunner(repo, P, other["id"]).run("get_assessment_responses", {"assessment_id": a["id"]})
+    assert {"get_assessment_history", "get_assessment_responses"}.isdisjoint(READ)  # 검사 결과 도구는 제거됨
+    assert "error" in ToolRunner(repo, P, child["id"]).run("get_assessment_responses", {"assessment_id": "x"})
     assert "error" in ToolRunner(repo, Principal(uid="x", org_id="orgB", role="therapist"), child["id"]).run("get_child_profile", {})
     assert "error" in ToolRunner(repo, P, None).run("get_child_profile", {})  # general chat has no child data
     prof = ToolRunner(repo, P, child["id"]).run("get_child_profile", {})

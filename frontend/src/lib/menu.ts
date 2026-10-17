@@ -6,7 +6,7 @@ export type MenuGroup = { id: string; title: string; items: MenuItem[] };
 const adminOnly = (me: Me | undefined) => me?.role === "admin";
 const canWrite = (me: Me | undefined) => me?.role === "admin" || me?.role === "therapist";
 
-export const HOME: MenuItem = { to: "/", label: "대시보드", desc: "담당 아동 수 · 승인 대기 AI 초안 · 검사 자료 준비 상태" };
+export const HOME: MenuItem = { to: "/", label: "대시보드", desc: "담당 아동 수 · 승인 대기 AI 초안 · AI 참고 검사 서류" };
 export const ACCOUNT: MenuItem = { to: "/account", label: "내 계정", desc: "비밀번호 변경 · 회원 탈퇴" };
 // Grouped so the everyday screens are short to find. `child` marks screens that need a selected child.
 export const GROUPS: MenuGroup[] = [
@@ -18,8 +18,7 @@ export const GROUPS: MenuGroup[] = [
     { to: "/children", label: "아동 관리", desc: "등록 · 엑셀 일괄 등록 · 휴지통" },
   ] },
   { id: "care", title: "아동 평가·치료", items: [
-    { to: "/assessments", label: "발달검사 관리", child: true, desc: "검사 결과 입력 · 검사 이력" },
-    { to: "/analysis", label: "통합 발달 분석", child: true, desc: "AI 초안 · 근거 목록 · 승인 이력" },
+    { to: "/analysis", label: "통합 발달 분석", child: true, desc: "회기·관찰 기록 기반 AI 초안 · 승인 이력" },
     { to: "/behavior", label: "행동분석", child: true, desc: "ABC 관찰 기록 · 관찰 목록" },
     { to: "/vocabulary", label: "어휘 발달 관리", child: true, desc: "수용/표현 어휘 · 습득 차트" },
     { to: "/plans", label: "치료계획", child: true, desc: "장·단기 목표 · 버전 승인" },
@@ -28,7 +27,7 @@ export const GROUPS: MenuGroup[] = [
   { id: "ai", title: "AI", items: [
     { to: "/ai", label: "AI 대화", desc: "언어치료 지식 · 임상 대화 모드" },
     { to: "/activities", label: "치료활동 생성", child: true, show: canWrite, desc: "조건 입력 → AI 초안 → 승인/반려" },  // 보조(읽기 전용)는 만들 수 없음
-    { to: "/knowledge", label: "AI 지식자료실", desc: "자료 목록 · 키워드 검색" },
+    { to: "/knowledge", label: "AI 지식자료실", desc: "검사 서류 등 AI 참고자료 · 키워드 검색" },
   ] },
   { id: "admin", title: "행정", items: [
     { to: "/voucher", label: "바우처·문서 생성", child: true, desc: "월별 집계 · DOCX/PDF/HWPX 출력" },

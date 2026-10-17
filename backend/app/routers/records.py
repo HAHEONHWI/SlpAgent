@@ -1,12 +1,12 @@
-"""Child-scoped records: assessments, behavior observations, vocabulary, sessions."""
+"""Child-scoped records: behavior observations, vocabulary, sessions."""
 from datetime import date
-from typing import Any, Literal
+from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, model_validator
 from ..auth import Principal, current_principal, require_write
 from ..deps import audit, child_or_404, get_repo
 from ..repo.base import NotFound
-from ..services import assessment_defs, billing
+from ..services import billing
 
 router = APIRouter(tags=["records"])
 
@@ -21,59 +21,6 @@ def _create(col, child_id, body: BaseModel, p, repo, extra=None):
     doc = repo.create(col, p.org_id, {**body.model_dump(mode="json"), **(extra or {}), "child_id": child_id})
     audit(repo, p, "create", col, doc["id"], child_id)
     return doc
-
-
-# ---- assessments ----
-class ItemResponse(BaseModel):
-    item_id: str = Field(max_length=40, description="검사 원문의 문항 번호")
-    response: Any = None
-    note: str | None = None
-
-
-class AssessmentIn(BaseModel):
-    test_code: str
-    assessed_on: date
-    examiner: str
-    raw_total: float | None = None  # entered from the form; never derived here
-    items: list[ItemResponse] = []
-    observations: str | None = None
-
-    @model_validator(mode="after")
-    def _known(self):
-        if self.test_code not in assessment_defs.DEFS:
-            raise ValueError(f"unsupported test_code: {self.test_code}")
-        return self
-
-
-@router.get("/assessment-definitions")
-def definitions(p: Principal = Depends(current_principal), repo=Depends(get_repo)):
-    return assessment_defs.public_definitions(assessment_defs.licensed_codes(repo, p.org_id))
-
-
-@router.get("/assessment-definitions/{code}/items")
-def assessment_items(code: str, p: Principal = Depends(current_principal), repo=Depends(get_repo)):
-    if code not in assessment_defs.DEFS:
-        raise HTTPException(404, "assessment definition not found")
-    if code not in assessment_defs.licensed_codes(repo, p.org_id):
-        raise HTTPException(403, "이 기관은 해당 검사의 사용 허가가 없습니다")
-    return assessment_defs.load_item_bank(code)
-
-
-@router.post("/children/{child_id}/assessments", status_code=201)
-def create_assessment(child_id: str, body: AssessmentIn, p: Principal = Depends(require_write), repo=Depends(get_repo)):
-    child = child_or_404(repo, p, child_id)
-    if body.assessed_on < date.fromisoformat(child["birth_date"]):
-        raise HTTPException(422, "assessed_on is before birth_date")
-    from .children import age_months
-    doc = _create("assessments", child_id, body, p, repo,
-                  {"age_months_at_test": age_months(child["birth_date"], body.assessed_on),
-                   "derived_scores": assessment_defs.derived_scores(body.test_code)})
-    return doc
-
-
-@router.get("/children/{child_id}/assessments")
-def list_assessments(child_id: str, p: Principal = Depends(current_principal), repo=Depends(get_repo)):
-    return _list("assessments", child_id, p, repo)
 
 
 # ---- behavior (ABC) ----

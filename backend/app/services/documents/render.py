@@ -76,7 +76,7 @@ def _sections(kind: str, data: dict) -> list[tuple[str, list[str] | None, list[l
                 ("회기 기록", ["일자", "상태", "활동", "관찰"], session_rows),
                 ("월 집계", ["회기 수", "제공시간(분)"], [[str(data["billing"].get("session_count", 0)),
                                                             str(data["billing"].get("total_minutes", 0))]])]
-    if kind == "assessment_summary":
+    if kind == "assessment_summary":  # legacy: no longer created; kept so drafts made before 검사 removal still approve
         rows = [[a["test_code"], a["assessed_on"], str(a.get("age_months_at_test", "")),
                  _value(a.get("raw_total")), a.get("derived_scores", {}).get("status", "norm_unavailable"),
                  "; ".join(f"{i.get('item_id')}: {i.get('response')}" for i in a.get("items", []))]

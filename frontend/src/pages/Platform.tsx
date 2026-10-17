@@ -175,7 +175,7 @@ function Orgs({ orgs }: { orgs: Org[] }) {
                 </div></Td>
               </tr>))}
           </Table>)}
-        <p className="mt-2 text-xs text-slate-500">사용 허가(라이선스)를 확인한 검사만 지정하세요. 허가된 기관만 해당 검사의 문항과 자료실 원문을 볼 수 있습니다.</p>
+        <p className="mt-2 text-xs text-slate-500">사용 허가(라이선스)를 확인한 검사만 지정하세요. 허가된 기관만 해당 검사 서류를 AI 지식자료실·AI 대화에서 검색할 수 있습니다.</p>
       </Card>
 
       {merge && (

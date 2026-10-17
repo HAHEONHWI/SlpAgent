@@ -16,7 +16,7 @@ router = APIRouter(tags=["documents"])
 
 
 class DocumentIn(BaseModel):
-    type: str = Field(pattern=r"^(service_record|schedule|progress_report|assessment_summary|parent_consultation)$")
+    type: str = Field(pattern=r"^(service_record|schedule|progress_report|parent_consultation)$")
     month: str = Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
     format: str = Field(pattern=r"^(docx|pdf|hwpx)$")
 
@@ -35,11 +35,10 @@ def _data(repo, principal: Principal, child_id: str, month: str) -> dict:
     sync_month(repo, principal.org_id, month)
     schedules = repo.list_range("schedules", principal.org_id, "date", *month_bounds(month), child_id=child_id)
     plans = repo.list("treatment_plans", principal.org_id, child_id=child_id)
-    assessments = repo.list("assessments", principal.org_id, child_id=child_id)
     consultations = [row for row in repo.list("parent_consultations", principal.org_id, child_id=child_id)
                      if row.get("date", "").startswith(month)]
     return {"child": child, "organization": {"name": org.get("name")}, "month": month, "sessions": sessions, "schedules": schedules,
-            "plans": plans, "assessments": assessments, "consultations": consultations, "billing": summary}
+            "plans": plans, "consultations": consultations, "billing": summary}
 
 
 def _render(kind: str, format: str, data: dict, draft: bool, settings) -> tuple[bytes, str, str]:

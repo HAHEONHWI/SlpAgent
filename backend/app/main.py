@@ -77,3 +77,12 @@ if get_settings().dev_seed and get_settings().env == "development" and get_setti
     from .deps import get_repo
     from .dev_seed import seed
     seed(get_repo())
+
+_settings = get_settings()
+if _settings.local_knowledge_dir and _settings.env == "development" and _settings.storage_backend == "memory":
+    from pathlib import Path
+    from .deps import get_repo
+    from .services.knowledge_ingest import load_local_dev
+    _dir = Path(_settings.local_knowledge_dir)
+    _dir = _dir if _dir.is_absolute() else Path(__file__).resolve().parents[1] / _dir
+    load_local_dev(get_repo(), _dir, [o.strip() for o in _settings.local_knowledge_orgs.split(",") if o.strip()])

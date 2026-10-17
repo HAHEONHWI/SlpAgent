@@ -36,4 +36,10 @@ AI 도구에는 원문 `text`를 넣지 않는다. 도구 호출에는 문서명
 
 저작권 자료의 파생 텍스트가 원격 Firestore로 가는 ingest는 `--allow-reference-text-upload` 없이는 중단된다. OpenAI 임베딩은 `OPENAI_EMBEDDING_MODEL`과 `OPENAI_ALLOW_REFERENCE_EMBEDDING_UPLOAD=true`를 모두 설정해야 활성화된다. 기본 설정에서는 한국어 bigram 검색으로 폴백하고 원문을 외부 임베딩 API로 보내지 않는다. 활성화 전 사용 권한과 기관 정책을 확인한다.
 
-텍스트 PDF 추출 JSON과 문항 ID 메타데이터를 기관 저장소로 가져오는 스크립트는 `cd backend && .venv/bin/python -m scripts.ingest_knowledge ORG_ID ../extracted --allow-reference-text-upload`다. 권리 검토 전에는 실행하지 않는다.
+## 검사 서류를 AI 지식으로 쓰기
+
+검사 결과 입력 기능(발달검사 관리)은 제거했다. 기존에 저장된 검사 결과는 삭제하지 않고 보관만 하며, 화면·API·AI 도구·통합 분석·문서에서 읽지 않는다. 검사 서류(검사지·매뉴얼)는 모델 학습(fine-tuning)이 아니라 이 지식검색으로 AI 대화에 제공한다. 검색은 사이트 관리자가 기관에 사용 허가한 검사의 서류만 반환한다.
+
+- 추출: `backend/scripts/extract_text.py`(텍스트 PDF)와 로컬 OCR(`extracted/ocr`)의 결과를 쓴다. OCR 페이지는 모두 `needs_review=true`라 육안 검수 전까지 검색에서 제외된다. 점수·규준·문항을 만들어 채우지 않는다.
+- 로컬 개발: `backend/.env`에 `LOCAL_KNOWLEDGE_DIR=../extracted`를 두면 `ENV=development`·`STORAGE_BACKEND=memory`일 때만 서버 시작 시 `LOCAL_KNOWLEDGE_ORGS`(기본 `orgA,demo`)에 적재하고 해당 검사 사용 허가를 준다. 원문은 이 컴퓨터 밖으로 나가지 않는다.
+- 원격 저장소 적재: `cd backend && .venv/bin/python -m scripts.ingest_knowledge ORG_ID ../extracted --allow-reference-text-upload`. 권리 검토 전에는 실행하지 않는다.

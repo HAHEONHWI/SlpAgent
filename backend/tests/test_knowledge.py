@@ -1,79 +1,96 @@
 import json
 from pathlib import Path
 from types import SimpleNamespace as NS
-import pytest
-from app.services import assessment_defs, knowledge
+from app.services import knowledge, knowledge_ingest
 from app.services.ai_tools import ToolRunner
 from app.auth import Principal
 from tests.conftest import H, grant_license
 
 
-FIXTURES = Path(__file__).parent / "fixtures" / "assessments"
-LOCAL_BANKS = assessment_defs.DEFAULT_ITEM_BANK_DIR
+def test_assessment_result_feature_is_removed(client, child):
+    """검사 결과 입력/조회와 문항 은행 API는 제거됐다. 저장된 기록은 지우지 않고 더 이상 노출하지 않는다."""
+    assert client.get("/assessment-definitions", headers=H()).status_code == 404
+    assert client.get("/assessment-definitions/PRES/items", headers=H()).status_code == 404
+    assert client.get(f"/children/{child['id']}/assessments", headers=H()).status_code == 404
+    assert client.post(f"/children/{child['id']}/assessments", headers=H(), json={
+        "test_code": "PRES", "assessed_on": "2026-09-01", "examiner": "김"}).status_code in (404, 405)
 
 
-@pytest.fixture
-def synthetic_banks(monkeypatch):
-    """Licensed item banks are local-only (git-ignored), so route tests use a synthetic fixture."""
-    monkeypatch.setattr(assessment_defs, "item_bank_dir", lambda: FIXTURES)
-    assessment_defs.load_item_bank.cache_clear()
-    yield
-    assessment_defs.load_item_bank.cache_clear()
-
-
-@pytest.mark.skipif(not (LOCAL_BANKS / "PRES.json").exists(), reason="licensed item banks are local-only")
-def test_assessment_banks_match_recorded_counts_and_stay_unreviewed():
-    root = LOCAL_BANKS
-    expected = {"SELSI": 112, "EASIC": 144, "KOSECT": 57}
-    for code, count in expected.items():
-        bank = json.loads((root / f"{code}.json").read_text(encoding="utf-8"))
-        assert len(bank["items"]) == bank["source_checks"]["observed_count"] == count
-        assert bank["source_checks"]["expected_count"] == count
-        assert bank["norm_tables_loaded"] is False
-        assert all(item["needs_review"] for item in bank["items"])
-        assert all({"item_id", "domain", "age_range", "prompt", "response_options", "source", "needs_review"} <= item.keys()
-                   for item in bank["items"])
-    pres = json.loads((root / "PRES.json").read_text(encoding="utf-8"))
-    assert len(pres["items"]) == 90
-    assert pres["source_checks"]["unresolved_count"] == {"수용언어": 1, "표현언어": 1}
-    assert pres["source_checks"]["observed_domain_counts"] == {
-        "수용언어": {"인지·의미론": 25, "음운·구문론": 14, "화용론": 6},
-        "표현언어": {"인지·의미론": 16, "음운·구문론": 22, "화용론": 7},
-    }
-    assert pres["source_checks"]["unresolved_domain_counts"] == {
-        "수용언어": {"인지·의미론": 0, "음운·구문론": 1, "화용론": 0},
-        "표현언어": {"인지·의미론": 0, "음운·구문론": 0, "화용론": 1},
-    }
-    assert pres["norm_tables_loaded"] is False
-    assert all(item["needs_review"] for item in pres["items"])
-
-
-def test_assessment_items_route_requires_org_auth(client, repo, synthetic_banks):
-    assert client.get("/assessment-definitions/PRES/items").status_code == 401
-    # loaded but not licensed for this org -> refused, and not reported as available
-    assert client.get("/assessment-definitions/PRES/items", headers=H()).status_code == 403
-    assert not {d["code"]: d["item_bank_loaded"] for d in client.get("/assessment-definitions", headers=H()).json()}["PRES"]
-    grant_license(repo, "orgA", "PRES")
-    response = client.get("/assessment-definitions/PRES/items", headers=H())
-    assert response.status_code == 200 and [i["item_id"] for i in response.json()] == ["synthetic-01", "synthetic-02"]
-    assert client.get("/assessment-definitions/PRES/items", headers=H("orgB")).status_code == 403  # orgB holds no license
-    definitions = client.get("/assessment-definitions", headers=H()).json()
-    loaded = {definition["code"]: definition["item_bank_loaded"] for definition in definitions}
-    assert loaded["PRES"] and not any(v for k, v in loaded.items() if k != "PRES")
-
-
-def test_item_bank_dir_is_configurable(monkeypatch, tmp_path):
-    from app import config
-    monkeypatch.setattr(config, "get_settings", lambda: NS(assessment_data_dir=str(tmp_path)))
-    assert assessment_defs.item_bank_dir() == tmp_path
-    monkeypatch.setattr(config, "get_settings", lambda: NS(assessment_data_dir=""))
-    assert assessment_defs.item_bank_dir() == LOCAL_BANKS
-
-
-def test_licensed_item_banks_are_not_committed_or_baked_into_image():
+def test_local_reference_material_is_not_committed_or_baked_into_image():
     root = Path(__file__).resolve().parents[2]
-    assert "backend/app/data/assessments/" in (root / ".gitignore").read_text()
+    ignored = (root / ".gitignore").read_text()
+    assert "reference-docs/" in ignored and "extracted/" in ignored
+    assert "backend/app/data/assessments/" in ignored
     assert "app/data/assessments/" in (root / "backend" / ".dockerignore").read_text()
+
+
+def _write_extraction(tmp_path):
+    """Synthetic stand-ins for scripts/extract_text.py and OCR output (never real test text)."""
+    (tmp_path / "ocr").mkdir()
+    (tmp_path / "pres검사지.json").write_text(json.dumps({"source": "pres검사지.pdf", "pages": [
+        {"page": 1, "text": "합성 안내문: 아동이 그림을 가리키게 한다", "needs_ocr": False}]}, ensure_ascii=False), encoding="utf-8")
+    (tmp_path / "REVT 검사지.json").write_text(json.dumps({"source": "REVT 검사지.PDF", "pages": [
+        {"page": 1, "text": "", "needs_ocr": True}]}, ensure_ascii=False), encoding="utf-8")
+    (tmp_path / "ocr" / "REVT_검사지.json").write_text(json.dumps({"source": "REVT 검사지.PDF", "pages": [
+        {"page": 1, "text": "합성 OCR 그림 가리키게", "needs_ocr": False, "needs_review": True}]}, ensure_ascii=False), encoding="utf-8")
+    (tmp_path / "notes.json").write_text(json.dumps({"checks": []}), encoding="utf-8")  # not extraction output
+
+
+def test_extracted_documents_become_searchable_knowledge(repo, tmp_path):
+    _write_extraction(tmp_path)
+    documents = knowledge_ingest.load_extracted(tmp_path)
+    assert [d["source"] for d in documents] == ["REVT 검사지.PDF", "pres검사지.pdf", "REVT 검사지.PDF"]
+    assert knowledge_ingest.ingest(repo, "orgA", documents) == 3
+    pages = {(d["source"], d["page"]): d for d in repo.list("knowledge_documents", "orgA")}
+    assert len(pages) == 2  # the OCR page replaced the empty needs_ocr page of the same source
+    assert pages[("REVT 검사지.PDF", 1)]["needs_review"] and pages[("pres검사지.pdf", 1)]["test_code"] == "PRES"
+    assert knowledge.search(repo, "orgA", "그림 가리키게") == []  # unlicensed test material stays hidden
+    grant_license(repo, "orgA", "PRES", "REVT")
+    found = knowledge.search(repo, "orgA", "그림 가리키게")
+    assert [r["document"] for r in found] == ["pres검사지.pdf"]  # needs_review OCR page is excluded
+    assert knowledge.search(repo, "orgB", "그림 가리키게") == []
+
+
+def test_document_list_marks_unreviewed_pages_as_excluded(client, repo, tmp_path):
+    _write_extraction(tmp_path)
+    knowledge_ingest.ingest(repo, "orgA", knowledge_ingest.load_extracted(tmp_path))
+    status = {d["source"]: (d["status"], d["excluded_pages"]) for d in client.get("/knowledge/documents", headers=H()).json()}
+    assert status == {"REVT 검사지.PDF": ("ocr_required", 1), "pres검사지.pdf": ("text_ok", 0)}
+
+
+def test_local_dev_loader_licenses_only_tests_it_loaded(repo, tmp_path):
+    _write_extraction(tmp_path)
+    repo.create("organizations", "orgA", {"name": "A", "licensed_assessments": ["SELSI"]}, doc_id="orgA")
+    knowledge_ingest.load_local_dev(repo, tmp_path, ["orgA", "demo"])
+    assert repo.get("organizations", "orgA", "orgA")["licensed_assessments"] == ["PRES", "REVT", "SELSI"]
+    assert repo.get("organizations", "demo", "demo")["licensed_assessments"] == ["PRES", "REVT"]
+    assert [r["document"] for r in knowledge.search(repo, "demo", "그림 가리키게")] == ["pres검사지.pdf"]
+
+
+def test_dialogue_cites_ingested_reference_pages(client, repo, tmp_path, monkeypatch):
+    from app.main import app
+    from app.routers.chat import get_client
+    _write_extraction(tmp_path)
+    knowledge_ingest.load_local_dev(repo, tmp_path, ["orgA"])
+    seen = []
+
+    class Answer:
+        def __init__(self):
+            self.responses = self
+
+        def create(self, **kw):
+            seen.append(kw)
+            return NS(output=[NS(type="message")], output_text="답변 [자료 1]")
+
+    app.dependency_overrides[get_client] = lambda: Answer()
+    try:
+        r = client.post("/ai/dialogue", headers=H(), json={"message": "그림을 가리키게 하는 방법"})
+    finally:
+        app.dependency_overrides.pop(get_client, None)
+    assert r.status_code == 200, r.text
+    assert "pres검사지.pdf" in json.dumps(r.json(), ensure_ascii=False)
+    assert "합성 안내문" in json.dumps(seen[-1]["input"], ensure_ascii=False)
+    assert "합성 안내문" not in json.dumps(seen[-1].get("instructions", ""), ensure_ascii=False)
 
 
 class EmbeddingClient:

@@ -3,6 +3,9 @@ from app.main import app
 from app.routers.analysis import get_analysis_client
 from tests.conftest import H
 
+FIELDS = ("record_overview", "age_and_record_dates", "strengths", "support_needs",
+          "shared_observations", "inconsistencies", "additional_assessment_needs", "candidate_treatment_goals")
+
 
 class ParseClient:
     def __init__(self, payload):
@@ -15,15 +18,18 @@ class ParseClient:
         return NS(output_parsed=kwargs["text_format"].model_validate(self.payload))
 
 
+def _session(repo, child, date="2026-09-01", note="2음절 모방"):
+    return repo.create("therapy_sessions", "orgA", {"child_id": child["id"], "date": date, "status": "completed",
+                       "activities": [{"name": "2음절 모방", "correct": 3, "trials": 5}], "observed_behaviors": [note]})
+
+
 def test_integrated_analysis_is_evidence_checked_draft_until_approval(client, repo, child):
-    client.post(f"/children/{child['id']}/assessments", headers=H(), json={
-        "test_code": "SELSI", "assessed_on": "2026-09-01", "examiner": "therapist",
-        "items": [{"item_id": "수용-05", "response": "관찰", "note": "테스트아동 010-0000-0000 test@example.com"}]})
-    claim = {"text": "평가 기록이 있습니다", "evidence": [{"document": "SELSI", "evaluation_date": "2026-09-01"}]}
-    payload = {field: [] for field in ("assessment_overview", "age_and_assessment_dates", "strengths", "support_needs",
-                                       "shared_observations", "inconsistencies", "additional_assessment_needs",
-                                       "candidate_treatment_goals")}
-    payload["assessment_overview"] = [claim]
+    _session(repo, child, note="테스트아동 010-0000-0000 test@example.com")
+    repo.create("vocabulary_records", "orgA", {"child_id": child["id"], "word": "공", "modality": "expressive",
+                "status": "emerging", "observed_on": "2026-09-02"})
+    claim = {"text": "회기 기록이 있습니다", "evidence": [{"document": "회기기록", "evaluation_date": "2026-09-01"}]}
+    payload = {field: [] for field in FIELDS}
+    payload["record_overview"] = [claim]
     fake = ParseClient(payload)
     app.dependency_overrides[get_analysis_client] = lambda: fake
     try:
@@ -42,14 +48,11 @@ def test_integrated_analysis_is_evidence_checked_draft_until_approval(client, re
     assert repo.list("clinical_analyses", "orgA")[0]["status"] == "approved"
 
 
-def test_analysis_rejects_unrecognized_evidence(client, child):
-    client.post(f"/children/{child['id']}/assessments", headers=H(), json={
-        "test_code": "SELSI", "assessed_on": "2026-09-01", "examiner": "therapist"})
-    claim = {"text": "unsupported", "evidence": [{"document": "SELSI", "evaluation_date": "2020-01-01"}]}
-    payload = {field: [] for field in ("assessment_overview", "age_and_assessment_dates", "strengths", "support_needs",
-                                       "shared_observations", "inconsistencies", "additional_assessment_needs",
-                                       "candidate_treatment_goals")}
-    payload["assessment_overview"] = [claim]
+def test_analysis_rejects_unrecognized_evidence(client, repo, child):
+    _session(repo, child)
+    claim = {"text": "unsupported", "evidence": [{"document": "SELSI", "evaluation_date": "2026-09-01"}]}
+    payload = {field: [] for field in FIELDS}
+    payload["record_overview"] = [claim]
     app.dependency_overrides[get_analysis_client] = lambda: ParseClient(payload)
     try:
         response = client.post(f"/children/{child['id']}/analysis/integrated", headers=H())
@@ -105,8 +108,6 @@ def test_behavior_and_activity_routes_use_fake_client_and_approval(client, repo,
     assert applied.status_code == 200 and applied.json()["applied_to"] == "therapy_activities"
 
 
-FIELDS = ("assessment_overview", "age_and_assessment_dates", "strengths", "support_needs",
-          "shared_observations", "inconsistencies", "additional_assessment_needs", "candidate_treatment_goals")
 
 
 class SequenceClient:
@@ -128,28 +129,35 @@ def _integrated(client, child, fake):
         app.dependency_overrides.pop(get_analysis_client, None)
 
 
-def test_citable_evidence_is_sent_and_one_retry_recovers(client, child):
+def test_citable_evidence_is_sent_and_one_retry_recovers(client, repo, child):
     import json
-    client.post(f"/children/{child['id']}/assessments", headers=H(), json={
-        "test_code": "SELSI", "assessed_on": "2026-09-01", "examiner": "t", "items": [{"item_id": "5", "response": "통과"}]})
+    session = _session(repo, child)
     bad = {f: [] for f in FIELDS}
-    bad["assessment_overview"] = [{"text": "x", "evidence": [{"document": "SELSI", "evaluation_date": "2020-01-01"}]}]
+    bad["record_overview"] = [{"text": "x", "evidence": [{"document": "회기기록", "evaluation_date": "2020-01-01"}]}]
     good = {f: [] for f in FIELDS}
-    good["assessment_overview"] = [{"text": "문항 5 통과", "evidence": [{"document": "SELSI", "item_number": "5", "evaluation_date": "2026-09-01"}]}]
+    good["record_overview"] = [{"text": "2음절 모방 3/5", "evidence": [{"document": "회기기록", "item_number": session["id"], "evaluation_date": "2026-09-01"}]}]
     fake = SequenceClient([bad, good])
     response = _integrated(client, child, fake)
     assert response.status_code == 201 and len(fake.calls) == 2
     sent = json.loads(fake.calls[0]["input"])
-    assert {"document": "SELSI", "item_number": "5", "evaluation_date": "2026-09-01"} in sent["citable_evidence"]
+    assert {"document": "회기기록", "item_number": session["id"], "evaluation_date": "2026-09-01"} in sent["citable_evidence"]
+    assert "assessments" not in sent["records"]
     assert "rejected" in fake.calls[1]["instructions"]
 
 
-def test_analysis_gives_up_after_one_retry_with_brief_error(client, child):
-    client.post(f"/children/{child['id']}/assessments", headers=H(), json={
-        "test_code": "SELSI", "assessed_on": "2026-09-01", "examiner": "t"})
+def test_analysis_gives_up_after_one_retry_with_brief_error(client, repo, child):
+    _session(repo, child)
     bad = {f: [] for f in FIELDS}
-    bad["assessment_overview"] = [{"text": "x", "evidence": [{"document": "SELSI", "evaluation_date": "2020-01-01"}]}]
+    bad["record_overview"] = [{"text": "x", "evidence": [{"document": "회기기록", "evaluation_date": "2020-01-01"}]}]
     fake = SequenceClient([bad, bad])
     response = _integrated(client, child, fake)
     assert response.status_code == 422 and len(fake.calls) == 2
     assert response.json()["detail"].startswith("AI 응답의 근거가 기록과 일치하지 않아 거부했습니다")
+
+
+def test_integrated_analysis_needs_records_and_ignores_legacy_assessments(client, repo, child):
+    # 저장된 검사 결과(검사 기능 제거 전 기록)는 보관만 하고 분석 근거로 쓰지 않는다
+    repo.create("assessments", "orgA", {"child_id": child["id"], "test_code": "SELSI", "assessed_on": "2026-09-01"})
+    fake = SequenceClient([])
+    response = _integrated(client, child, fake)
+    assert response.status_code == 422 and fake.calls == []

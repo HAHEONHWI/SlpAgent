@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { Badge, Card, Empty, Input, Notice, PageTitle, Table, Td } from "../components/ui";
 
-const ST: Record<string, [string, any]> = { text_ok: ["텍스트 추출", "green"], partial: ["일부 OCR 필요", "amber"], ocr_required: ["OCR·검수 필요", "red"] };
+const ST: Record<string, [string, any]> = { text_ok: ["텍스트 추출", "green"], partial: ["일부 OCR·검수 필요", "amber"], ocr_required: ["OCR·검수 필요", "red"] };
 
 export default function Knowledge() {
   const [q, setQ] = useState(""), [term, setTerm] = useState("");
@@ -16,9 +16,9 @@ export default function Knowledge() {
         <Card title="자료 목록">
           {!docs.data?.length ? <Empty>적재된 자료가 없습니다. (backend/scripts/ingest_knowledge.py)</Empty> : (
             <Table head={["문서", "검사", "쪽수", "상태"]}>
-              {docs.data.map((d) => <tr key={d.source}><Td className="max-w-56 break-words">{d.source}</Td><Td>{d.test_code ?? "-"}</Td><Td>{d.pages}</Td><Td><Badge tone={ST[d.status][1]}>{ST[d.status][0]}</Badge></Td></tr>)}
+              {docs.data.map((d) => <tr key={d.source}><Td className="max-w-56 !whitespace-normal [overflow-wrap:anywhere]">{d.source}</Td><Td>{d.test_code ?? "-"}</Td><Td>{d.pages}</Td><Td><Badge tone={ST[d.status][1]}>{ST[d.status][0]}</Badge></Td></tr>)}
             </Table>)}
-          <div className="mt-3"><Notice>OCR이 필요한 페이지는 검수 전까지 검색·AI 답변에서 제외됩니다.</Notice></div>
+          <div className="mt-3"><Notice>검사 서류는 사용 허가된 검사만 AI 대화의 근거로 검색됩니다. OCR·검수가 필요한 페이지는 검수 전까지 검색·AI 답변에서 제외됩니다.</Notice></div>
         </Card>
         <Card title="자료 검색">
           <form className="mb-3" onSubmit={(e) => { e.preventDefault(); setTerm(q.trim()); }}><Input placeholder="검색어 입력 후 Enter" value={q} onChange={(e) => setQ(e.target.value)} /></form>

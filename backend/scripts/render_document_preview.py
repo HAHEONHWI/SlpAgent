@@ -15,7 +15,7 @@ def main() -> None:
                  "therapist": "담당 치료사"}]
     data = {"month": "2026-10", "organization": {"name": "샘플 기관"}, "child": {"alias": "QA-01", "display_name": "샘플 이용자",
             "birth_date": "2022-01-01"}, "sessions": sessions, "schedules": [], "plans": [],
-            "assessments": [], "consultations": [], "billing": billing.monthly_summary(sessions, 40000, 120)}
+            "consultations": [], "billing": billing.monthly_summary(sessions, 40000, 120)}
     settings = SimpleNamespace(pdf_font_path=args.font_path, hwpx_template_path="")
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

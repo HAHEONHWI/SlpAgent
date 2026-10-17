@@ -49,10 +49,10 @@ def _generate(client, output_model, instruction: str, context: dict, refs: set[t
 def integrated(child_id: str, p: Principal = Depends(require_write), repo=Depends(get_repo), client=Depends(get_analysis_client)):
     child_or_404(repo, p, child_id)
     context, refs = analysis.child_context(repo, p.org_id, child_id)
-    if not context["assessments"]:
-        raise HTTPException(422, "assessment records are required")
+    if not (context["sessions"] or context["behavior_observations"] or context["vocabulary_records"]):
+        raise HTTPException(422, "session, ABC or vocabulary records are required")
     payload = _generate(client, analysis.IntegratedAnalysis,
-                        "Provide assessment overview, chronological age and test dates, strengths, support needs, shared observations, discrepancies, additional assessment needs, and candidate treatment goals.",
+                        "From session, ABC observation and vocabulary records, provide a record overview, chronological age and record dates, strengths, support needs, observations shared across records, discrepancies between records, needs for additional formal assessment, and candidate treatment goals. Do not state test scores or norms.",
                         context, refs)
     return _draft(repo, p, child_id, "integrated_analysis", payload)
 
