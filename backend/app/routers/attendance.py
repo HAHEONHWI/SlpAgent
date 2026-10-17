@@ -88,6 +88,8 @@ def day(on: date, p: Principal = Depends(current_principal), repo=Depends(get_re
     marks = {m["schedule_id"]: m for m in repo.list("attendance", p.org_id, date=d)}
     absences = _absences(repo, p.org_id)
     rows = in_scope([s for s in repo.list("schedules", p.org_id, date=d) if s.get("status") != "cancelled"], _scope(repo, p))
+    from .voucher_doc import classify_month
+    pays = {c["id"]: c for cs in classify_month(repo, p.org_id, d[:7]).values() for c in cs if c["id"]} if rows else {}
     out = []
     for s in sorted(rows, key=lambda s: s["start"]):
         moved_to = None
@@ -100,7 +102,8 @@ def day(on: date, p: Principal = Depends(current_principal), repo=Depends(get_re
         out.append({"schedule_id": s["id"], "child_id": s["child_id"], "date": d, "start": s["start"], "end": s["end"],
                     "therapist": s.get("therapist"), "attendance": marks.get(s["id"]),
                     "state": effective(s, marks.get(s["id"]), absences), "moved_to": moved_to, "moved_from": s.get("moved_from"),
-                    "source": s.get("source"), "extra": s.get("extra")})
+                    "source": s.get("source"), "extra": s.get("extra"),
+                    "pay": (pays.get(s["id"]) or {}).get("pay"), "pay_auto": (pays.get(s["id"]) or {}).get("pay_auto", False)})
     return out
 
 
@@ -135,8 +138,12 @@ def child_attendance(child_id: str, month: str | None = None, p: Principal = Dep
                    if s.get("status") != "cancelled"),
                   key=lambda s: (s["date"], s["start"]))
     states = [effective(s, marks.get(s["id"]), absences) for s in rows]
-    records = [{"schedule_id": s["id"], "date": s["date"], "start": s["start"], "end": s["end"], "extra": s.get("extra"), **st}
-               for s, st in zip(rows, states)]
+    pays = {}
+    if month:
+        from .voucher_doc import classify_month
+        pays = {c["id"]: c["pay"] for c in classify_month(repo, p.org_id, month, child_id).get(child_id, []) if c["id"]}
+    records = [{"schedule_id": s["id"], "date": s["date"], "start": s["start"], "end": s["end"], "extra": s.get("extra"),
+                "pay": pays.get(s["id"]), **st} for s, st in zip(rows, states)]
     return {"records": records, "summary": _summary(states)}
 
 
@@ -184,6 +191,8 @@ def move(sid: str, body: MoveIn, p: Principal = Depends(require_write), repo=Dep
            "therapist": s.get("therapist"), "note": "보강", "status": "scheduled", "source": "makeup", "moved_from": sid}
     if s.get("extra"):  # a moved 추가 수업 stays the same kind
         new["extra"] = s["extra"]
+    if s.get("pay"):  # and so does a 결제 구분 chosen by hand
+        new["pay"] = s["pay"]
     from .schedules import busy
     for o in busy(repo, p.org_id, new["date"]):
         if o["start"] < new["end"] and new["start"] < o["end"] and (o.get("therapist") == new["therapist"] or o["child_id"] == new["child_id"]):

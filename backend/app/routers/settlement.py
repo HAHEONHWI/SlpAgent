@@ -5,10 +5,8 @@ from ..auth import Principal, current_principal
 from ..deps import can_settle, get_repo
 from ..repo.base import NotFound
 from ..services import billing
-from ..services.attendance_state import effective, held
-from .attendance import month_bounds
 from .timetable import sync_month
-from .voucher_doc import held_visits
+from .voucher_doc import classify_month
 
 
 
@@ -40,30 +38,18 @@ def grades(p: Principal = Depends(settler), repo=Depends(get_repo)):
 def month_settlement(month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"), p: Principal = Depends(settler), repo=Depends(get_repo)):
     org = _org(repo, p.org_id)
     paid_price, (day_price, night_price) = org.get("paid_price"), billing.voucher_prices(org)
-    # one read of the month for the whole organization, then split per child (not one pass per child)
     sync_month(repo, p.org_id, month)
-    first, last = month_bounds(month)
-    by_child: dict[str, dict[str, list]] = {}
-    def bucket(cid: str) -> dict[str, list]:
-        return by_child.setdefault(cid, {"schedules": [], "sessions": []})
-    for s in repo.list_range("schedules", p.org_id, "date", first, last):
-        bucket(s["child_id"])["schedules"].append(s)
-    for s in repo.list_range("therapy_sessions", p.org_id, "date", first, last):
-        bucket(s["child_id"])["sessions"].append(s)
-    marks = {m["schedule_id"]: m for m in repo.list_range("attendance", p.org_id, "date", first, last)}
-    absences = repo.list("absences", p.org_id)
+    classes = classify_month(repo, p.org_id, month)  # one read of the month for the whole organization
     rows = []
     for c in repo.list("children", p.org_id):
         if c.get("archived"):
             continue
-        data = by_child.get(c["id"], {"schedules": [], "sessions": []})
-        visits = held_visits(data["schedules"], marks, absences, data["sessions"], month)  # 추가(유료) excluded
-        paid = [s for s in data["schedules"] if s.get("extra") == "paid"
-                and held(effective(s, marks.get(s["id"]), absences, today="9999-12-31"))]
+        mine = classes.get(c["id"], [])
         grade = c.get("voucher_grade")
-        if not grade and not visits and not paid:
+        if not grade and not mine:
             continue
-        # a child without a 바우처 유형 pays for every class at the 유료 price
-        voucher, paid = (visits, paid) if grade else ([], paid + visits)
-        rows.append({"child_id": c["id"], **billing.settlement(grade, voucher, paid, paid_price, day_price, night_price, org.get("paid_night_price"))})
+        pick = lambda pay: [x for x in mine if x["pay"] == pay]
+        rows.append({"child_id": c["id"], "auto_private": sum(1 for x in mine if x["pay"] == "private" and x["pay_auto"]),
+                     **billing.settlement(grade, pick("voucher"), pick("private"), paid_price, day_price, night_price,
+                                          org.get("paid_night_price"), pick("cognitive"))})
     return {"month": month, "paid_price": paid_price, "paid_night_price": org.get("paid_night_price"), "rows": rows}

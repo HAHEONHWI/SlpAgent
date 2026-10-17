@@ -132,3 +132,19 @@ def edit(sid: str, body: ScheduleEdit, p: Principal = Depends(require_write), re
         pass
     audit(repo, p, "update", "schedules", sid, s["child_id"])
     return repo.update("schedules", p.org_id, sid, d)
+
+
+class PayIn(BaseModel):
+    pay: Literal["voucher", "private", "cognitive"] | None = Field(default=None, description="결제 구분; None = 자동 (바우처 26만원까지, 넘으면 사비)")
+
+
+@router.put("/{sid}/pay")
+def set_pay(sid: str, body: PayIn, p: Principal = Depends(require_write), repo=Depends(get_repo)):
+    """Choose how one class is paid: 바우처, 사비 or 인지 (인지치료, 사비 단가로 따로 집계). None goes back to automatic."""
+    try:
+        s = repo.get("schedules", p.org_id, sid)
+    except NotFound:
+        raise HTTPException(404, "schedule not found")
+    child_or_404(repo, p, s["child_id"])
+    audit(repo, p, "update", "schedules", sid, s["child_id"])
+    return repo.update("schedules", p.org_id, sid, {"pay": body.pay})

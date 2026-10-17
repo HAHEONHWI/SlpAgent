@@ -83,7 +83,8 @@ def voucher_price(classes: list[dict], day_price: int = DAY_PRICE, night_price: 
 
 
 def settlement(grade: str | None, voucher_classes: list[dict], paid_classes: list[dict] | int, paid_price: int | None,
-               day_price: int = DAY_PRICE, night_price: int = NIGHT_PRICE, paid_night_price: int | None = None) -> dict:
+               day_price: int = DAY_PRICE, night_price: int = NIGHT_PRICE, paid_night_price: int | None = None,
+               cognitive_classes: list[dict] = ()) -> dict:
     """One child's month. voucher_classes / paid_classes: held classes ({'date','start'}); a bare count of paid
     classes counts them all as 일반. 야간 유료 classes cost paid_night_price (unset = the 일반 유료 price).
     본인부담금 is monthly and used in proportion to the voucher spent (사용액 ÷ 월 26만원; with the default prices
@@ -94,8 +95,11 @@ def settlement(grade: str | None, voucher_classes: list[dict], paid_classes: lis
     paid_sessions = len(paid)
     paid_night = sum(1 for c in paid if is_night(c["date"], c["start"]))
     pn = paid_price if paid_night_price is None else paid_night_price
-    paid_amount = None if paid_price is None else int(Decimal(paid_price) * (paid_sessions - paid_night) + Decimal(pn) * paid_night)
+    cost = lambda cs: None if paid_price is None else int(sum(Decimal(pn if is_night(c["date"], c["start"]) else paid_price) for c in cs))
+    paid_amount = cost(paid)
+    cognitive_amount = cost(cognitive_classes)  # 인지: same prices as 사비, counted apart
     out: dict = {"grade": grade, "day_sessions": day, "night_sessions": night, "paid_sessions": paid_sessions, "paid_night_sessions": paid_night,
+                 "cognitive_sessions": len(cognitive_classes), "cognitive_amount": cognitive_amount,
                  "copay": None, "copay_charged": None, "copay_refund": None, "voucher_amount": None,
                  "support": None, "over_budget": False, "paid_amount": paid_amount}
     if grade in VOUCHER_COPAY:
@@ -105,5 +109,33 @@ def settlement(grade: str | None, voucher_classes: list[dict], paid_classes: lis
         charged = int(copay * used)
         out.update(copay=copay, copay_charged=charged, copay_refund=copay - charged, voucher_amount=amount,
                    support=min(amount, VOUCHER_TOTAL) - charged, over_budget=amount > VOUCHER_TOTAL)
-    out["guardian_total"] = None if paid_sessions and paid_amount is None else (out["copay_charged"] or 0) + (paid_amount or 0)
+    unpriced = (paid_sessions or cognitive_classes) and paid_price is None
+    out["guardian_total"] = None if unpriced else (out["copay_charged"] or 0) + (paid_amount or 0) + (cognitive_amount or 0)
+    return out
+
+
+# ---- 결제 구분: 바우처 / 사비 / 인지 ------------------------------------------------------------------------
+
+PAY = ("voucher", "private", "cognitive")  # 바우처, 사비(유료), 인지(인지치료: 사비 단가, 따로 집계)
+
+
+def assign_pay(classes: list[dict], voucher: bool, day_price: int = DAY_PRICE, night_price: int = NIGHT_PRICE) -> list[dict]:
+    """Give each held class of one child's month a 결제 구분 ({'pay', 'pay_auto'}).
+    A 구분 chosen on the class wins, and 추가(유료) is 사비. The rest fill the 바우처 in date order while the month
+    stays within 26만원 (5 일반 or 4 야간 classes at the default prices); classes past that, and every class of a
+    child without a 바우처, are 사비 automatically."""
+    ordered = sorted(classes, key=lambda c: (c["date"], c["start"]))
+    price = lambda c: night_price if is_night(c["date"], c["start"]) else day_price
+    spent = sum(price(c) for c in ordered if c.get("pay") == "voucher")
+    out = []
+    for c in ordered:
+        if c.get("pay") in PAY:
+            out.append({**c, "pay_auto": False})
+        elif c.get("extra") == "paid":
+            out.append({**c, "pay": "private", "pay_auto": False})
+        elif voucher and spent + price(c) <= VOUCHER_TOTAL:
+            spent += price(c)
+            out.append({**c, "pay": "voucher", "pay_auto": True})
+        else:
+            out.append({**c, "pay": "private", "pay_auto": True})
     return out

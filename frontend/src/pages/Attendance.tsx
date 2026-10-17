@@ -4,7 +4,7 @@ import { Download, Trash2, Undo2 } from "lucide-react";
 import { api } from "../lib/api";
 import { useChild } from "../lib/child";
 import { errText } from "../lib/hooks";
-import { EXTRA, type Extra } from "../lib/extraClass";
+import { EXTRA, PAY, type Extra, type Pay } from "../lib/extraClass";
 import ChildPicker from "../components/ChildPicker";
 import EditClassForm from "../components/EditClassForm";
 import { Badge, Button, Card, Empty, Input, Label, Notice, PageTitle, Table, Td } from "../components/ui";
@@ -12,11 +12,12 @@ import { Badge, Button, Card, Empty, Input, Label, Notice, PageTitle, Table, Td 
 type State = { status: string | null; auto: boolean; reason: string | null };
 type Mark = { status: string; minutes_late?: number | null; note?: string | null };
 type Row = { schedule_id: string; child_id: string; date: string; start: string; end: string; therapist: string; attendance: Mark | null; state: State;
-  moved_to: { date: string; start: string } | null; moved_from: string | null; extra?: Extra | null; source?: string | null };
+  moved_to: { date: string; start: string } | null; moved_from: string | null; extra?: Extra | null; source?: string | null;
+  pay?: Pay | null; pay_auto?: boolean };
 type Summary = { child_id: string; scheduled: number; present: number; late: number; absent: number; excused: number; makeup: number;
   auto: number; upcoming: number; moved: number; rate_pct: number | null };
 type Absence = { id: string; child_id: string; start: string; end: string; reason: string | null };
-type Rec = { date: string; start: string; end: string; status: string | null; auto: boolean; reason: string | null; extra?: Extra | null };
+type Rec = { date: string; start: string; end: string; status: string | null; auto: boolean; reason: string | null; extra?: Extra | null; pay?: Pay | null };
 
 const ST: Record<string, [string, "green" | "amber" | "red" | "slate" | "indigo"]> = {
   present: ["출석", "green"], late: ["지각", "amber"], absent: ["결석", "red"], excused: ["사유결석", "slate"], makeup: ["보강", "indigo"],
@@ -44,13 +45,13 @@ export default function Attendance() {
       const b = (value: string) => ({ value, fontWeight: "bold" as const });
       const totals = [["아동", "수업", "출석", "(자동)", "지각", "결석", "사유결석", "옮김", "남은 수업", "출석률(%)"].map(b),
         ...rows.map((s) => [who(s.child_id), s.scheduled, s.present + s.makeup, s.auto, s.late, s.absent, s.excused, s.moved, s.upcoming, s.rate_pct])];
-      const classes = [["날짜", "시간", "아동", "구분", "출결", "사유"].map(b),
-        ...rows.flatMap((s, i) => recs[i].records.map((r) => [r.date, `${r.start}–${r.end}`, who(s.child_id), r.extra ? EXTRA[r.extra] : "정규",
+      const classes = [["날짜", "시간", "아동", "구분", "결제", "출결", "사유"].map(b),
+        ...rows.flatMap((s, i) => recs[i].records.map((r) => [r.date, `${r.start}–${r.end}`, who(s.child_id), r.extra ? EXTRA[r.extra] : "정규", r.pay ? PAY[r.pay] : "-",
           r.status ? `${ST[r.status]?.[0] ?? r.status}${r.auto && r.status === "present" ? " (자동)" : ""}` : "예정", r.reason]))
           .sort((x, y) => `${x[0]}${x[1]}`.localeCompare(`${y[0]}${y[1]}`))];
       await writeXlsxFile([
         { data: totals, sheet: "월별 현황", columns: [{ width: 22 }, ...Array(9).fill({ width: 9 })], stickyRowsCount: 1 },
-        { data: classes, sheet: "수업별 출결", columns: [{ width: 12 }, { width: 13 }, { width: 22 }, { width: 16 }, { width: 12 }, { width: 30 }], stickyRowsCount: 1 },
+        { data: classes, sheet: "수업별 출결", columns: [{ width: 12 }, { width: 13 }, { width: 22 }, { width: 16 }, { width: 8 }, { width: 12 }, { width: 30 }], stickyRowsCount: 1 },
       ]).toFile(`출결_${month}.xlsx`);
     } catch (e) { setExportError(errText(e)); } finally { setExporting(false); }
   };
@@ -110,7 +111,7 @@ function AddClass({ day, onDone }: { day: string; onDone: () => void }) {
         <Button disabled={add.isPending || !f.child_id || !f.extra}>추가</Button>
         <Button type="button" variant="ghost" onClick={() => setOpen(false)}>취소</Button>
       </div>
-      <p className="text-xs text-slate-500">바우처 5회는 바우처 서류에 들어가고, 유료는 출결에만 남고 바우처 서류에서 빠져요. 담당 치료사와 수업 길이는 아동·시간표 설정을 따라요.</p>
+      <p className="text-xs text-slate-500">바우처는 한 달 26만원(일반 5회·야간 4회)까지만 바우처 서류에 들어가고, 넘는 수업은 자동으로 사비가 돼요. 수업마다 결제 칸에서 바우처·사비·인지로 바꿀 수 있어요. 유료로 추가한 수업은 처음부터 사비예요. 담당 치료사와 수업 길이는 아동·시간표 설정을 따라요.</p>
       {add.error && <Notice tone="red">{errText(add.error)}</Notice>}
     </form>
   );
@@ -126,8 +127,9 @@ function RollRow({ r, who, onDone }: { r: Row; who: string; onDone: () => void }
   const clear = useMutation({ mutationFn: () => api(`/schedules/${r.schedule_id}/attendance`, { method: "DELETE" }), onSuccess: onDone });
   const move = useMutation({ mutationFn: () => api(`/schedules/${r.schedule_id}/move`, { method: "POST", json: { date: to.date, start: to.start, reason: to.reason.trim() || null } }), onSuccess: () => { setMoving(false); onDone(); } });
   const unmove = useMutation({ mutationFn: () => api(`/schedules/${r.schedule_id}/unmove`, { method: "POST" }), onSuccess: onDone });
+  const pay = useMutation({ mutationFn: (v: string) => api(`/schedules/${r.schedule_id}/pay`, { method: "PUT", json: { pay: v || null } }), onSuccess: onDone });
   const st = r.state.status;
-  const err = mark.error || clear.error || move.error || unmove.error;
+  const err = mark.error || clear.error || move.error || unmove.error || pay.error;
   const badge = st === "moved" ? <Badge>옮김 → {r.moved_to ? `${md(r.moved_to.date)} ${r.moved_to.start}` : "?"}</Badge>
     : st ? <Badge tone={ST[st]?.[1]}>{ST[st]?.[0] ?? st}{st === "late" && r.attendance?.minutes_late ? ` ${r.attendance.minutes_late}분` : ""}{r.state.auto && st === "present" ? " (자동)" : ""}</Badge>
     : <Badge>예정</Badge>;
@@ -140,6 +142,11 @@ function RollRow({ r, who, onDone }: { r: Row; who: string; onDone: () => void }
         {r.moved_from && <Badge tone="indigo">보강</Badge>}
         {r.extra && <Badge tone={r.extra === "paid" ? "amber" : "indigo"}>{EXTRA[r.extra]}</Badge>}
         {badge}
+        {r.pay && <select aria-label="결제 구분" disabled={pay.isPending} value={r.pay_auto ? "" : r.pay} onChange={(e) => pay.mutate(e.target.value)}
+          className={`rounded-md border px-1.5 py-0.5 text-xs ${r.pay === "voucher" ? "border-indigo-200 bg-indigo-50 text-indigo-800" : r.pay === "cognitive" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
+          <option value="">{PAY[r.pay]} (자동)</option>
+          {(Object.keys(PAY) as Pay[]).map((k) => <option key={k} value={k}>{PAY[k]}</option>)}
+        </select>}
         {r.state.reason && <span className="text-xs text-slate-500">{r.state.reason}</span>}
       </div>
       {st !== "moved" && !(r.state.auto && st === "excused") && (
