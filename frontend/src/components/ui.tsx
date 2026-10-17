@@ -54,8 +54,9 @@ export const Badge = ({ tone = "slate", children }: { tone?: "slate" | "amber" |
 export const Notice = ({ tone = "amber", children }: { tone?: "amber" | "red"; children: ReactNode }) => (
   <div className={clsx("rounded-xl px-4 py-3 text-sm", tone === "amber" ? "bg-indigo-100/70 text-slate-900" : "bg-red-50 text-red-800")}>{children}</div>
 );
-export const Table = ({ head, children }: { head: string[]; children: ReactNode }) => (
-  <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b border-slate-300 text-left text-[11px] tracking-[.08em] text-slate-500">{head.map((h) => <th key={h} className="whitespace-nowrap px-2 py-2 font-semibold">{h}</th>)}</tr></thead><tbody className="divide-y divide-slate-200 [&>tr:hover]:bg-slate-900/[.03]">{children}</tbody></table></div>
+// `right`: indexes of numeric columns whose header lines up with right-aligned cells.
+export const Table = ({ head, children, right }: { head: string[]; children: ReactNode; right?: number[] }) => (
+  <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b border-slate-300 text-left text-[11px] tracking-[.08em] text-slate-500">{head.map((h, i) => <th key={h} className={clsx("whitespace-nowrap px-2 py-2 font-semibold", right?.includes(i) && "text-right")}>{h}</th>)}</tr></thead><tbody className="divide-y divide-slate-200 [&>tr:hover]:bg-slate-900/[.03]">{children}</tbody></table></div>
 );
 // Cells don't wrap (narrow screens scroll the table sideways instead of breaking words letter by letter);
 // `wrap` is for free-text cells such as reasons.
