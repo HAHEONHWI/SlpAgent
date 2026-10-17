@@ -7,6 +7,7 @@ import { useChild } from "../lib/child";
 import { useMe } from "../lib/me";
 import { seenAt, useNotices } from "../lib/notices";
 import { GROUPS, HOME, matches, roleLabel } from "../lib/menu";
+import BrandLogo from "./BrandLogo";
 import Footer from "./Footer";
 import ChildPicker from "./ChildPicker";
 
@@ -37,7 +38,7 @@ export default function Layout() {
       <header className="relative z-40 shrink-0 bg-slate-50 print:hidden">
         <div className="flex h-16 items-center gap-2 px-3 sm:gap-4 sm:px-4 md:px-8">
           <Link to="/" title="메인으로" className="flex shrink-0 items-center gap-2.5 whitespace-nowrap text-xl font-semibold tracking-[-.02em] text-slate-900">
-            <span className="block size-[18px] rounded-full bg-indigo-600" aria-hidden /><span className="hidden sm:inline">SLP AI</span>
+            <BrandLogo className="w-14 mix-blend-multiply sm:w-24" />
           </Link>
           <ChildPicker variant="header" className="min-w-0 flex-1 sm:flex-none md:ml-6 sm:w-[300px]" value={childId} onChange={setChildId} emptyLabel="아동 선택 안 함 (일반 모드)" aria-label="아동 선택" />
           <div className="ml-auto flex min-w-0 shrink-0 items-center gap-1 text-sm sm:gap-2 lg:gap-4">
