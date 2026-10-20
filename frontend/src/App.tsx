@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { KNOWLEDGE_ENABLED } from "./lib/menu";
 import { useAuth } from "./lib/auth";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
@@ -59,7 +60,7 @@ export default function App() {
         <Route path="progress" element={page(<Progress />)} />
         <Route path="parents" element={<Navigate to="/sessions" replace />} />
         <Route path="voucher" element={page(<Voucher />)} />
-        <Route path="knowledge" element={page(<Knowledge />)} />
+        <Route path="knowledge" element={KNOWLEDGE_ENABLED ? page(<Knowledge />) : <Navigate to="/" replace />} />
         <Route path="schedule" element={page(<Schedule />)} />
         <Route path="attendance" element={page(<Attendance />)} />
         <Route path="settlement" element={page(<Settlement />)} />

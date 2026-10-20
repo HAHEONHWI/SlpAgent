@@ -157,3 +157,26 @@ def test_absent_class_frees_the_time_slot(client, child):
     assert client.post("/schedules", headers=H(), json=clash).status_code == 409  # same therapist, same time
     client.put(f"/schedules/{a['id']}/attendance", headers=H(), json={"status": "excused", "note": "유치원소풍"})
     assert client.post("/schedules", headers=H(), json=clash).status_code == 201  # 사유결석 frees the slot
+
+
+def test_center_wide_closure_cancels_the_day_and_can_be_undone(client, child):
+    cid = child["id"]
+    a = client.post("/schedules", headers=H(), json={"child_id": cid, "date": "2020-10-14", "start": "10:00", "extra": "voucher"}).json()
+    b = client.post("/schedules", headers=H(), json={"child_id": cid, "date": "2020-10-14", "start": "15:00", "extra": "paid"}).json()
+    client.put(f"/schedules/{a['id']}/attendance", headers=H(), json={"status": "late", "minutes_late": 5})
+    other = client.post("/schedules", headers=H(), json={"child_id": cid, "date": "2020-10-15", "start": "10:00", "extra": "voucher"}).json()
+    body = {"date": "2020-10-14", "reason": "원장 교육"}
+    assert client.post("/attendance/closures", headers=H(), json=body).status_code == 403  # 기관 관리자만
+    r = client.post("/attendance/closures", headers=H(role="admin"), json=body)
+    assert r.status_code == 201 and r.json()["classes"] == 2
+    assert client.post("/attendance/closures", headers=H(role="admin"), json=body).status_code == 409
+    assert client.get("/attendance/day?on=2020-10-14", headers=H()).json() == []
+    assert [x["date"] for x in client.get(f"/children/{cid}/voucher-visits?month=2020-10", headers=H()).json()["visits"]] == ["2020-10-15"]
+    assert {"date": "10/14", "text": "센터 휴강 (원장 교육)"} in client.get(f"/children/{cid}/voucher-visits?month=2020-10", headers=H()).json()["other"]
+    assert client.get("/attendance/closures", headers=H()).json() == [{"date": "2020-10-14", "reason": "원장 교육", "classes": 2}]
+    assert "2020-10-14" in [h["date"] for h in client.get("/org/holidays", headers=H()).json() if h["scope"] == "closure"]
+    # undo: every class comes back as it was, attendance mark included
+    assert client.delete("/attendance/closures/2020-10-14", headers=H(role="admin")).status_code == 204
+    day = client.get("/attendance/day?on=2020-10-14", headers=H()).json()
+    assert [(d["start"], d["state"]["status"]) for d in day] == [("10:00", "late"), ("15:00", "present")]
+    assert client.get("/attendance/closures", headers=H()).json() == [] and b and other

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, Trash2, Undo2 } from "lucide-react";
 import { api } from "../lib/api";
 import { useChild } from "../lib/child";
+import { useMe } from "../lib/me";
 import { errText } from "../lib/hooks";
 import { EXTRA, PAY, type Extra, type Pay } from "../lib/extraClass";
 import ChildPicker from "../components/ChildPicker";
@@ -16,6 +17,7 @@ type Row = { schedule_id: string; child_id: string; date: string; start: string;
   pay?: Pay | null; pay_auto?: boolean };
 type Summary = { child_id: string; scheduled: number; present: number; late: number; absent: number; excused: number; makeup: number;
   auto: number; upcoming: number; moved: number; rate_pct: number | null };
+type Closure = { date: string; reason: string | null; classes: number };
 type Absence = { id: string; child_id: string; start: string; end: string; reason: string | null };
 type Rec = { date: string; start: string; end: string; status: string | null; auto: boolean; reason: string | null; extra?: Extra | null; pay?: Pay | null };
 
@@ -31,7 +33,10 @@ export default function Attendance() {
   const qc = useQueryClient();
   const [day, setDay] = useState(today());
   const [month, setMonth] = useState(today().slice(0, 7));
-  const [tab, setTab] = useState<"day" | "month" | "long">("day");
+  const [tab, setTab] = useState<"day" | "month" | "long" | "closed">("day");
+  const isAdmin = useMe().data?.role === "admin";
+  const closed = useQuery({ queryKey: ["attendance", "closures"], queryFn: () => api<Closure[]>("/attendance/closures") });
+  const closure = closed.data?.find((c) => c.date === day);
   const refresh = () => { qc.invalidateQueries({ queryKey: ["attendance"] }); qc.invalidateQueries({ queryKey: ["schedules"] }); qc.invalidateQueries({ queryKey: ["voucher-visits"] }); };
   const who = (id: string) => { const c = children.find((x) => x.id === id); return c ? `${c.display_name} · ${c.alias}` : "–"; };
   const roll = useQuery({ queryKey: ["attendance", "day", day], queryFn: () => api<Row[]>(`/attendance/day?on=${day}`) });
@@ -61,8 +66,8 @@ export default function Attendance() {
   const dayLabel = new Date(`${day}T00:00`).toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", weekday: "short" });
   return (
     <>
-      <PageTitle title="출결 관리" sub="수업은 따로 체크하지 않으면 출석으로 처리돼요. 결석·사유결석·지각, 보강(수업 옮기기), 장기결강만 여기서 기록하세요. 기관 휴무일은 일정 관리에서 정해요. 바우처 서류에 자동으로 반영됩니다." />
-      <Tabs value={tab} onChange={setTab} items={[["day", "일별 출결"], ["month", "월별 현황"], ["long", "장기결강"]]} />
+      <PageTitle title="출결 관리" sub="수업은 따로 체크하지 않으면 출석으로 처리돼요. 결석·사유결석·지각, 보강(수업 옮기기), 장기결강, 치료실 전체 휴강만 여기서 기록하세요. 기관 휴무일은 일정 관리에서 정해요. 바우처 서류에 자동으로 반영됩니다." />
+      <Tabs value={tab} onChange={setTab} items={[["day", "일별 출결"], ["month", "월별 현황"], ["long", "장기결강"], ["closed", "전체 휴강"]]} />
       {tab === "day" && (
         <section>
           <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -73,6 +78,7 @@ export default function Attendance() {
               <div className="w-44"><Input type="date" value={day} onChange={(e) => setDay(e.target.value)} aria-label="날짜" /></div>
             </div>
           </div>
+          {closure && <div className="mb-3"><Notice tone="amber">이 날은 치료실 전체 휴강이에요{closure.reason ? ` (${closure.reason})` : ""}. 수업 {closure.classes}개가 취소되어 출결·정산·바우처 서류에서 빠졌어요. ‘전체 휴강’ 탭에서 되돌릴 수 있어요.</Notice></div>}
           {roll.isLoading ? <p className="text-sm text-slate-400">불러오는 중…</p> : !roll.data?.length ? <Empty>이 날짜에 수업이 없습니다.</Empty> : (
             <ul className="divide-y divide-slate-200 border-y border-slate-300">{roll.data.map((r) => <RollRow key={r.schedule_id} r={r} who={who(r.child_id)} onDone={refresh} />)}</ul>)}
           {roll.error && <Notice tone="red">{errText(roll.error)}</Notice>}
@@ -81,6 +87,7 @@ export default function Attendance() {
         </section>)}
 
       {tab === "long" && <Absences who={who} onDone={refresh} />}
+      {tab === "closed" && <Closures list={closed.data ?? []} isAdmin={isAdmin} onDone={refresh} />}
 
       {tab === "month" && (
         <section>
@@ -192,6 +199,35 @@ function RollRow({ r, who, onDone }: { r: Row; who: string; onDone: () => void }
         </form>)}
       {err && <div className="mt-2"><Notice tone="red">{errText(err)}</Notice></div>}
     </li>
+  );
+}
+
+/** 치료실 전체 휴강: the whole center cancels a day. Every class that day is cancelled; undoing brings them back. */
+function Closures({ list, isAdmin, onDone }: { list: Closure[]; isAdmin: boolean; onDone: () => void }) {
+  const [f, setF] = useState({ date: "", reason: "" });
+  const add = useMutation({
+    mutationFn: () => api<Closure>("/attendance/closures", { method: "POST", json: { date: f.date, reason: f.reason.trim() || null } }),
+    onSuccess: () => { setF({ date: "", reason: "" }); onDone(); },
+  });
+  const undo = useMutation({ mutationFn: (d: string) => api(`/attendance/closures/${d}`, { method: "DELETE" }), onSuccess: onDone });
+  return (
+    <section className="space-y-4">
+      <p className="text-sm text-slate-600">센터 사정으로 하루 전체 수업을 쉬는 날이에요. 그날의 모든 수업(시간표·추가·보강, 이미 출결을 적은 수업 포함)이 취소되어 출결·정산·바우처 서류에서 빠지고, 바우처 ‘기타사항’에 ‘센터 휴강’이 적혀요. 휴강을 지우면 수업이 원래대로 돌아와요.</p>
+      {isAdmin ? (
+        <form className="flex flex-wrap items-end gap-2" onSubmit={(e) => { e.preventDefault(); if (confirm(`${f.date} 하루 전체 수업을 휴강으로 처리할까요?`)) add.mutate(); }}>
+          <Label label="날짜"><Input type="date" required value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></Label>
+          <div className="min-w-56 flex-1"><Label label="사유"><Input maxLength={100} placeholder="예: 원장 교육, 태풍, 시설 점검" value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} /></Label></div>
+          <Button disabled={add.isPending || !f.date}>휴강 등록</Button>
+        </form>) : <Notice>전체 휴강은 기관 관리자가 정해요.</Notice>}
+      {add.data && <Notice>{add.data.date} 휴강을 등록했어요. 수업 {add.data.classes}개를 취소했어요.</Notice>}
+      {!list.length ? <Empty>등록된 전체 휴강이 없습니다.</Empty> : (
+        <Table head={["날짜", "사유", "취소된 수업", ""]}>
+          {[...list].reverse().map((c) => (
+            <tr key={c.date}><Td className="tabular-nums">{c.date}</Td><Td>{c.reason ?? "–"}</Td><Td>{c.classes}개</Td>
+              <Td>{isAdmin && <Button variant="ghost" disabled={undo.isPending} onClick={() => { if (confirm(`${c.date} 휴강을 지우고 수업을 되돌릴까요?`)) undo.mutate(c.date); }}><Undo2 size={14} />되돌리기</Button>}</Td></tr>))}
+        </Table>)}
+      {(add.error || undo.error) && <Notice tone="red">{errText(add.error || undo.error)}</Notice>}
+    </section>
   );
 }
 

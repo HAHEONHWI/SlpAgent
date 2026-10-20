@@ -3,10 +3,13 @@ import type { Me } from "./me";
 export type MenuItem = { to: string; label: string; desc: string; child?: boolean; show?: (me: Me | undefined) => boolean };
 export type MenuGroup = { id: string; title: string; items: MenuItem[] };
 
+/** AI 지식자료실 screen (and its dashboard card) is switched off for now. AI 대화 still searches the 검사 서류. */
+export const KNOWLEDGE_ENABLED = false;
+
 const adminOnly = (me: Me | undefined) => me?.role === "admin";
 const canWrite = (me: Me | undefined) => me?.role === "admin" || me?.role === "therapist";
 
-export const HOME: MenuItem = { to: "/", label: "대시보드", desc: "담당 아동 수 · 승인 대기 AI 초안 · AI 참고 검사 서류" };
+export const HOME: MenuItem = { to: "/", label: "대시보드", desc: "담당 아동 수 · 승인 대기 AI 초안" };
 export const ACCOUNT: MenuItem = { to: "/account", label: "내 계정", desc: "비밀번호 변경 · 회원 탈퇴" };
 // Grouped so the everyday screens are short to find. `child` marks screens that need a selected child.
 export const GROUPS: MenuGroup[] = [
@@ -27,7 +30,7 @@ export const GROUPS: MenuGroup[] = [
   { id: "ai", title: "AI", items: [
     { to: "/ai", label: "AI 대화", desc: "언어치료 지식 · 임상 대화 모드" },
     { to: "/activities", label: "치료활동 생성", child: true, show: canWrite, desc: "조건 입력 → AI 초안 → 승인/반려" },  // 보조(읽기 전용)는 만들 수 없음
-    { to: "/knowledge", label: "AI 지식자료실", desc: "검사 서류 등 AI 참고자료 · 키워드 검색" },
+    { to: "/knowledge", label: "AI 지식자료실", show: () => KNOWLEDGE_ENABLED, desc: "검사 서류 등 AI 참고자료 · 키워드 검색" },
   ] },
   { id: "admin", title: "행정", items: [
     { to: "/voucher", label: "바우처·문서 생성", child: true, desc: "월별 집계 · DOCX/PDF/HWPX 출력" },

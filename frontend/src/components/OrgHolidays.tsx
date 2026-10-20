@@ -6,7 +6,7 @@ import { errText } from "../lib/hooks";
 import { useMe } from "../lib/me";
 import { Badge, Button, Card, Empty, Input, Label, Notice } from "./ui";
 
-type Holiday = { date: string; name: string; scope?: "site" | "org" };
+type Holiday = { date: string; name: string; scope?: "site" | "org" | "closure" };
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const md = (iso: string) => `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}`;
 
@@ -21,7 +21,7 @@ export default function OrgHolidays() {
     onSuccess: () => { setF({ date: "", name: "" }); ["holidays", "timetable", "schedules", "attendance", "settlement", "voucher-visits"].forEach((k) => qc.invalidateQueries({ queryKey: [k] })); },
   });
   const all = list.data ?? [];
-  const rows = all.filter((h) => h.scope !== "site").map(({ date, name }) => ({ date, name }));  // only the organization's own ones are saved here
+  const rows = all.filter((h) => h.scope === "org").map(({ date, name }) => ({ date, name }));  // only the organization's own ones are saved here
   const upcoming = all.filter((h) => h.date >= today().slice(0, 7));
   return (
     <Card title="기관 휴무일" className="mt-4">
@@ -36,7 +36,7 @@ export default function OrgHolidays() {
           {upcoming.map((h) => (
             <span key={h.date} className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 py-1 pl-3 pr-1.5 text-sm">
               <b className="tabular-nums">{md(h.date)}</b>{h.name}
-              {h.scope === "site" ? <Badge tone="indigo">전체</Badge> : isAdmin && <button className="rounded-full p-0.5 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label={`${h.name} 삭제`} onClick={() => save.mutate(rows.filter((x) => x.date !== h.date))}><Trash2 size={13} /></button>}
+              {h.scope === "site" ? <Badge tone="indigo">전체</Badge> : h.scope === "closure" ? <Badge tone="amber">출결 관리에서 정함</Badge> : isAdmin && <button className="rounded-full p-0.5 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label={`${h.name} 삭제`} onClick={() => save.mutate(rows.filter((x) => x.date !== h.date))}><Trash2 size={13} /></button>}
             </span>))}
         </div>)}
       <p className="mt-2 text-xs text-slate-500">휴무일에는 주간 시간표 수업이 생기지 않고, 이미 생긴 수업 중 출결을 기록하지 않은 것은 빠져요. ‘전체’ 휴무일은 사이트 관리자가 모든 기관에 정한 날이에요. {isAdmin ? "" : "기관 휴무일은 기관 관리자가 정해요."}</p>

@@ -48,6 +48,8 @@ def other_notes(schedules: list[dict], marks: dict[str, dict], absences: list[di
             new = by_id.get(s.get("moved_to") or "")
             to = f"{_md(new['date'])} {new['start']}" if new else "다른 날"
             out.append((s["date"], _md(s["date"]), f"수업일 변경 → {to} 보강" + (f" ({s['move_reason']})" if s.get("move_reason") else "")))
+        elif s.get("status") == "cancelled" and s.get("closure"):
+            out.append((s["date"], _md(s["date"]), "센터 휴강" + (f" ({s['cancel_reason'].removeprefix('휴강 · ')})" if s.get("cancel_reason", "").startswith("휴강 · ") else "")))
         elif (m := marks.get(s["id"])) and m.get("status") in ("absent", "excused") \
                 and not absence_for(absences, s["child_id"], s["date"]):
             out.append((s["date"], _md(s["date"]), "결강" + (f" ({m['note']})" if m.get("note") else "")))

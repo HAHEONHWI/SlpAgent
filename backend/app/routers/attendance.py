@@ -291,9 +291,20 @@ def site_holidays(repo) -> list[dict]:
         return []
 
 
+def closures(repo, org_id: str) -> list[dict]:
+    """치료실 전체 휴강 days ({'date', 'reason'})."""
+    try:
+        return sorted(repo.get("organizations", org_id, org_id).get("closures") or [], key=lambda c: c["date"])
+    except NotFound:
+        return []
+
+
 def holidays(repo, org_id: str) -> list[dict]:
-    """Every day this organization is closed: 전체 휴무일 (scope "site") and its own 기관 휴무일 (scope "org")."""
-    out = {h["date"]: {**h, "scope": "org"} for h in org_holidays(repo, org_id)}
+    """Every day this organization is closed: 전체 휴무일 (scope "site"), its own 기관 휴무일 (scope "org") and
+    치료실 전체 휴강 days (scope "closure")."""
+    out = {c["date"]: {"date": c["date"], "name": f"휴강 · {c['reason']}" if c.get("reason") else "휴강", "scope": "closure"}
+           for c in closures(repo, org_id)}
+    out.update({h["date"]: {**h, "scope": "org"} for h in org_holidays(repo, org_id)})
     out.update({h["date"]: {**h, "scope": "site"} for h in site_holidays(repo)})
     return sorted(out.values(), key=lambda h: h["date"])
 
@@ -353,3 +364,67 @@ def put_site_holidays(body: HolidaysIn, admin: Identity = Depends(require_site_a
     repo.create("audit_logs", PLATFORM, {"actor": admin.uid, "role": "site_admin", "action": "update",
                                          "collection": "settings", "doc_id": "holidays"})
     return rows
+
+
+
+# ---- 치료실 전체 휴강 ------------------------------------------------------------------------------------
+
+class ClosureIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    date: date
+    reason: str | None = Field(default=None, max_length=100)
+
+
+def _save_closures(repo, org_id: str, rows: list[dict]):
+    try:
+        repo.get("organizations", org_id, org_id)
+        repo.update("organizations", org_id, org_id, {"closures": sorted(rows, key=lambda c: c["date"])})
+    except NotFound:
+        repo.create("organizations", org_id, {"name": "", "closures": rows}, doc_id=org_id)
+
+
+@router.get("/attendance/closures")
+def list_closures(p: Principal = Depends(current_principal), repo=Depends(get_repo)):
+    """휴강 days with how many classes each one cancelled (for the people who can see them)."""
+    scope = _scope(repo, p)
+    out = []
+    for c in closures(repo, p.org_id):
+        n = sum(1 for s in repo.list("schedules", p.org_id, date=c["date"]) if s.get("closure") == c["date"]
+                and (scope is None or s["child_id"] in scope))
+        out.append({**c, "classes": n})
+    return out
+
+
+@router.post("/attendance/closures", status_code=201)
+def close_day(body: ClosureIn, p: Principal = Depends(require_admin), repo=Depends(get_repo)):
+    """치료실 전체 휴강: every class that day (timetable, 추가, 보강, even ones already marked) is cancelled and stays
+    out of 출결·정산·바우처 서류; the voucher 기타사항 says '센터 휴강'. Undoing it brings them all back."""
+    d = body.date.isoformat()
+    rows = closures(repo, p.org_id)
+    if any(c["date"] == d for c in rows):
+        raise HTTPException(409, "이미 휴강으로 정한 날입니다")
+    from .timetable import sync_schedules
+    sync_schedules(repo, p.org_id, body.date, body.date)  # the day's timetable classes exist before they are cancelled
+    reason = (body.reason or "").strip() or None
+    n = 0
+    for s in repo.list("schedules", p.org_id, date=d):
+        if s.get("status") == "scheduled":
+            repo.update("schedules", p.org_id, s["id"], {"status": "cancelled", "closure": d, "cancel_reason": f"휴강 · {reason}" if reason else "휴강"})
+            n += 1
+    _save_closures(repo, p.org_id, rows + [{"date": d, "reason": reason}])
+    audit(repo, p, "close_day", "organizations", p.org_id)
+    return {"date": d, "reason": reason, "classes": n}
+
+
+@router.delete("/attendance/closures/{day}", status_code=204)
+def reopen_day(day: date, p: Principal = Depends(require_admin), repo=Depends(get_repo)):
+    d = day.isoformat()
+    rows = closures(repo, p.org_id)
+    if not any(c["date"] == d for c in rows):
+        raise HTTPException(404, "휴강으로 정한 날이 아닙니다")
+    _save_closures(repo, p.org_id, [c for c in rows if c["date"] != d])
+    for s in repo.list("schedules", p.org_id, date=d):
+        if s.get("closure") == d:
+            repo.update("schedules", p.org_id, s["id"], {"status": "scheduled", "closure": None, "cancel_reason": None})
+    touch_timetable(repo, p.org_id)
+    audit(repo, p, "reopen_day", "organizations", p.org_id)
