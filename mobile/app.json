@@ -1,0 +1,58 @@
+{
+  "expo": {
+    "name": "SLP AI",
+    "slug": "slp-ai",
+    "scheme": "slpai",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#FCFAF7",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "dev.heonhwi.slpai"
+    },
+    "android": {
+      "package": "dev.heonhwi.slpai",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FCFAF7"
+      },
+      "softwareKeyboardLayoutMode": "resize",
+      "predictiveBackGestureEnabled": false,
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 220,
+          "backgroundColor": "#FCFAF7"
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "수업 녹음을 기록으로 만들기 위해 마이크를 사용합니다.",
+          "recordAudioAndroid": true,
+          "enableBackgroundRecording": true,
+          "enableBackgroundPlayback": false
+        }
+      ],
+      "expo-sharing",
+      "@react-native-community/datetimepicker",
+      "expo-font",
+      "expo-asset"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

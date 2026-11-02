@@ -16,6 +16,7 @@ SLP Agent is a Korean-language assistant for speech-language therapists. Backend
 - `docs/`: plans, operations, retention, and privacy procedures.
 - `reference-docs/` and `extracted/` are local-only source material and generated extraction. Do not commit, upload, or publish either directory.
 - `frontend/` belongs to another owner. Do not modify it for backend work.
+- `mobile/`: Expo (React Native) Android app using the same API and Firebase project; mirrors the web's 매일 and AI menus plus the record-by-recording flow. Follow `mobile/AGENTS.md`; Play Store release steps are in `mobile/README.md`.
 
 Run from the repository root:
 
