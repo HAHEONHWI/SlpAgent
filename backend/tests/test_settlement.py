@@ -60,10 +60,9 @@ def test_month_settlement_follows_attendance(client, child):
     assert (row["day_sessions"], row["copay_charged"], row["copay_refund"], row["paid_sessions"], row["guardian_total"]) == (2, 16_000, 24_000, 1, 66_000)
     v = client.get(f"/children/{cid}/voucher-visits?month=2020-10", headers=H()).json()
     assert (v["unit_price"], v["copay"]) == (52_000, 40_000)
-    # without a 바우처 유형 every class is 유료
     client.put(f"/children/{cid}/voucher", headers=H(), json={"voucher_grade": None})
     [row] = client.get("/settlement?month=2020-10", headers=admin).json()["rows"]
-    assert (row["day_sessions"], row["paid_sessions"], row["guardian_total"]) == (0, 3, 150_000)
+    assert (row["day_sessions"], row["paid_sessions"], row["guardian_total"], row["support"]) == (2, 1, None, None)
     g = client.get("/settlement/grades", headers=admin).json()
     assert (g["total"], g["day_price"], g["night_price"]) == (260_000, 52_000, 65_000)
     assert [(x["grade"], x["support"]) for x in g["grades"]][:2] == [("다", 260_000), ("가", 240_000)]
@@ -110,32 +109,26 @@ def _days(n, start="10:00"):
     return [{"date": f"2020-10-{d:02d}", "start": start} for d in (5, 6, 7, 8, 9, 12, 13, 14, 15, 16)[:n]]
 
 
-def test_voucher_is_cut_at_the_monthly_total():
-    # 일반 8회: 앞의 5회가 바우처(26만원), 나머지 3회는 자동으로 사비
-    pays = [c["pay"] for c in assign_pay(_days(8), True)]
-    assert pays == ["voucher"] * 5 + ["private"] * 3
-    # 야간은 4회까지 (65,000 × 4 = 26만원)
-    assert [c["pay"] for c in assign_pay(_days(5, "19:00"), True)] == ["voucher"] * 4 + ["private"]
-    # 직접 고른 구분이 먼저: 인지 2회, 사비 1회 → 남은 5회가 바우처
+def test_class_categories_default_to_voucher_and_preserve_choices():
+    assert [c["pay"] for c in assign_pay(_days(8))] == ["voucher"] * 5 + ["private"] * 3
+    assert [c["pay"] for c in assign_pay(_days(5, "19:00"))] == ["voucher"] * 5
     cls = _days(8)
     cls[0]["pay"], cls[1]["pay"], cls[7]["pay"] = "cognitive", "cognitive", "private"
-    out = assign_pay(cls, True)
+    out = assign_pay(cls)
     assert [c["pay"] for c in out] == ["cognitive", "cognitive"] + ["voucher"] * 5 + ["private"]
     assert [c["pay_auto"] for c in out][:3] == [False, False, True]
-    # 추가(유료)는 사비, 바우처가 없는 아이는 모두 사비
-    assert assign_pay([{**_days(1)[0], "extra": "paid"}], True)[0]["pay"] == "private"
-    assert {c["pay"] for c in assign_pay(_days(3), False)} == {"private"}
+    assert assign_pay([{**_days(1)[0], "extra": "paid"}])[0]["pay"] == "private"
+    assert assign_pay([{**_days(1)[0], "extra": "paid", "pay": "voucher"}])[0]["pay"] == "voucher"
     # 인지는 사비 단가로 따로 계산되어 보호자 청구에 더해짐
     s = settlement("마", _days(5), [], 50_000, cognitive_classes=_days(2))
     assert (s["cognitive_sessions"], s["cognitive_amount"], s["guardian_total"]) == (2, 100_000, 80_000 + 100_000)
 
 
-def test_month_classes_follow_the_cap_and_chosen_pay(client, child):
+def test_month_classes_follow_chosen_pay_and_the_first_five_are_voucher(client, child):
     cid = child["id"]
     client.put("/org", headers=H(role="admin"), json={"name": "센터", "paid_price": 50_000})
     client.put(f"/children/{cid}/voucher", headers=H(), json={"voucher_grade": "나"})
     ids = [client.post("/schedules", headers=H(), json={"child_id": cid, "date": c["date"], "start": "10:00", "extra": "voucher"}).json()["id"] for c in _days(8)]
-    # 바우처 서류에는 5회만
     assert len(client.get(f"/children/{cid}/voucher-visits?month=2020-10", headers=H()).json()["visits"]) == 5
     assert client.put(f"/schedules/{ids[0]}/pay", headers=H(), json={"pay": "cognitive"}).json()["pay"] == "cognitive"
     assert client.put(f"/schedules/{ids[1]}/pay", headers=H(), json={"pay": "bad"}).status_code == 422
@@ -144,7 +137,8 @@ def test_month_classes_follow_the_cap_and_chosen_pay(client, child):
     assert [(d["pay"], d["pay_auto"]) for d in day] == [("cognitive", False)]
     [row] = client.get("/settlement?month=2020-10", headers=H(role="admin")).json()["rows"]
     assert (row["day_sessions"], row["paid_sessions"], row["cognitive_sessions"], row["auto_private"]) == (5, 2, 1, 2)
-    # back to automatic
     client.put(f"/schedules/{ids[0]}/pay", headers=H(), json={"pay": None})
     [row] = client.get("/settlement?month=2020-10", headers=H(role="admin")).json()["rows"]
     assert (row["day_sessions"], row["paid_sessions"], row["cognitive_sessions"]) == (5, 3, 0)
+    assert row["support"] + row["copay_charged"] == 260_000
+    assert row["over_budget"] is False

@@ -17,7 +17,7 @@ import io
 import re
 import zipfile
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 TEMPLATE = Path(__file__).resolve().parent.parent / "data" / "hwpx" / "voucher_template.hwpx"
@@ -51,7 +51,6 @@ class VoucherInput:
     year: int
     month: int
     visits: list[Visit] = field(default_factory=list)
-    written_on: date | None = None  # 작성일자 on page 3; default: last day of the month
     teacher: str = ""  # 교사명 / 담당 on page 3; default: the therapist with the most visits
     unit_price: int | None = None  # 원/회; None keeps the template's price
     copay: int | None = None  # 본인부담금; None leaves it blank
@@ -235,7 +234,8 @@ def _fill_pages_1(xml: str, data: VoucherInput) -> str:
         d = Doc(part)
         _fill_sheet(d, data, chunk, other)
         d.replace_text(TITLE1, rf"\g<1> {data.month}월 \g<2>")
-        return _LINESEG.sub("", d.xml) if not first else d.xml
+        # Edited cells drop their own layout; page-level layout keeps HWP conversion from adding blank pages.
+        return d.xml
 
     body = "".join(filled(c, i == 0, others[i]) for i, c in enumerate(chunks))
     return xml[:paras[0][0]] + body + xml[paras[p2][0]:]
@@ -266,10 +266,10 @@ def _fill_pages_2(xml: str, data: VoucherInput) -> str:
     block = xml[paras[h][0]:paras[t][1]]
     chunks = [data.visits[i:i + PER_SHEET] for i in range(0, max(len(data.visits), 1), PER_SHEET)]
     out = []
-    for k, chunk in enumerate(chunks):
+    for chunk in chunks:
         d = Doc(block)
         _fill_sheet_2(d, data, chunk)
-        out.append(d.xml if k == 0 else _LINESEG.sub("", d.xml))  # the heading already starts a new page
+        out.append(d.xml)  # keep page-level layout; edited cells already drop stale lines
     return xml[:paras[h][0]] + "".join(out) + xml[paras[t][1]:]
 
 
@@ -327,13 +327,14 @@ def _calendar_rows(t: Table, data: VoucherInput, label: dict[int, str]) -> None:
 
 def _fill_page_3(doc: Doc, data: VoucherInput) -> None:
     doc.replace_text(TITLE3, rf"\g<1> {data.month}월 \g<2>")
-    last_day = date(data.year, data.month, calendar.monthrange(data.year, data.month)[1])
+    prior_month_end = date(data.year, data.month, 1) - timedelta(days=1)
     teacher = data.teacher or _main_therapist(data.visits)
 
     def head(t: Table):
+        t.set(0, 1, "8001")
         t.set(0, 3, data.child_name)
         t.set(1, 1, teacher)
-        t.set(1, 3, _dotted(data.written_on or last_day, trailing_dot=False))
+        t.set(1, 3, _dotted(prior_month_end, trailing_dot=False))
     doc.edit(doc.find("사회복지서비스관리번호", "작성일자"), head)
 
     label: dict[int, str] = {}

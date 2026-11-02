@@ -20,7 +20,7 @@ class ChildIn(BaseModel):
     guardian_contact: str | None = None
     notes: str | None = None
     therapist: str | None = Field(default=None, max_length=20, description="담당(지정제공인력)")
-    voucher_grade: Literal["가", "나", "다", "라", "마"] | None = Field(default=None, description="발달재활 바우처 등급. None = 바우처 없음(유료)")
+    voucher_grade: Literal["가", "나", "다", "라", "마"] | None = Field(default=None, description="발달재활 바우처 등급. None = 지원금·본인부담금 계산 보류; 수업 구분은 일정에서 지정")
     disability_registered: bool | None = Field(default=None, description="장애등록 여부 (Y/N). None = 미입력")
 
 
@@ -126,7 +126,7 @@ def set_therapist(child_id: str, body: TherapistIn, p: Principal = Depends(requi
 
 class VoucherGradeIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    voucher_grade: Literal["가", "나", "다", "라", "마"] | None = Field(default=None, description="발달재활 바우처 유형. None = 바우처 없음(유료)")
+    voucher_grade: Literal["가", "나", "다", "라", "마"] | None = Field(default=None, description="발달재활 바우처 유형. None = 지원금·본인부담금 계산 보류; 수업 구분은 일정에서 지정")
 
 
 @router.put("/{child_id}/voucher")

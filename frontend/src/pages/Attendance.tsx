@@ -8,7 +8,7 @@ import { errText } from "../lib/hooks";
 import { EXTRA, PAY, type Extra, type Pay } from "../lib/extraClass";
 import ChildPicker from "../components/ChildPicker";
 import EditClassForm from "../components/EditClassForm";
-import { Badge, Button, Empty, Input, Label, Notice, PageTitle, Segmented, Table, Tabs, Td } from "../components/ui";
+import { Badge, Button, Empty, Input, Label, Notice, PageTitle, Segmented, Select, Table, Tabs, Td } from "../components/ui";
 
 type State = { status: string | null; auto: boolean; reason: string | null };
 type Mark = { status: string; minutes_late?: number | null; note?: string | null };
@@ -37,7 +37,7 @@ export default function Attendance() {
   const isAdmin = useMe().data?.role === "admin";
   const closed = useQuery({ queryKey: ["attendance", "closures"], queryFn: () => api<Closure[]>("/attendance/closures") });
   const closure = closed.data?.find((c) => c.date === day);
-  const refresh = () => { qc.invalidateQueries({ queryKey: ["attendance"] }); qc.invalidateQueries({ queryKey: ["schedules"] }); qc.invalidateQueries({ queryKey: ["voucher-visits"] }); };
+  const refresh = () => ["attendance", "schedules", "voucher-visits", "settlement", "class-records"].forEach((key) => qc.invalidateQueries({ queryKey: [key] }));
   const who = (id: string) => { const c = children.find((x) => x.id === id); return c ? `${c.display_name} · ${c.alias}` : "–"; };
   const roll = useQuery({ queryKey: ["attendance", "day", day], queryFn: () => api<Row[]>(`/attendance/day?on=${day}`) });
   const summary = useQuery({ queryKey: ["attendance", "summary", month], queryFn: () => api<Summary[]>(`/attendance/summary?month=${month}`) });
@@ -114,10 +114,9 @@ export default function Attendance() {
   );
 }
 
-/** 수업 추가: a one-off class on the chosen day, either 바우처 5회 (goes into the voucher form) or 유료 (does not). */
 function AddClass({ day, onDone }: { day: string; onDone: () => void }) {
   const [open, setOpen] = useState(false);
-  const empty = { child_id: "", start: "", extra: "" as Extra | "" };
+  const empty: { child_id: string; start: string; extra: Extra } = { child_id: "", start: "", extra: "voucher" };
   const [f, setF] = useState(empty);
   const add = useMutation({
     mutationFn: () => api("/schedules", { method: "POST", json: { child_id: f.child_id, date: day, start: f.start, extra: f.extra } }),
@@ -126,14 +125,14 @@ function AddClass({ day, onDone }: { day: string; onDone: () => void }) {
   if (!open) return <div className="mt-4"><Button onClick={() => { add.reset(); setOpen(true); }}>+ 수업 추가</Button></div>;
   return (
     <form className="mt-4 space-y-3 rounded-3xl bg-slate-100 p-5 shadow-sm" onSubmit={(e) => { e.preventDefault(); add.mutate(); }}>
-      <Segmented aria-label="추가 종류" value={f.extra} onChange={(extra) => setF({ ...f, extra })} items={(Object.keys(EXTRA) as Extra[]).map((k) => [k, EXTRA[k]] as [Extra, string])} />
+      <Segmented aria-label="수업 구분" value={f.extra} onChange={(extra) => setF({ ...f, extra })} items={(Object.keys(EXTRA) as Extra[]).map((k) => [k, EXTRA[k]] as [Extra, string])} />
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-48 flex-1"><Label label="아동"><ChildPicker value={f.child_id || null} onChange={(id) => setF({ ...f, child_id: id ?? "" })} /></Label></div>
         <Label label={`시작 시간 (${md(day)})`}><Input type="time" required value={f.start} onChange={(e) => setF({ ...f, start: e.target.value })} /></Label>
         <Button disabled={add.isPending || !f.child_id || !f.extra}>추가</Button>
         <Button type="button" variant="ghost" onClick={() => setOpen(false)}>취소</Button>
       </div>
-      <p className="text-xs text-slate-500">바우처는 한 달 26만원(일반 5회·야간 4회)까지만 바우처 서류에 들어가고, 넘는 수업은 자동으로 사비가 돼요. 수업마다 결제 칸에서 바우처·사비·인지로 바꿀 수 있어요. 유료로 추가한 수업은 처음부터 사비예요. 담당 치료사와 수업 길이는 아동·시간표 설정을 따라요.</p>
+      <p className="text-xs text-slate-500">수업은 기본 바우처예요. 결제 일정이 ‘실제와 동일’이면 그 달 처음 5회만 바우처이고 나머지는 자동 사비, 결제 일정을 입력했으면 그 날짜 수업만 바우처예요(일정 관리 › 월간 일정표). 담당 치료사와 수업 길이는 아동·시간표 설정을 따라요.</p>
       {add.error && <Notice tone="red">{errText(add.error)}</Notice>}
     </form>
   );
@@ -164,13 +163,11 @@ function RollRow({ r, who, onDone }: { r: Row; who: string; onDone: () => void }
         <span className="font-semibold">{who}</span>
         <span className="text-sm text-slate-500">{r.therapist}</span>
         {r.moved_from && <Badge tone="indigo">보강</Badge>}
-        {r.extra && <Badge tone={r.extra === "paid" ? "amber" : "indigo"}>{EXTRA[r.extra]}</Badge>}
+        {r.extra && <Badge>추가</Badge>}
         {badge}
-        {r.pay && <select aria-label="결제 구분" disabled={pay.isPending} value={r.pay_auto ? "" : r.pay} onChange={(e) => pay.mutate(e.target.value)}
-          className={`rounded-full border px-2.5 py-0.5 text-xs ${r.pay === "voucher" ? "border-indigo-200 bg-indigo-100 text-indigo-800" : r.pay === "cognitive" ? "border-green-200 bg-green-100 text-green-800" : "border-amber-200 bg-amber-100 text-amber-800"}`}>
-          <option value="">{PAY[r.pay]} (자동)</option>
+        {r.pay && <Select aria-label="수업 구분" className="w-28 py-1 text-xs" disabled={pay.isPending} value={r.pay} onChange={(e) => pay.mutate(e.target.value)}>
           {(Object.keys(PAY) as Pay[]).map((k) => <option key={k} value={k}>{PAY[k]}</option>)}
-        </select>}
+        </Select>}
         {r.state.reason && <span className="text-xs text-slate-500">{r.state.reason}</span>}
         {controls && (
           <div className="flex flex-wrap items-center gap-1 md:ml-auto">
@@ -187,7 +184,7 @@ function RollRow({ r, who, onDone }: { r: Row; who: string; onDone: () => void }
           <div className="w-24"><Input type="number" min={0} max={240} placeholder="지각 분" value={late} onChange={(e) => setLate(e.target.value)} aria-label="지각 분" /></div>
           {r.attendance && <Button variant="ghost" disabled={clear.isPending} onClick={() => clear.mutate()}><Undo2 size={14} />기본(출석)으로</Button>}
         </div>)}
-      {editing && <EditClassForm c={{ id: r.schedule_id, date: r.date, start: r.start, end: r.end, extra: r.extra }} onCancel={() => setEditing(false)} onDone={() => { setEditing(false); onDone(); }} />}
+      {editing && <EditClassForm c={{ id: r.schedule_id, date: r.date, start: r.start, end: r.end, extra: r.extra, pay: r.pay }} onCancel={() => setEditing(false)} onDone={() => { setEditing(false); onDone(); }} />}
       {st === "moved" && <div className="mt-2"><Button variant="ghost" disabled={unmove.isPending} onClick={() => unmove.mutate()}><Undo2 size={14} />옮기기 취소</Button></div>}
       {moving && (
         <form className="mt-2 flex flex-wrap items-end gap-2 rounded-2xl bg-slate-100 p-4" onSubmit={(e) => { e.preventDefault(); move.mutate(); }}>

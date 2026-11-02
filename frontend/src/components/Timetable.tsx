@@ -7,10 +7,11 @@ import { errText } from "../lib/hooks";
 import { useMe } from "../lib/me";
 import { Badge, Button, Card, Empty, Input, Label, Notice, Select } from "./ui";
 import ChildPicker from "./ChildPicker";
+import { CLASS_PAY, type ClassPay } from "../lib/extraClass";
 
 type Teacher = { id: string; name: string; short: string; color: string };
 type Config = { session_minutes: number; break_minutes: number; morning_start: string; morning_count: number; afternoon_start: string; afternoon_count: number; days: number[]; teachers: Teacher[]; closed: string[] };
-type Entry = { id: string; day: number; slot: string; teacher_id: string; child_id: string | null; label: string | null; note: string | null; highlight: boolean; valid_from: string | null; valid_to: string | null };
+type Entry = { id: string; day: number; slot: string; teacher_id: string; child_id: string | null; pay?: ClassPay; label: string | null; note: string | null; highlight: boolean; valid_from: string | null; valid_to: string | null };
 type Data = { config: Config; morning: string[]; afternoon: string[]; entries: Entry[] };
 type Cell = { day: number; slot: string; teacher: Teacher };
 
@@ -41,7 +42,7 @@ export default function Timetable() {
   const tt = useQuery({ queryKey: ["timetable"], queryFn: () => api<Data>("/timetable") });
   const [week, setWeek] = useState(iso(new Date()));
   const [edit, setEdit] = useState(false), [cell, setCell] = useState<Cell | null>(null), [setup, setSetup] = useState(false);
-  const refresh = () => qc.invalidateQueries({ queryKey: ["timetable"] });
+  const refresh = () => ["timetable", "schedules", "attendance", "settlement", "voucher-visits", "class-records"].forEach((key) => qc.invalidateQueries({ queryKey: [key] }));
 
   const from = iso(monday(week)), to = iso(plus(monday(week), 6));
   const byCell = useMemo(() => {
@@ -81,6 +82,7 @@ export default function Timetable() {
               <span key={e.id} className={`block font-semibold ${e.highlight ? "rounded-md bg-indigo-600 px-1 !text-slate-50" : ""}`} style={{ color: t.color }}
                 title={[e.note, e.valid_from && `${e.valid_from}부터`, e.valid_to && `${e.valid_to}까지`].filter(Boolean).join(" · ")}>
                 {e.child_id ? childName(e.child_id) : e.label}{e.note && <span className="font-normal">({e.note})</span>}
+                {e.child_id && e.pay === "private" && <span className="font-normal"> · 사비</span>}
               </span>))}
           </td>);
       })}
@@ -144,10 +146,10 @@ export default function Timetable() {
 
 function CellEditor({ cell, entries, cfg, isAdmin, closedHere, onClose, onSaved }: { cell: Cell; entries: Entry[]; cfg: Config; isAdmin: boolean; closedHere: boolean; onClose: () => void; onSaved: () => void }) {
   const { children } = useChild();
-  const blank = { mode: "child" as "child" | "label", child_id: "", label: "", note: "", highlight: false, valid_from: "", valid_to: "" };
+  const blank = { mode: "child" as "child" | "label", child_id: "", pay: "voucher", label: "", note: "", highlight: false, valid_from: "", valid_to: "" };
   const [f, setF] = useState(blank), [editing, setEditing] = useState<string | null>(null);
   const body = () => ({ day: cell.day, slot: cell.slot, teacher_id: cell.teacher.id, child_id: f.mode === "child" ? f.child_id || null : null, label: f.mode === "label" ? f.label : null,
-    note: f.note.trim() || null, highlight: f.highlight, valid_from: f.valid_from || null, valid_to: f.valid_to || null });
+    pay: f.pay, note: f.note.trim() || null, highlight: f.highlight, valid_from: f.valid_from || null, valid_to: f.valid_to || null });
   const save = useMutation({
     mutationFn: () => editing ? api(`/timetable/entries/${editing}`, { method: "PUT", json: body() }) : api("/timetable/entries", { method: "POST", json: body() }),
     onSuccess: () => { setF(blank); setEditing(null); onSaved(); },
@@ -158,7 +160,7 @@ function CellEditor({ cell, entries, cfg, isAdmin, closedHere, onClose, onSaved 
     onSuccess: onSaved,
   });
   const set = (k: keyof typeof f) => (e: any) => setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
-  const load = (e: Entry) => { setEditing(e.id); setF({ mode: e.child_id ? "child" : "label", child_id: e.child_id ?? "", label: e.label ?? "", note: e.note ?? "", highlight: e.highlight, valid_from: e.valid_from ?? "", valid_to: e.valid_to ?? "" }); };
+  const load = (e: Entry) => { setEditing(e.id); setF({ mode: e.child_id ? "child" : "label", child_id: e.child_id ?? "", pay: e.pay ?? "voucher", label: e.label ?? "", note: e.note ?? "", highlight: e.highlight, valid_from: e.valid_from ?? "", valid_to: e.valid_to ?? "" }); };
   const slotKey = `${cell.day}|${cell.slot}|*`, cellKey = `${cell.day}|${cell.slot}|${cell.teacher.id}`;
   const err = save.error || remove.error || toggle.error;
   return (
@@ -174,6 +176,7 @@ function CellEditor({ cell, entries, cfg, isAdmin, closedHere, onClose, onSaved 
               <li key={e.id} className="flex items-center gap-2 px-3 py-2 text-sm">
                 <span className="font-medium">{e.child_id ? children.find((c) => c.id === e.child_id)?.display_name ?? "(삭제된 아동)" : e.label}</span>
                 {!e.child_id && <Badge>미등록</Badge>}
+                {e.child_id && <Badge tone={e.pay === "private" ? "amber" : "indigo"}>{CLASS_PAY[e.pay ?? "voucher"]}</Badge>}
                 <span className="text-xs text-slate-500">{[e.note, (e.valid_from || e.valid_to) && `${e.valid_from ?? ""}~${e.valid_to ?? ""}`].filter(Boolean).join(" · ")}</span>
                 <button className="ml-auto rounded p-1 hover:bg-slate-100" aria-label="수정" onClick={() => load(e)}><Pencil size={14} /></button>
                 <button className="rounded p-1 text-red-600 hover:bg-red-50" aria-label="빼기" onClick={() => remove.mutate(e.id)}><Trash2 size={14} /></button>
@@ -189,6 +192,9 @@ function CellEditor({ cell, entries, cfg, isAdmin, closedHere, onClose, onSaved 
               ? <ChildPicker value={f.child_id || null} onChange={(id) => setF({ ...f, child_id: id ?? "" })} aria-label="아동" />
               : <Input value={f.label} onChange={set("label")} maxLength={30} required placeholder="아동 이름" aria-label="아동 이름" />}
             {f.mode === "label" && <p className="text-[11px] text-slate-500">이름만 넣은 칸은 시간표에만 보이고, 날짜별 일정·출결은 만들어지지 않아요.</p>}
+            {f.mode === "child" && <Label label="수업 구분"><Select value={f.pay} onChange={set("pay")}>
+              {Object.entries(CLASS_PAY).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+            </Select></Label>}
             <Label label="메모 (예: 13, 10월-)"><Input value={f.note} onChange={set("note")} maxLength={60} /></Label>
             <div className="grid grid-cols-2 gap-2">
               <Label label="시작일 (선택)"><Input type="date" value={f.valid_from} onChange={set("valid_from")} /></Label>

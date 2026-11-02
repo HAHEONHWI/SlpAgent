@@ -9,7 +9,7 @@ export const KNOWLEDGE_ENABLED = false;
 const adminOnly = (me: Me | undefined) => me?.role === "admin";
 const canWrite = (me: Me | undefined) => me?.role === "admin" || me?.role === "therapist";
 
-export const HOME: MenuItem = { to: "/", label: "대시보드", desc: "담당 아동 수 · 승인 대기 AI 초안" };
+export const HOME: MenuItem = { to: "/dashboard", label: "대시보드", desc: "담당 아동 수 · 승인 대기 AI 초안" };
 export const ACCOUNT: MenuItem = { to: "/account", label: "내 계정", desc: "비밀번호 변경 · 회원 탈퇴" };
 // Grouped so the everyday screens are short to find. `child` marks screens that need a selected child.
 export const GROUPS: MenuGroup[] = [
@@ -33,7 +33,7 @@ export const GROUPS: MenuGroup[] = [
     { to: "/knowledge", label: "AI 지식자료실", show: () => KNOWLEDGE_ENABLED, desc: "검사 서류 등 AI 참고자료 · 키워드 검색" },
   ] },
   { id: "admin", title: "행정", items: [
-    { to: "/voucher", label: "바우처·문서 생성", child: true, desc: "월별 집계 · DOCX/PDF/HWPX 출력" },
+    { to: "/voucher", label: "바우처·문서 생성", child: true, desc: "월별 집계 · DOCX/PDF/HWP·HWPX 출력" },
     { to: "/settlement", label: "정산", show: (me) => !!me?.can_settle, desc: "월별 바우처 · 본인부담금 · 유료 수업" },  // 기관 관리자와 회계 담당만
     { to: "/notices", label: "공지사항", desc: "사이트 공지 · 기관 공지" },
     { to: "/settings", label: "기관 설정", show: adminOnly, desc: "단가 · 치료사 · 회계 담당 · 감사로그" },

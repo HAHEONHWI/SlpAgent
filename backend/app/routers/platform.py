@@ -319,7 +319,7 @@ def approve_signup(uid: str, body: ApproveIn | None = None, admin: Identity = De
     else:
         org_id, role = uuid.uuid4().hex, "admin"
         repo.create("organizations", org_id, {"name": req["org_name"], "status": "active", "behavior_scale": None,
-                                              "unit_price": None, "voucher_minutes": None}, doc_id=org_id)
+                                              "unit_price": None}, doc_id=org_id)
         repo.create("organization_registry", PLATFORM, {"org_id": org_id, "name": req["org_name"],
                                                         "owner_uid": uid, "status": "active"}, doc_id=org_id)
     repo.create("users", org_id, {"uid": uid, "email": req.get("email"), "name": req["therapist_name"],
@@ -349,11 +349,11 @@ def reject_signup(uid: str, body: RejectIn, admin: Identity = Depends(require_si
 
 def _org_stats(repo, org_id: str, since: str) -> dict:
     # Counts only: the platform view must not expose names or clinical content.
-    children = [c for c in repo.list("children", org_id) if not c.get("archived")]
-    sessions = repo.list_range("therapy_sessions", org_id, "date", since[:10], "9999-12-31")
+    children = repo.count("children", org_id) - repo.count("children", org_id, archived=True)
+    sessions = repo.count_range("therapy_sessions", org_id, "date", since[:10], "9999-12-31")
     activity = next((a.get("created_at") for a in repo.list_latest("audit_logs", org_id, "created_at", 1)), None)
-    return {"users": len(repo.list("users", org_id)), "children": len(children),
-            "sessions_30d": len(sessions), "last_activity": activity}
+    return {"users": repo.count("users", org_id), "children": children,
+            "sessions_30d": sessions, "last_activity": activity}
 
 
 @router.get("/platform/organizations")

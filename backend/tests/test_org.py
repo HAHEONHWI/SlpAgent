@@ -2,7 +2,7 @@ from tests.conftest import H
 
 
 def test_org_settings_admin_only_and_feed_behavior_scale(client, child):
-    body = {"name": "히즈", "behavior_scale": {"min": 1, "max": 4}, "unit_price": 40000, "voucher_minutes": 240}
+    body = {"name": "히즈", "behavior_scale": {"min": 1, "max": 4}, "unit_price": 40000}
     assert client.put("/org", json=body, headers=H(role="therapist")).status_code == 403
     assert client.put("/org", json={**body, "behavior_scale": {"min": 3, "max": 3}}, headers=H(role="admin")).status_code == 422
     assert client.put("/org", json=body, headers=H(role="admin")).status_code == 200

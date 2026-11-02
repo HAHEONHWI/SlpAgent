@@ -10,18 +10,13 @@ def audit(repo: Repo, p: Principal, action: str, col: str, doc_id: str, child_id
 
 
 def my_therapist_name(repo: Repo, p: Principal) -> str:
-    """The 치료사 목록 name linked to this account (else the account's own name)."""
+    """The 치료사 목록 name an admin linked to this account. Never the account's own (applicant-chosen) name:
+    a same-name account must not inherit another therapist's 담당 아동, so an unlinked account has none."""
     try:
         linked = repo.get("organizations", p.org_id, p.org_id).get("therapists") or []
-        name = next((t["name"] for t in linked if t.get("uid") == p.uid), None)
-        if name:
-            return name.strip()
-    except NotFound:
-        pass
-    try:
-        return (repo.get("users", p.org_id, p.uid).get("name") or "").strip()
     except NotFound:
         return ""
+    return next((t["name"] for t in linked if t.get("uid") == p.uid), "").strip()
 
 
 def child_scope(repo: Repo, p: Principal, *, all_but_admin: bool = False) -> set[str] | None:
@@ -30,12 +25,25 @@ def child_scope(repo: Repo, p: Principal, *, all_but_admin: bool = False) -> set
     if p.role == "admin" or (p.role != "therapist" and not all_but_admin):
         return None
     name = my_therapist_name(repo, p)
-    return {c["id"] for c in repo.list("children", p.org_id) if name and (c.get("therapist") or "").strip() == name}
+    if not name:
+        return set()
+    return {c["id"] for c in repo.list("children", p.org_id) if (c.get("therapist") or "").strip() == name}
 
 
 def in_scope(rows: list[dict], scope: set[str] | None, key: str = "child_id") -> list[dict]:
     """Drop rows about children outside the scope (rows with no child stay)."""
     return rows if scope is None else [r for r in rows if not r.get(key) or r[key] in scope]
+
+
+def owned_or_404(repo: Repo, p: Principal, row: dict, detail: str = "not found") -> dict:
+    """A child-scoped row loaded by its own id: another therapist's child's row is as if it did not exist."""
+    from fastapi import HTTPException
+    if p.role == "therapist" and row.get("child_id"):
+        try:
+            child_or_404(repo, p, row["child_id"])
+        except HTTPException as exc:
+            raise HTTPException(404, detail) from exc
+    return row
 
 
 def child_or_404(repo: Repo, p: Principal, child_id: str) -> dict:
@@ -44,9 +52,10 @@ def child_or_404(repo: Repo, p: Principal, child_id: str) -> dict:
         child = repo.get("children", p.org_id, child_id)
     except NotFound:
         raise HTTPException(404, "child not found")
-    scope = child_scope(repo, p)
-    if scope is not None and child_id not in scope:  # another therapist's child: as if it did not exist
-        raise HTTPException(404, "child not found")
+    if p.role == "therapist":
+        name = my_therapist_name(repo, p)
+        if not name or (child.get("therapist") or "").strip() != name:
+            raise HTTPException(404, "child not found")
     return child
 
 

@@ -10,7 +10,7 @@ from ..repo.base import NotFound
 from ..services.accounts import PLATFORM
 from .timetable import touch_timetable
 from ..services.attendance_state import NOT_HELD, effective
-from ..services.billing import attendance_summary, minutes_between
+from ..services.billing import assign_pay, attendance_summary, minutes_between
 
 
 def month_bounds(month: str) -> tuple[str, str]:
@@ -85,11 +85,17 @@ def day(on: date, p: Principal = Depends(current_principal), repo=Depends(get_re
     from .timetable import sync_month
     sync_month(repo, p.org_id, on.isoformat()[:7])  # the day's classes come from the weekly timetable
     d = on.isoformat()
-    marks = {m["schedule_id"]: m for m in repo.list("attendance", p.org_id, date=d)}
+    # 실제와 동일 makes the month's first 5 바우처 classes 바우처, so read the month up to this day (never later days)
+    first = month_bounds(d)[0]
+    so_far = [s for s in repo.list_range("schedules", p.org_id, "date", first, d) if s.get("status") != "cancelled"]
+    marks = {m["schedule_id"]: m for m in repo.list_range("attendance", p.org_id, "date", first, d)}
     absences = _absences(repo, p.org_id)
-    rows = in_scope([s for s in repo.list("schedules", p.org_id, date=d) if s.get("status") != "cancelled"], _scope(repo, p))
-    from .voucher_doc import classify_month
-    pays = {c["id"]: c for cs in classify_month(repo, p.org_id, d[:7]).values() for c in cs if c["id"]} if rows else {}
+    rows = in_scope([s for s in so_far if s["date"] == d], _scope(repo, p))
+    from .voucher_doc import month_classes, pay_plans
+    kids = {s["child_id"] for s in rows}
+    plans = pay_plans(repo, p.org_id, d[:7]) if kids else {}
+    pays = {c["id"]: c for cid in kids for c in assign_pay(
+        month_classes([s for s in so_far if s["child_id"] == cid], marks, absences, [], d[:7]), plans.get(cid))}
     out = []
     for s in sorted(rows, key=lambda s: s["start"]):
         moved_to = None
@@ -140,8 +146,9 @@ def child_attendance(child_id: str, month: str | None = None, p: Principal = Dep
     states = [effective(s, marks.get(s["id"]), absences) for s in rows]
     pays = {}
     if month:
-        from .voucher_doc import classify_month
-        pays = {c["id"]: c["pay"] for c in classify_month(repo, p.org_id, month, child_id).get(child_id, []) if c["id"]}
+        from .voucher_doc import month_classes, pay_plan
+        pays = {c["id"]: c["pay"] for c in assign_pay(month_classes(rows, marks, absences, [], month),
+                                                      pay_plan(repo, p.org_id, child_id, month))}
     records = [{"schedule_id": s["id"], "date": s["date"], "start": s["start"], "end": s["end"], "extra": s.get("extra"),
                 "pay": pays.get(s["id"]), **st} for s, st in zip(rows, states)]
     return {"records": records, "summary": _summary(states)}
@@ -319,7 +326,7 @@ def _drop_classes_on(repo, org_id: str, days: set[str]):
     for d in sorted(days):
         marked = {m["schedule_id"] for m in repo.list("attendance", org_id, date=d)}
         for s in repo.list("schedules", org_id, date=d):
-            if s.get("timetable_entry_id") and s.get("status") == "scheduled" and s["id"] not in marked:
+            if s.get("timetable_entry_id") and not s.get("timetable_date") and s.get("status") == "scheduled" and s["id"] not in marked:
                 repo.delete("schedules", org_id, s["id"])
 
 

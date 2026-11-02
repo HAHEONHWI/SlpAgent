@@ -1,10 +1,10 @@
 """Child-scoped records: behavior observations, vocabulary, sessions."""
 from datetime import date
 from typing import Literal
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, model_validator
 from ..auth import Principal, current_principal, require_write
-from ..deps import audit, child_or_404, get_repo
+from ..deps import audit, child_or_404, get_repo, owned_or_404
 from ..repo.base import NotFound
 from ..services import billing
 
@@ -142,6 +142,7 @@ def save_manual_note(session_id: str, body: NoteIn, p: Principal = Depends(requi
         s = repo.get("therapy_sessions", p.org_id, session_id)
     except NotFound:
         raise HTTPException(404, "session not found")
+    owned_or_404(repo, p, s, "session not found")
     doc = repo.create("session_notes", p.org_id, {"session_id": session_id, "child_id": s["child_id"], "text": body.text,
                                                   "source": "therapist", "status": "approved"})
     audit(repo, p, "create", "session_notes", doc["id"], s["child_id"])
@@ -149,7 +150,9 @@ def save_manual_note(session_id: str, body: NoteIn, p: Principal = Depends(requi
 
 
 @router.get("/billing/summary")
-def billing_summary(month: str, child_id: str, unit_price: int | None = None, voucher_minutes: int | None = None,
+def billing_summary(month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"), child_id: str = Query(), unit_price: int | None = None,
                     p: Principal = Depends(current_principal), repo=Depends(get_repo)):
-    rows = [s for s in _list("therapy_sessions", child_id, p, repo) if s["date"].startswith(month)]
-    return billing.monthly_summary(rows, unit_price, voucher_minutes)
+    from .attendance import month_bounds
+    child_or_404(repo, p, child_id)
+    rows = repo.list_range("therapy_sessions", p.org_id, "date", *month_bounds(month), child_id=child_id)
+    return billing.monthly_summary(rows, unit_price)

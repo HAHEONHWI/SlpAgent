@@ -1,5 +1,17 @@
 # 문서 생성 및 서식 검수
 
+## 바우처 HWP 다운로드 (2026-11-02)
+
+바우처 화면은 HWP를 기본으로 제공하며 HWPX도 선택할 수 있다. 기존 `POST /children/{id}/voucher-hwpx` 요청에 `"format": "hwp"`를 추가하면 HWP, 생략하면 기존 HWPX를 반환한다. 여러 달은 선택한 형식의 파일을 ZIP으로 묶는다. 아동·기관 권한과 감사로그는 그대로 적용한다.
+
+HWPX 양식을 채운 뒤 [hwp-cli v1.3.1](https://github.com/STAIxBWLB/hwp-cli/releases/tag/v1.3.1)의 `hwp convert voucher.hwpx -o voucher.hwp --preserve-layout --strict`로 서버 안에서만 변환한다. 임시 파일은 성공·실패 모두 정리한다. 변환기 미설치·실패·시간 초과는 HTTP 503이며 HWPX로 내려받을 수 있다. Docker 이미지와 CI는 SHA-256으로 검증한 바이너리를 설치하고 라이선스는 이미지의 `/usr/local/share/doc/hwp-cli/`에 포함한다.
+
+로컬 개발은 해당 OS/CPU용 v1.3.1 릴리스와 `.sha256`을 받아 해시를 대조하고, 압축을 푼 디렉터리를 PATH에 추가한 뒤 `hwp --version`을 확인한다. `cd backend && .venv312/bin/python -m pytest tests/test_voucher_hwp.py tests/test_voucher_hwpx.py -q`로 검증한다. 변환기가 없는 환경에서는 실제 변환 테스트만 skip한다.
+
+Mac 한글에서 합성 4회 HWP는 3쪽, 9회 HWP는 5쪽으로 열리는 것을 확인했다. 기본 변환은 4회에서도 4쪽이 되어 `--preserve-layout`이 필요했다. 복제 페이지는 상위 문단의 레이아웃을 유지하고, 수정한 셀의 캐시만 지워 9회에서도 불필요한 빈 페이지를 막는다. 한글 버전·폰트·긴 회기 내용에 따라 출력 서식 검수는 계속 필요하다. 아래는 일반 문서 생성기의 이전 검수 기록이다.
+
+검증: 브라우저 HWP·HWPX·2개월 ZIP 다운로드, 독립 `syhwp` 파서, frontend build와 Linux arm64 이미지·amd64 변환을 확인했다. 기존 시간표 테스트의 날짜 의존성은 명시적 시작일로 수정했다. 분리한 배포본의 Python 3.12 회귀 테스트 220개, 최종 관련 테스트 52개 통과. 실제 Linux amd64 배포 이미지에서도 합성 데이터로 HWP·HWPX·ZIP·일정 수정·권한을 검증했다. 2026-11-02 백엔드 `slp-agent-api-00042-giv` 트래픽 100% 및 Hosting `c56be45cd10d01a7` 배포 완료. 동시 작업 중인 결제 일정·추가 읽기 최적화는 제외했다. 실제 임상 데이터 수정과 Windows 한글 확인은 수행하지 않았다. 상세 배포 기록은 `docs/operations.md`.
+
 지원 형식은 DOCX와 PDF다. PDF에는 배포 이미지의 Noto Sans CJK 폰트를 포함한다. 별도 폰트를 쓸 때는 재배포·임베딩 라이선스를 확인한다. 금액·시간은 `services/billing.py` 결과만 사용한다. 승인번호, 날짜, 서명은 수기 입력란이다. 미승인 DOCX에는 초안 표시, PDF에는 초안 워터마크가 있다.
 
 생성된 파일은 기관·아동별 비공개 Cloud Storage 경로에 저장하고 15분 서명 URL을 반환한다. 로컬에서는 HMAC 서명 URL로 대체한다. 승인 시 파일에서 초안 표시를 제거하고 감사로그를 남긴다.

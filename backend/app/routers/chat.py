@@ -69,15 +69,14 @@ def _conversation_mode(conversation) -> agent.DialogueMode:
 
 @router.get("/conversations")
 def conversations(p: Principal = Depends(current_principal), repo=Depends(get_repo)):
-    rows = sorted(repo.list("chat_conversations", p.org_id, user_id=p.uid),
-                  key=lambda row: row.get("updated_at", ""), reverse=True)[:50]
+    rows = repo.list_latest("chat_conversations", p.org_id, "updated_at", 50, user_id=p.uid)
     result = []
     for row in rows:
         title = row.get("title")
         if not title:
-            messages = sorted(repo.list("chat_messages", p.org_id, conversation_id=row["id"]),
-                              key=lambda message: message.get("created_at", ""))
-            first_user = next((message for message in messages if message.get("role") == "user"), None)
+            messages = repo.list_earliest("chat_messages", p.org_id, "created_at", 1,
+                                          conversation_id=row["id"], role="user")
+            first_user = messages[0] if messages else None
             title = _title(sanitize_external_text(first_user.get("content", ""))) if first_user else "새 대화"
         result.append({"id": row["id"], "title": title, "child_id": row.get("child_id"),
                        "mode": _conversation_mode(row),
@@ -297,7 +296,8 @@ async def chat(request: Request, p: Principal = Depends(current_principal), repo
             "title": _title(sanitize_external_text(body.message, sensitive_values)),
         })
         audit(repo, p, "create", "chat_conversations", conv["id"], child_id)
-    prior = sorted(repo.list("chat_messages", p.org_id, conversation_id=conv["id"]), key=lambda m: m["created_at"])
+    prior = (sorted(repo.list("chat_messages", p.org_id, conversation_id=conv["id"]), key=lambda m: m["created_at"])
+             if body.conversation_id else [])
     clean_message = sanitize_external_text(body.message, sensitive_values)
     history = []
     for message in prior:

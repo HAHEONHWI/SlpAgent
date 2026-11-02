@@ -59,7 +59,7 @@ def test_document_endpoints_create_draft_calculate_billing_and_approve(client, r
     settings = NS(gcs_bucket="", local_documents_dir=str(tmp_path), document_url_signing_key="test-key",
                   pdf_font_path="", hwpx_template_path="")
     monkeypatch.setattr(documents, "get_settings", lambda: settings)
-    repo.create("organizations", "orgA", {"unit_price": 40000, "voucher_minutes": 30}, doc_id="orgA")
+    repo.update("organizations", "orgA", "orgA", {"unit_price": 40000, "voucher_minutes": 30})
     repo.create("therapy_sessions", "orgA", {"child_id": child["id"], "date": "2026-10-04", "start": "10:00",
                 "end": "10:40", "status": "completed", "therapist": "T"})
     repo.create("therapy_sessions", "orgA", {"child_id": child["id"], "date": "2026-10-05", "start": "10:00",
@@ -84,8 +84,8 @@ def test_document_endpoints_create_draft_calculate_billing_and_approve(client, r
     session_dates = [row.cells[0].text for row in document.tables[0].rows[1:]]
     assert session_dates == ["2026-10-04", "2026-10-05"]
     summary_rows = {row.cells[0].text: row.cells[1].text for row in document.tables[1].rows[1:]}
-    assert summary_rows == {"총 제공시간(분)": "40", "바우처 시간(분)": "30",
-                            "추가 구매 시간(분)": "10", "총 이용금액": "40,000원"}
+    assert summary_rows == {"총 제공시간(분)": "40", "바우처 시간(분)": "40",
+                            "추가 구매 시간(분)": "0", "총 이용금액": "40,000원"}
     approved = client.post(f"/generated-documents/{body['id']}/approve", headers=H())
     assert approved.status_code == 200 and approved.json()["status"] == "approved"
     assert not approved.json()["cleanup_pending"] and not draft_file.exists()

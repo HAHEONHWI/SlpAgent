@@ -2,7 +2,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from ..auth import Principal, current_principal, require_write
-from ..deps import audit, child_or_404, get_repo
+from ..deps import audit, child_or_404, get_repo, owned_or_404
 from ..repo.base import NotFound
 
 router = APIRouter(tags=["plans"])
@@ -50,6 +50,7 @@ def approve_plan(plan_id: str, p: Principal = Depends(require_write), repo=Depen
         plan = repo.get("treatment_plans", p.org_id, plan_id)
     except NotFound:
         raise HTTPException(404)
+    owned_or_404(repo, p, plan)
     if plan["status"] != "draft":
         raise HTTPException(409, f"plan is {plan['status']}")
     for old in repo.list("treatment_plans", p.org_id, child_id=plan["child_id"], status="active"):

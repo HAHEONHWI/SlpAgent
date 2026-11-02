@@ -113,9 +113,9 @@ def test_extra_classes_voucher_and_paid(client, child):
     v = client.post("/schedules", headers=H(), json={"child_id": cid, "date": "2020-10-29", "start": "15:00", "extra": "voucher"})
     assert v.status_code == 201
     v = v.json()
-    assert (v["end"], v["therapist"], v["note"], v["source"], v["extra"]) == ("15:40", child["therapist"], "추가(바우처 5회)", "extra", "voucher")
+    assert (v["end"], v["therapist"], v["note"], v["source"], v["extra"], v["pay"]) == ("15:40", child["therapist"], "바우처 수업", "extra", "voucher", "voucher")
     paid = client.post("/schedules", headers=H(), json={"child_id": cid, "date": "2020-10-30", "start": "15:00", "extra": "paid"}).json()
-    assert paid["note"] == "추가(유료)"
+    assert (paid["note"], paid["pay"]) == ("사비 수업", "private")
     assert client.post("/schedules", headers=H(), json={"child_id": cid, "date": "2020-10-30", "start": "15:00", "extra": "free"}).status_code == 422
     day = client.get("/attendance/day?on=2020-10-30", headers=H()).json()
     assert [d["extra"] for d in day] == ["paid"]
@@ -141,7 +141,7 @@ def test_added_class_time_can_be_fixed(client, child):
     assert [(d["start"], d["state"]["status"]) for d in day] == [("16:10", "late")]
     # the kind can be switched, and the default note follows it
     r = client.put(f"/schedules/{a['id']}", headers=H(), json={"date": "2020-10-30", "start": "16:10", "extra": "paid"}).json()
-    assert (r["extra"], r["note"]) == ("paid", "추가(유료)")
+    assert (r["extra"], r["note"], r["pay"]) == ("paid", "사비 수업", "private")
     assert client.put(f"/schedules/{a['id']}", headers=H(), json={"date": "2020-10-29", "start": "16:50"}).status_code == 409  # clashes with 17:00
     assert client.put(f"/schedules/{a['id']}", headers=H(), json={"date": "2020-10-30", "start": "16:10", "end": "16:00"}).status_code == 422
     assert client.put(f"/schedules/{a['id']}", headers=H(uid="u2"), json={"date": "2020-10-30", "start": "09:00"}).status_code == 404

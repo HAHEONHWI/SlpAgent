@@ -37,7 +37,7 @@ export default function Layout() {
     <div className="flex h-dvh flex-col overflow-hidden bg-slate-50 print:block print:h-auto print:overflow-visible print:bg-white">
       <header className="relative z-40 shrink-0 bg-slate-50 print:hidden">
         <div className="flex h-16 items-center gap-2 px-3 sm:gap-4 sm:px-4 md:px-8">
-          <Link to="/" title="메인으로" className="flex shrink-0 items-center gap-2.5 whitespace-nowrap text-xl font-semibold tracking-[-.02em] text-slate-900">
+          <Link to={HOME.to} title="대시보드로" className="flex shrink-0 items-center gap-2.5 whitespace-nowrap text-xl font-semibold tracking-[-.02em] text-slate-900">
             <BrandLogo className="w-14 mix-blend-multiply sm:w-24" />
           </Link>
           <ChildPicker variant="header" className="min-w-0 flex-1 sm:flex-none md:ml-6 sm:w-[300px]" value={childId} onChange={setChildId} emptyLabel="아동 선택 안 함 (일반 모드)" aria-label="아동 선택" />

@@ -6,7 +6,7 @@ import VoucherHwpx from "./VoucherHwpx";
 import { errText } from "../lib/hooks";
 import { Badge, Button, Empty, ErrorNotice, Label, Notice, Select } from "./ui";
 
-// 바우처 서류 = the 발달재활 서비스 제공 기록지 HWPX (기록지·별지·일정표 in one file), filled from records.
+// 바우처 서류 = the 발달재활 서비스 제공 기록지 (기록지·별지·일정표 in one file), filled from records.
 const TYPES: Record<string, string> = { voucher: "바우처 서류", progress_report: "치료 경과보고서", parent_consultation: "보호자 상담기록" };
 // Listed-only types: older voucher drafts, 평가 결과 요약서 made before 검사 removal, and documents approved in AI chat.
 const LABELS: Record<string, string> = { ...TYPES, assessment_summary: "평가 결과 요약서", service_record: "서비스 제공기록지", schedule: "서비스 일정표", parent_guidance: "보호자 안내문 (승인됨)" };
@@ -23,6 +23,7 @@ export const href = (u: string) => {
 export default function DocumentExport({ childId, month }: { childId: string; month: string }) {
   const qc = useQueryClient();
   const [type, setType] = useState("voucher"), [format, setFormat] = useState("docx");
+  const [voucherFormat, setVoucherFormat] = useState<"hwp" | "hwpx">("hwp");
   const voucher = type === "voucher";
   // Docs created/approved here carry a fresh signed URL; listed (past) docs request one on click.
   const [fresh, setFresh] = useState<Doc[]>([]);
@@ -43,10 +44,10 @@ export default function DocumentExport({ childId, month }: { childId: string; mo
       <div className="grid grid-cols-2 gap-2">
         <Label label="문서 종류"><Select value={type} onChange={(e) => setType(e.target.value)}>{Object.entries(TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select></Label>
         <Label label="형식">{voucher
-          ? <Select value="hwpx" disabled><option value="hwpx">HWPX (한글)</option></Select>
+          ? <Select value={voucherFormat} onChange={(e) => { const value = e.target.value; if (value === "hwp" || value === "hwpx") setVoucherFormat(value); }}><option value="hwp">HWP (한글)</option><option value="hwpx">HWPX (한글 표준)</option></Select>
           : <Select value={format} onChange={(e) => setFormat(e.target.value)}><option value="docx">DOCX</option><option value="pdf">PDF</option></Select>}</Label>
       </div>
-      {voucher ? <VoucherHwpx childId={childId} month={month} /> : <>
+      {voucher ? <VoucherHwpx childId={childId} month={month} format={voucherFormat} /> : <>
       <Button onClick={() => create.mutate()} disabled={create.isPending}>{create.isPending ? "생성 중…" : `${month} 초안 생성`}</Button>
       {create.error && <Notice tone="red">{errText(create.error)}</Notice>}
       </>}

@@ -48,7 +48,8 @@ export default function App() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route index element={page(<Dashboard />)} />
+        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route path="dashboard" element={page(<Dashboard />)} />
         <Route path="ai" element={page(<Chat />)} />
         <Route path="children" element={page(<Children />)} />
         <Route path="analysis" element={page(<Analysis />)} />
@@ -60,7 +61,7 @@ export default function App() {
         <Route path="progress" element={page(<Progress />)} />
         <Route path="parents" element={<Navigate to="/sessions" replace />} />
         <Route path="voucher" element={page(<Voucher />)} />
-        <Route path="knowledge" element={KNOWLEDGE_ENABLED ? page(<Knowledge />) : <Navigate to="/" replace />} />
+        <Route path="knowledge" element={KNOWLEDGE_ENABLED ? page(<Knowledge />) : <Navigate to="/dashboard" replace />} />
         <Route path="schedule" element={page(<Schedule />)} />
         <Route path="attendance" element={page(<Attendance />)} />
         <Route path="settlement" element={page(<Settlement />)} />
@@ -68,7 +69,7 @@ export default function App() {
         <Route path="account" element={page(<Account />)} />
         <Route path="notices" element={page(<Notices />)} />
         <Route path="class-records" element={page(<ClassRecords />)} />
-        <Route path="*" element={<Navigate to="/" />} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
     </Routes>
   );

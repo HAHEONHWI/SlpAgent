@@ -1,0 +1,19 @@
+[
+  {
+    "name": "delete-old-untagged-api-images",
+    "action": { "type": "Delete" },
+    "condition": {
+      "tagState": "untagged",
+      "packageNamePrefixes": ["slp-agent-api"],
+      "olderThan": "7d"
+    }
+  },
+  {
+    "name": "keep-recent-api-images",
+    "action": { "type": "Keep" },
+    "mostRecentVersions": {
+      "packageNamePrefixes": ["slp-agent-api"],
+      "keepCount": 3
+    }
+  }
+]

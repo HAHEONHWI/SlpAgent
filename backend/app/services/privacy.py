@@ -7,7 +7,7 @@ PHONE = re.compile(r"(?<!\d)(?:\+?82[- .]?)?0\d{1,2}[- .]?\d{3,4}[- .]?\d{4}(?!\
 
 def sanitize_external_text(value: str, sensitive_values: list[str | None] | None = None) -> str:
     for sensitive in sorted({item for item in sensitive_values or [] if item}, key=len, reverse=True):
-        value = value.replace(sensitive, "[개인정보]")
+        value = re.sub(re.escape(sensitive), "[개인정보]", value, flags=re.IGNORECASE)  # "JANE DOE" too
     value = EMAIL.sub("[이메일]", value)
     return PHONE.sub("[전화번호]", value)
 

@@ -39,6 +39,8 @@ def test_render_keeps_package_and_fills_three_pages():
     assert "발달재활 서비스 제공 기록지 ( 8월 )" in xml and "서비스 일정표 ( 8월 )" in xml and "대상아동: 가 나 다." in xml
     t = _tables(xml)
     assert t[0][1][-1] == "가나다" and t[0][2][-1] == "2020. 8. 10."
+    schedule_info = next(x for x in t if x and x[0][0] == "사회복지서비스관리번호")
+    assert schedule_info[0][1] == "8001" and schedule_info[1][3] == "2026. 7. 31"
     assert t[1][0][1:] == ["8/4", "8/11", "8/19", "8/25", "8/26"] and t[1][2][-5:] == ["9:50"] * 5 and t[1][4][-1] == "김치료"
     assert [r[1] for r in t[3][1:6]] == [f"FAKE {d}일 활동" for d in (4, 11, 19, 25, 26)]
     cal = next(x for x in t if x and x[0][0] == "일")
@@ -78,7 +80,10 @@ def test_api_uses_schedules_attendance_and_notes(client, child):
     r = client.post(f"/children/{cid}/voucher-hwpx", headers=H(), json={"months": [{"month": "2026-10"}]})
     assert r.status_code == 200 and "filename*=UTF-8''" in r.headers["content-disposition"]
     assert "%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%95%84%EB%8F%99-10%EC%9B%94.hwpx" in r.headers["content-disposition"]  # 테스트아동-10월.hwpx
-    assert "FAKE 노트" in _section(r.content)
+    api_xml = _section(r.content)
+    assert "FAKE 노트" in api_xml
+    schedule_info = next(x for x in _tables(api_xml) if x and x[0][0] == "사회복지서비스관리번호")
+    assert schedule_info[0][1] == "8001" and schedule_info[1][3] == "2026. 9. 30"
     multi = client.post(f"/children/{cid}/voucher-hwpx", headers=H(), json={"months": [
         {"month": "2026-10"}, {"month": "2026-11", "visits": [{"date": "2026-11-03", "start": "09:50", "end": "10:40", "content": "수정함"}]}]})
     names = zipfile.ZipFile(io.BytesIO(multi.content)).namelist()
@@ -94,3 +99,23 @@ def test_other_notes_fill_the_gitasahang_rows():
     xml = _section(vh.render(vh.VoucherInput("기관", "가나", None, 2026, 10, _visits(10, [6, 15]), other=other)))
     approvals = next(x for x in _tables(xml) if x and x[0][:2] == ["승인일자", "승인번호"])
     assert approvals[7:10] == [["10/13", "수업일 변경 → 10/15 보강"], ["10/20", "결강 (독감)"], ["10/26~11/8", "장기결강 (입원) / 10/30 추가 메모"]]
+
+
+def test_schedule_written_date_for_january_uses_previous_year():
+    xml = _section(vh.render(vh.VoucherInput("기관", "가나", None, 2026, 1, [])))
+    schedule_info = next(x for x in _tables(xml) if x and x[0][0] == "사회복지서비스관리번호")
+    assert schedule_info[0][1] == "8001" and schedule_info[1][3] == "2025. 12. 31"
+
+
+def test_repeated_pages_keep_layout_without_stale_edited_cell_lines():
+    content = vh.render(vh.VoucherInput("기관", "가나다", None, 2026, 10, _visits(10, [1, 6, 8, 13, 15, 20])))
+    root = ET.fromstring(_section(content))
+
+    headings = [p for p in root if "발달재활 서비스 제공 기록지" in "".join(p.itertext())
+                or "".join(p.itertext()).strip() == "※ 별지"]
+    assert len(headings) == 4
+    assert all(p.find(HP + "linesegarray") is not None for p in headings)
+    edited = [p for p in root.iter(HP + "p") if any(t.text == "가나다" for t in p.findall(".//" + HP + "t"))
+              and p.find(".//" + HP + "tbl") is None]
+    assert len(edited) >= 2
+    assert all(p.find(HP + "linesegarray") is None for p in edited)
