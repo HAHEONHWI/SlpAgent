@@ -22,7 +22,12 @@ def test_same_name_account_does_not_inherit_children(client, repo, child):
     assert [c["id"] for c in client.get("/children", headers=H()).json()] == [child["id"]]
 
 
-def test_id_addressed_routes_hide_other_therapists_children(client, repo, child, other):
+def test_id_addressed_routes_hide_other_therapists_children(client, repo, child, other, tmp_path, monkeypatch):
+    from types import SimpleNamespace as NS
+    from app.routers import documents
+    # signed download links need a key; don't depend on a developer's local .env
+    monkeypatch.setattr(documents, "get_settings", lambda: NS(gcs_bucket="", local_documents_dir=str(tmp_path),
+                                                              document_url_signing_key="test-key", pdf_font_path="", hwpx_template_path=""))
     oid = other["id"]
     doc = repo.create("generated_documents", "orgA", {"child_id": oid, "doc_type": "monthly", "format": "pdf", "status": "draft",
                                                       "storage_key": "k", "storage_kind": "local", "source_data": {}})
