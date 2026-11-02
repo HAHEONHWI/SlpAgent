@@ -33,7 +33,7 @@ export function PageTitle({ title, sub }: { title: string; sub?: string }) {
   const { pathname } = useLocation();
   const { child } = useChild();
   const m = findMenu(pathname);
-  const kicker = pathname === "/" ? "SLP AI" : m?.group.title ?? (pathname === "/account" ? "계정" : "");
+  const kicker = pathname === "/dashboard" ? "SLP AI" : m?.group.title ?? (pathname === "/account" ? "계정" : "");
   return (
     <div className="mb-7 flex flex-wrap items-end justify-between gap-4 border-b border-slate-200 pb-5">
       <div className="min-w-0">

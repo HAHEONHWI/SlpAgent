@@ -24,8 +24,7 @@ class OrgSettings(BaseModel):
     behavior_scale: Scale | None = None
     unit_price: int | None = Field(default=None, ge=0, description="바우처 단가(원, 일반 수업 1회). 비우면 52,000")
     night_price: int | None = Field(default=None, ge=0, description="바우처 야간 단가(원, 19:00 이후·토요일 수업 1회). 비우면 65,000")
-    voucher_minutes: int | None = Field(default=None, ge=0)
-    paid_price: int | None = Field(default=None, ge=0, description="일반(유료) 수업 회당 금액(원): 추가(유료)와 바우처가 없는 아동")
+    paid_price: int | None = Field(default=None, ge=0, description="일정에서 사비로 지정한 일반 수업 회당 금액(원)")
     paid_night_price: int | None = Field(default=None, ge=0, description="일반(유료) 야간 수업 회당 금액(원). 비우면 일반 금액")
 
 
@@ -34,7 +33,7 @@ def get_org(p: Principal = Depends(current_principal), repo=Depends(get_repo)):
     try:
         return repo.get("organizations", p.org_id, p.org_id)
     except NotFound:
-        return {"id": p.org_id, "name": "", "behavior_scale": None, "unit_price": None, "night_price": None, "voucher_minutes": None, "paid_price": None, "paid_night_price": None}
+        return {"id": p.org_id, "name": "", "behavior_scale": None, "unit_price": None, "night_price": None, "paid_price": None, "paid_night_price": None}
 
 
 @router.put("")

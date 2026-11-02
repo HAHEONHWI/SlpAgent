@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import copy, uuid
 from collections import defaultdict
 from typing import Any
+from pydantic import JsonValue
 from .base import NotFound, now_iso
 
 
@@ -24,11 +27,22 @@ class MemoryRepo:
         return [copy.deepcopy(d) for d in self.db[col].values()
                 if d["organization_id"] == org_id and all(d.get(k) == v for k, v in eq.items())]
 
+    def count(self, col: str, org_id: str, **eq: str | bool) -> int:
+        return len(self.list(col, org_id, **eq))
+
+    def count_range(self, col: str, org_id: str, field: str, lo: str, hi: str, **eq: str | bool) -> int:
+        return len(self.list_range(col, org_id, field, lo, hi, **eq))
+
     def list_range(self, col, org_id, field, lo, hi, **eq: Any):
         return [d for d in self.list(col, org_id, **eq) if d.get(field) is not None and lo <= d[field] <= hi]
 
     def list_latest(self, col, org_id, field, limit, **eq: Any):
         return sorted(self.list(col, org_id, **eq), key=lambda d: d.get(field) or "", reverse=True)[:limit]
+
+    def list_earliest(self, col: str, org_id: str, field: str, limit: int, **eq: str) -> list[dict[str, JsonValue]]:
+        """Mirror Firestore ordering, including its exclusion of missing sort fields."""
+        return sorted((row for row in self.list(col, org_id, **eq) if field in row),
+                      key=lambda row: row.get(field) or "")[:limit]
 
     def update(self, col, org_id, doc_id, patch):
         d = self.db[col].get(doc_id)

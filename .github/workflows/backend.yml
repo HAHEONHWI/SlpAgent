@@ -18,5 +18,12 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
       - run: python -m pip install -r backend/requirements.txt pip-audit
+      - name: Install pinned HWP converter
+        run: |
+          curl -fL --retry 3 -o /tmp/hwp.tar.gz https://github.com/STAIxBWLB/hwp-cli/releases/download/v1.3.1/hwp-v1.3.1-x86_64-unknown-linux-gnu.tar.gz
+          echo "21bd8ab3b6834c48fcebca390e3d3f79dcedd6a4388e4eeaf802501f84fcf433  /tmp/hwp.tar.gz" | sha256sum -c -
+          mkdir /tmp/hwp-cli
+          tar -xzf /tmp/hwp.tar.gz -C /tmp/hwp-cli
+          echo /tmp/hwp-cli >> "$GITHUB_PATH"
       - run: python -m pytest -q backend/tests
       - run: python -m pip_audit -r backend/requirements.txt

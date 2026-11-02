@@ -20,17 +20,15 @@ def accuracy(correct: int, trials: int) -> float | None:
     return round(correct / trials * 100, 1)
 
 
-def monthly_summary(sessions: list[dict], unit_price: int | None, voucher_minutes: int | None = None) -> dict:
+def monthly_summary(sessions: list[dict], unit_price: int | None) -> dict:
     """sessions: therapy_sessions docs with 'date','start','end','status'. Only completed sessions count."""
     done = [s for s in sessions if s.get("status") == "completed"]
     total = sum(minutes_between(s["start"], s["end"]) for s in done)
-    voucher = min(total, voucher_minutes) if voucher_minutes is not None else None
-    extra = total - voucher if voucher is not None else None
     amount = None
     if unit_price is not None:  # per-session unit price is an org setting; never guessed
         amount = int(Decimal(unit_price) * len(done))
-    return {"session_count": len(done), "total_minutes": total, "voucher_minutes": voucher,
-            "additional_minutes": extra, "total_amount": amount,
+    return {"session_count": len(done), "total_minutes": total, "voucher_minutes": total,
+            "additional_minutes": 0, "total_amount": amount,
             "amount_note": None if amount is not None else "단가 미설정: 기관 설정에서 입력 필요",
             "approval_numbers": "수기 입력 전용(AI 생성 불가)"}
 
@@ -110,7 +108,8 @@ def settlement(grade: str | None, voucher_classes: list[dict], paid_classes: lis
         out.update(copay=copay, copay_charged=charged, copay_refund=copay - charged, voucher_amount=amount,
                    support=min(amount, VOUCHER_TOTAL) - charged, over_budget=amount > VOUCHER_TOTAL)
     unpriced = (paid_sessions or cognitive_classes) and paid_price is None
-    out["guardian_total"] = None if unpriced else (out["copay_charged"] or 0) + (paid_amount or 0) + (cognitive_amount or 0)
+    ungraded = bool(voucher_classes) and grade not in VOUCHER_COPAY
+    out["guardian_total"] = None if unpriced or ungraded else (out["copay_charged"] or 0) + (paid_amount or 0) + (cognitive_amount or 0)
     return out
 
 
@@ -119,23 +118,31 @@ def settlement(grade: str | None, voucher_classes: list[dict], paid_classes: lis
 PAY = ("voucher", "private", "cognitive")  # 바우처, 사비(유료), 인지(인지치료: 사비 단가, 따로 집계)
 
 
-def assign_pay(classes: list[dict], voucher: bool, day_price: int = DAY_PRICE, night_price: int = NIGHT_PRICE) -> list[dict]:
+def chosen_other(c: dict) -> bool:
+    """사비·인지 chosen for this class (or a legacy 추가(유료) class): never counted as 바우처."""
+    return c.get("pay") in ("private", "cognitive") or (c.get("pay") is None and c.get("extra") == "paid")
+
+
+def pay_days(plan: dict | None) -> set[str] | None:
+    """The 결제 일정's dates, or None when the month is 실제와 동일 (no plan saved = 실제와 동일)."""
+    if plan is None or plan.get("same_as_actual", True):
+        return None
+    return {s["date"] for s in plan.get("slots", [])}
+
+
+def assign_pay(classes: list[dict], plan: dict | None = None) -> list[dict]:
     """Give each held class of one child's month a 결제 구분 ({'pay', 'pay_auto'}).
-    A 구분 chosen on the class wins, and 추가(유료) is 사비. The rest fill the 바우처 in date order while the month
-    stays within 26만원 (5 일반 or 4 야간 classes at the default prices); classes past that, and every class of a
-    child without a 바우처, are 사비 automatically."""
-    ordered = sorted(classes, key=lambda c: (c["date"], c["start"]))
-    price = lambda c: night_price if is_night(c["date"], c["start"]) else day_price
-    spent = sum(price(c) for c in ordered if c.get("pay") == "voucher")
+    사비·인지 (and legacy 추가(유료)) chosen per class always win. The other classes are 바우처 or 사비 by the month's
+    결제 일정 (plan): 실제와 동일 = the first 5 in date order are 바우처, later ones 사비; otherwise a class on a
+    결제 날짜 is 바우처 and the rest 사비. pay_auto marks a 구분 that was not chosen as is."""
+    days = pay_days(plan)
+    used = 0
     out = []
-    for c in ordered:
-        if c.get("pay") in PAY:
-            out.append({**c, "pay_auto": False})
-        elif c.get("extra") == "paid":
-            out.append({**c, "pay": "private", "pay_auto": False})
-        elif voucher and spent + price(c) <= VOUCHER_TOTAL:
-            spent += price(c)
-            out.append({**c, "pay": "voucher", "pay_auto": True})
-        else:
-            out.append({**c, "pay": "private", "pay_auto": True})
+    for c in sorted(classes, key=lambda c: (c["date"], c["start"])):
+        if chosen_other(c):
+            out.append({**c, "pay": c.get("pay") or "private", "pay_auto": False})
+            continue
+        voucher = c["date"] in days if days is not None else used < DAY_SESSIONS
+        used += voucher
+        out.append({**c, "pay": "voucher" if voucher else "private", "pay_auto": not (voucher and c.get("pay") == "voucher")})
     return out

@@ -10,15 +10,15 @@ import Accountants from "../components/Accountants";
 export default function Settings() {
   const qc = useQueryClient();
   const org = useQuery({ queryKey: ["org"], queryFn: () => api<any>("/org") });
-  const [f, setF] = useState({ name: "", min: "", max: "", unit_price: "", night_price: "", voucher_minutes: "", paid_price: "", paid_night_price: "" });
+  const [f, setF] = useState({ name: "", min: "", max: "", unit_price: "", night_price: "", paid_price: "", paid_night_price: "" });
   useEffect(() => {
     const o = org.data; if (!o) return;
-    setF({ name: o.name ?? "", min: o.behavior_scale?.min?.toString() ?? "", max: o.behavior_scale?.max?.toString() ?? "", unit_price: o.unit_price?.toString() ?? "", night_price: o.night_price?.toString() ?? "", voucher_minutes: o.voucher_minutes?.toString() ?? "", paid_price: o.paid_price?.toString() ?? "", paid_night_price: o.paid_night_price?.toString() ?? "" });
+    setF({ name: o.name ?? "", min: o.behavior_scale?.min?.toString() ?? "", max: o.behavior_scale?.max?.toString() ?? "", unit_price: o.unit_price?.toString() ?? "", night_price: o.night_price?.toString() ?? "", paid_price: o.paid_price?.toString() ?? "", paid_night_price: o.paid_night_price?.toString() ?? "" });
   }, [org.data]);
   const save = useMutation({
     mutationFn: () => api("/org", { method: "PUT", json: {
       name: f.name, behavior_scale: f.min !== "" && f.max !== "" ? { min: Number(f.min), max: Number(f.max) } : null,
-      unit_price: f.unit_price === "" ? null : Number(f.unit_price), voucher_minutes: f.voucher_minutes === "" ? null : Number(f.voucher_minutes), paid_price: f.paid_price === "" ? null : Number(f.paid_price),
+      unit_price: f.unit_price === "" ? null : Number(f.unit_price), paid_price: f.paid_price === "" ? null : Number(f.paid_price),
       night_price: f.night_price === "" ? null : Number(f.night_price), paid_night_price: f.paid_night_price === "" ? null : Number(f.paid_night_price) } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["org"] }),
   });
@@ -42,10 +42,9 @@ export default function Settings() {
               <Label label="일반(유료) 단가"><Input type="number" min={0} value={f.paid_price} onChange={set("paid_price")} /></Label>
               <Label label="일반(유료) 야간 단가"><Input type="number" min={0} value={f.paid_night_price} onChange={set("paid_night_price")} placeholder="비우면 일반 단가" /></Label>
             </div>
-            <p className="mt-1 text-[11px] text-slate-500">야간은 19:00 이후 시작하거나 토요일인 수업이에요. 바우처 단가를 비우면 52,000원·65,000원(26만원을 월 5회·4회로 나눈 값)을 써요. 일반(유료)은 추가(유료) 수업과 바우처 등급이 없는 아이의 수업이에요.</p>
+            <p className="mt-1 text-[11px] text-slate-500">야간은 19:00 이후 시작하거나 토요일인 수업이에요. 바우처 단가를 비우면 52,000원·65,000원(26만원을 월 5회·4회로 나눈 값)을 써요. 사비 수업은 일정에서 직접 선택하며 일반(유료) 단가로 계산해요.</p>
           </div>
-          <Label label="바우처 월 한도(분)"><Input type="number" min={0} value={f.voucher_minutes} onChange={set("voucher_minutes")} /></Label>
-          <Notice>금액·시간 계산은 이 값을 사용해 서버 코드가 수행합니다. 값을 비우면 금액은 계산되지 않습니다.</Notice>
+          <Notice>총 이용금액은 바우처 단가를 설정한 경우에만 계산합니다.</Notice>
           {save.error && <Notice tone="red">{errText(save.error)}</Notice>}
           {save.isSuccess && <p className="text-sm text-green-700">저장되었습니다.</p>}
           <Button disabled={save.isPending}>저장</Button>

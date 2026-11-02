@@ -1,0 +1,7 @@
+User-agent: *
+Disallow: /api/
+Disallow: /reference-docs/
+Disallow: /extracted/
+Disallow: /backend/
+
+Sitemap: https://slpai.heonhwi.dev/sitemap.xml

@@ -45,7 +45,7 @@ def test_cell_rules(client, child):
 def test_generate_creates_dated_schedules_once(client, child):
     client.put("/timetable/config", headers=ADMIN, json=CFG)
     e = _entry(client, child_id=child["id"], note="(10월-)", valid_from="2026-10-12").json()  # Mondays 09:00
-    _entry(client, label="미등록아동", day=2)
+    _entry(client, label="미등록아동", day=2, valid_from="2026-10-01")
     r = client.post("/timetable/generate", headers=H(), json={"start": "2026-10-01", "end": "2026-10-31"}).json()
     assert r["created"] == 3 and r["unlinked"] == 4  # Oct 12, 19, 26; four Tuesdays with an unregistered name
     rows = client.get("/schedules?month=2026-10", headers=H()).json()
@@ -111,24 +111,28 @@ def test_a_synced_month_is_not_synced_again_until_something_changes(client, repo
         timetable.sync_schedules = real
 
 
-def test_every_range_and_latest_query_has_a_firestore_index():
-    """list_range / list_latest need composite indexes in production; a missing one fails at query time."""
+def test_every_range_and_ordered_query_has_a_firestore_index():
+    """Range and ordered queries need composite indexes before backend deployment."""
     import json, pathlib, re
     idx = json.loads((pathlib.Path(__file__).parents[2] / "firestore.indexes.json").read_text())["indexes"]
     have = {(i["collectionGroup"], tuple(f["fieldPath"] for f in i["fields"])) for i in idx}
     have_desc = {(i["collectionGroup"], tuple(f["fieldPath"] for f in i["fields"])) for i in idx
                  if i["fields"][-1]["order"] == "DESCENDING"}
+    have_asc = {(i["collectionGroup"], tuple(f["fieldPath"] for f in i["fields"])) for i in idx
+                if i["fields"][-1]["order"] == "ASCENDING"}
     src = "\n".join(p.read_text() for p in (pathlib.Path(__file__).parents[1] / "app").rglob("*.py"))
-    needed, needed_desc = set(), set()
-    for m in re.finditer(r'list_(range|latest)\((\w+|"\w+"), [^,]+, "(\w+)"[^)]*?((?:, \w+=[^,)]+|, \*\*\w+)*)\)', src):
+    needed, needed_desc, needed_asc = set(), set(), set()
+    by_kind = {"range": needed, "latest": needed_desc, "earliest": needed_asc}
+    for m in re.finditer(r'(?:list|count)_(range|latest|earliest)\((\w+|"\w+"), [^,]+, "(\w+)"[^)]*?((?:,\s+\w+=[^,)]+|,\s+\*\*\w+)*)\)', src):
         kind, col, field, rest = m.groups()
         cols = [col.strip('"')] if col.startswith('"') else ["therapy_sessions", "parent_consultations", "recording_records"]  # latest(col)
-        eqs = tuple(re.findall(r", (\w+)=", rest))
+        eqs = tuple(re.findall(r",\s+(\w+)=", rest))
         for c in cols:
             key = (c, ("organization_id", *eqs, field))
-            (needed_desc if kind == "latest" else needed).add(key)
+            by_kind[kind].add(key)
             if "**flt" in rest:
                 needed.add((c, ("organization_id", "child_id", field)))
     assert needed and needed_desc, "pattern found no queries"
     assert needed - have == set()
     assert needed_desc - have_desc == set()  # newest-first reads need a DESCENDING index
+    assert needed_asc and needed_asc - have_asc == set()

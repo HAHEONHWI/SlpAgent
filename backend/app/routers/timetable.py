@@ -2,6 +2,7 @@
 columns = weekday. Slots follow the rotation session + consultation (e.g. 40 + 10 = 50 minutes). Entries can be
 turned into dated schedules for a range of days, which is what attendance is marked against."""
 from datetime import date, datetime, timedelta
+from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from ..auth import Principal, current_principal, require_admin, require_write
@@ -72,6 +73,7 @@ class EntryIn(BaseModel):
     slot: str = Field(pattern=HHMM)
     teacher_id: str
     child_id: str | None = None
+    pay: Literal["voucher", "private"] = "voucher"
     label: str | None = Field(default=None, max_length=30, description="name shown when no registered child is linked")
     note: str | None = Field(default=None, max_length=60)
     highlight: bool = False
@@ -122,18 +124,26 @@ def _validate_entry(repo, p: Principal, body: EntryIn, entry_id: str | None) -> 
     return d
 
 
+def _visibility(repo, p: Principal, cfg: TimetableConfig):
+    """A therapist sees (and changes) their own children's cells and their own name-only cells."""
+    scope = child_scope(repo, p)
+    if scope is None:
+        return lambda e: True
+    mine = {t.id for t in cfg.teachers if t.name.strip() == my_therapist_name(repo, p)}
+    return lambda e: e.get("child_id") in scope or (not e.get("child_id") and e["teacher_id"] in mine)
+
+
 @router.get("")
 def get_timetable(p: Principal = Depends(current_principal), repo=Depends(get_repo)):
     cfg = _config(repo, p.org_id)
     am, pm = slots(cfg)
     gone = {c["id"] for c in repo.list("children", p.org_id) if c.get("archived")}
     entries = [e for e in repo.list("timetable_entries", p.org_id) if e.get("child_id") not in gone]
-    scope = child_scope(repo, p)
-    if scope is not None:  # a therapist sees their own children (and their own name-only cells)
-        mine = {t.id for t in cfg.teachers if t.name.strip() == my_therapist_name(repo, p)}
-        entries = [e for e in entries if e.get("child_id") in scope or (not e.get("child_id") and e["teacher_id"] in mine)]
+    visible = _visibility(repo, p, cfg)
+    entries = [e for e in entries if visible(e)]
     entries = sorted(entries, key=lambda e: (e["slot"], e["day"], e.get("valid_from") or ""))
-    return {"config": cfg.model_dump(), "morning": am, "afternoon": pm, "entries": entries}
+    return {"config": cfg.model_dump(), "morning": am, "afternoon": pm,
+            "entries": [{**e, "pay": e.get("pay") or "voucher"} for e in entries]}
 
 
 @router.put("/config")
@@ -159,9 +169,12 @@ def create_entry(body: EntryIn, p: Principal = Depends(require_write), repo=Depe
 
 def _entry(repo, p: Principal, eid: str) -> dict:
     try:
-        return repo.get("timetable_entries", p.org_id, eid)
+        e = repo.get("timetable_entries", p.org_id, eid)
     except NotFound:
         raise HTTPException(404, "entry not found")
+    if not _visibility(repo, p, _config(repo, p.org_id))(e):  # another therapist's cell: as if it did not exist
+        raise HTTPException(404, "entry not found")
+    return e
 
 
 @router.put("/entries/{eid}")
@@ -208,7 +221,9 @@ def sync_schedules(repo, org_id: str, start: date, end: date) -> dict:
     from .attendance import holidays
     off = {h["date"] for h in holidays(repo, org_id)}  # 전체·기관 휴무일
     existing = repo.list_range("schedules", org_id, "date", start.isoformat(), end.isoformat())
-    made = {(s.get("timetable_entry_id"), s["date"]) for s in existing if s.get("timetable_entry_id")}
+    overrides = repo.list_range("schedules", org_id, "timetable_date", start.isoformat(), end.isoformat())
+    made = {(s.get("timetable_entry_id"), s.get("timetable_date") or s["date"])
+            for s in existing + overrides if s.get("timetable_entry_id")}
     created, skipped, unlinked = 0, [], 0
     day = start
     while day <= end:
@@ -225,7 +240,8 @@ def sync_schedules(repo, org_id: str, start: date, end: date) -> dict:
             if (e["id"], iso) in made:
                 continue
             new = {"child_id": e["child_id"], "date": iso, "start": e["slot"], "end": _add(e["slot"], cfg.session_minutes),
-                   "therapist": names[e["teacher_id"]], "note": e.get("note"), "timetable_entry_id": e["id"], "source": "timetable"}
+                   "therapist": names[e["teacher_id"]], "note": e.get("note"), "pay": e.get("pay") or "voucher",
+                   "timetable_entry_id": e["id"], "source": "timetable"}
             clash = next((s for s in existing if s["date"] == iso and s.get("status") == "scheduled"
                           and s["start"] < new["end"] and new["start"] < s["end"]
                           and (s["therapist"] == new["therapist"] or s["child_id"] == new["child_id"])), None)
@@ -298,7 +314,7 @@ def prune_upcoming(repo, org_id: str, entry_ids: set[str] | None = None) -> int:
     n = 0
     for s in repo.list_range("schedules", org_id, "date", today, "9999-12-31"):
         tid = s.get("timetable_entry_id")
-        if tid and (entry_ids is None or tid in entry_ids) and s["date"] >= today \
+        if tid and not s.get("timetable_date") and (entry_ids is None or tid in entry_ids) and s["date"] >= today \
                 and s.get("status") == "scheduled" and s["id"] not in marked:
             repo.delete("schedules", org_id, s["id"])
             n += 1

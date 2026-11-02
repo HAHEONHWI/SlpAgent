@@ -6,7 +6,7 @@ from ..deps import can_settle, get_repo
 from ..repo.base import NotFound
 from ..services import billing
 from .timetable import sync_month
-from .voucher_doc import classify_month
+from .voucher_doc import classify_month, pay_plans, plan_slots
 
 
 
@@ -39,7 +39,8 @@ def month_settlement(month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"), p: 
     org = _org(repo, p.org_id)
     paid_price, (day_price, night_price) = org.get("paid_price"), billing.voucher_prices(org)
     sync_month(repo, p.org_id, month)
-    classes = classify_month(repo, p.org_id, month)  # one read of the month for the whole organization
+    plans = pay_plans(repo, p.org_id, month)
+    classes = classify_month(repo, p.org_id, month, plans=plans)  # one read of the month for the whole organization
     rows = []
     for c in repo.list("children", p.org_id):
         if c.get("archived"):
@@ -49,7 +50,8 @@ def month_settlement(month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"), p: 
         if not grade and not mine:
             continue
         pick = lambda pay: [x for x in mine if x["pay"] == pay]
+        slots = plan_slots(plans.get(c["id"]))  # 결제 일정 entered: the claimed 바우처 sessions are its dates
         rows.append({"child_id": c["id"], "auto_private": sum(1 for x in mine if x["pay"] == "private" and x["pay_auto"]),
-                     **billing.settlement(grade, pick("voucher"), pick("private"), paid_price, day_price, night_price,
+                     **billing.settlement(grade, pick("voucher") if slots is None else slots, pick("private"), paid_price, day_price, night_price,
                                           org.get("paid_night_price"), pick("cognitive"))})
     return {"month": month, "paid_price": paid_price, "paid_night_price": org.get("paid_night_price"), "rows": rows}

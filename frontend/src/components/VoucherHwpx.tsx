@@ -8,7 +8,7 @@ import { Badge, Button, Input, Label, Notice, Textarea } from "./ui";
 
 type Visit = { date: string; start: string; end: string; therapist: string; content: string; content_source?: string };
 type Other = { date: string; text: string };
-type MonthData = { month: string; minutes: number; unit_price: number | null; copay?: number | null; visits: Visit[]; other: Other[] };
+type MonthData = { month: string; minutes: number; same_as_actual?: boolean; unit_price: number | null; copay?: number | null; visits: Visit[]; other: Other[] };
 
 const addMonths = (ym: string, n: number) => {
   const [y, m] = ym.split("-").map(Number);
@@ -22,8 +22,8 @@ const monthsBetween = (a: string, b: string) => {
 };
 const label = (ym: string) => `${Number(ym.slice(5))}월`;
 
-/** 발달재활 서비스 제공 기록지 (HWPX): page 1 times, page 2 what was done, page 3 the month calendar. */
-export default function VoucherHwpx({ childId, month }: { childId: string; month: string }) {
+/** 발달재활 서비스 제공 기록지: page 1 times, page 2 what was done, page 3 the month calendar. */
+export default function VoucherHwpx({ childId, month, format }: { readonly childId: string; readonly month: string; readonly format: "hwp" | "hwpx" }) {
   const { child } = useChild();
   const [from, setFrom] = useState(month), [to, setTo] = useState(month);
   useEffect(() => { setFrom(month); setTo(month); }, [month]);
@@ -48,16 +48,17 @@ export default function VoucherHwpx({ childId, month }: { childId: string; month
     setBusy(true); setErr(""); setSaved("");
     try {
       const body = {
+        format,
         months: months.map((m) => ({ month: m, ...(edits[m] ? { visits: edits[m] } : {}), ...(otherEdits[m] ? { other: otherEdits[m] } : {}) })),
         ...(opt.unit_price && { unit_price: Number(opt.unit_price) }), ...(opt.copay && { copay: Number(opt.copay) }), ...(opt.phone.trim() && { phone: opt.phone.trim() }),
       };
-      setSaved(await download(`/children/${childId}/voucher-hwpx`, body, `${child?.display_name ?? "아동"}-${label(months[0])}.hwpx`));
+      setSaved(await download(`/children/${childId}/voucher-hwpx`, body, `${child?.display_name ?? "아동"}-${label(months[0])}.${format}`));
     } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
   };
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-slate-600">1쪽 수업 시간, 2쪽 수업 내용(별지), 3쪽 그 달 달력을 양식 그대로 채웁니다. 일정·출결(결석·취소 제외)과 회기 기록에서 가져오고, 아래에서 고칠 수 있어요.</p>
+      <p className="text-sm text-slate-600">1쪽 수업 시간, 2쪽 수업 내용(별지), 3쪽 그 달 달력을 양식 그대로 채웁니다. 날짜는 월간 일정표의 결제 일정(실제와 동일이면 출결상 실제 수업 처음 5회)에서, 내용은 회기 기록에서 가져오고, 아래에서 고칠 수 있어요.</p>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         <Label label="시작 월"><Input type="month" value={from} onChange={(e) => { setFrom(e.target.value); if (e.target.value > to) setTo(e.target.value); }} /></Label>
         <Label label="끝 월 (최대 12개월)"><Input type="month" value={to} min={from} max={addMonths(from, 11)} onChange={(e) => setTo(e.target.value)} /></Label>
@@ -77,6 +78,7 @@ export default function VoucherHwpx({ childId, month }: { childId: string; month
       <div className="rounded-lg border border-slate-200">
         <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-2 text-sm">
           <b>{current.slice(0, 4)}년 {label(current)}</b><span className="text-slate-500">{visits.length}회</span>
+          {data && <Badge tone={data.same_as_actual ? "slate" : "indigo"}>{data.same_as_actual ? "실제와 동일 · 처음 5회" : "결제 일정 기준"}</Badge>}
           {empty > 0 && <Badge tone="amber">내용 없는 회기 {empty}</Badge>}
           {edits[current] && <button className="ml-auto text-xs text-slate-500 underline" onClick={() => { const { [current]: _drop, ...rest } = edits; setEdits(rest); }}>기록에서 다시 불러오기</button>}
         </div>
@@ -116,7 +118,7 @@ export default function VoucherHwpx({ childId, month }: { childId: string; month
       {err && <Notice tone="red">{err}</Notice>}
       {saved && <p className="text-sm text-green-700">‘{saved}’ 파일을 내려받았어요.</p>}
       <Button onClick={run} disabled={busy || loaded.some((q) => q.isLoading)}>
-        <Download size={14} />{busy ? "만드는 중…" : months.length > 1 ? `${months.length}개월 내려받기 (${child?.display_name ?? ""}-n월.hwpx 묶음)` : `${child?.display_name ?? ""}-${label(current)}.hwpx 내려받기`}
+        <Download size={14} />{busy ? "만드는 중…" : months.length > 1 ? `${months.length}개월 내려받기 (${child?.display_name ?? ""}-n월.${format} 묶음)` : `${child?.display_name ?? ""}-${label(current)}.${format} 내려받기`}
       </Button>
       <p className="text-xs text-slate-500">5회를 넘는 달은 1쪽·2쪽이 5회씩 나뉘어 추가돼요. 승인번호·서명란은 비워 둡니다.</p>
     </div>

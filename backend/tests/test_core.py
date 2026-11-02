@@ -20,7 +20,7 @@ def test_assistant_is_read_only(client, child):
 def test_behavior_intensity_needs_org_scale(client, repo, child):
     body = {"observed_at": "2026-10-01T10:00:00", "antecedent": "a", "behavior": "b", "consequence": "c", "observer": "김", "intensity": 3}
     assert client.post(f"/children/{child['id']}/behavior", headers=H(), json=body).status_code == 422
-    repo.create("organizations", "orgA", {"behavior_scale": {"min": 1, "max": 3}}, doc_id="orgA")
+    repo.update("organizations", "orgA", "orgA", {"behavior_scale": {"min": 1, "max": 3}})
     assert client.post(f"/children/{child['id']}/behavior", headers=H(), json=body).status_code == 201
     assert client.post(f"/children/{child['id']}/behavior", headers=H(), json={**body, "intensity": 9}).status_code == 422
 
@@ -38,7 +38,7 @@ def test_billing_computed_in_code(client, child):
     _session(client, child, "2026-10-16", "10:00", "10:40", status="cancelled")
     q = f"/billing/summary?month=2026-10&child_id={child['id']}"
     r = client.get(q + "&voucher_minutes=60&unit_price=40000", headers=H()).json()
-    assert (r["session_count"], r["total_minutes"], r["voucher_minutes"], r["additional_minutes"], r["total_amount"]) == (2, 80, 60, 20, 80000)
+    assert (r["session_count"], r["total_minutes"], r["voucher_minutes"], r["additional_minutes"], r["total_amount"]) == (2, 80, 80, 0, 80000)
     assert client.get(q, headers=H()).json()["total_amount"] is None  # price unset -> not guessed
     assert client.post(f"/children/{child['id']}/sessions", headers=H(), json={
         "date": "2026-10-02", "start": "11:00", "end": "10:00", "therapist": "김"}).status_code == 422

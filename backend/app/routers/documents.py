@@ -5,7 +5,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from ..auth import Principal, current_principal, require_write
 from ..config import get_settings
-from ..deps import audit, child_or_404, get_repo
+from ..deps import audit, child_or_404, get_repo, owned_or_404
 from ..repo.base import NotFound
 from ..services import billing
 from ..services.documents import DocumentFontNotConfigured, render_document
@@ -30,7 +30,7 @@ def _data(repo, principal: Principal, child_id: str, month: str) -> dict:
         org = repo.get("organizations", principal.org_id, principal.org_id)
     except NotFound:
         org = {}
-    summary = billing.monthly_summary(sessions, org.get("unit_price"), org.get("voucher_minutes"))
+    summary = billing.monthly_summary(sessions, org.get("unit_price"))
     from .timetable import sync_month
     sync_month(repo, principal.org_id, month)
     schedules = repo.list_range("schedules", principal.org_id, "date", *month_bounds(month), child_id=child_id)
@@ -90,6 +90,7 @@ def approve_document(document_id: str, request: Request, p: Principal = Depends(
         document = repo.get("generated_documents", p.org_id, document_id)
     except NotFound:
         raise HTTPException(404, "document not found")
+    owned_or_404(repo, p, document, "document not found")
     if not p.can_approve:
         raise HTTPException(403, "therapist approval required")
     if document.get("status") != "draft":
@@ -137,6 +138,7 @@ def document_link(document_id: str, request: Request, p: Principal = Depends(cur
         document = repo.get("generated_documents", p.org_id, document_id)
     except NotFound:
         raise HTTPException(404, "document not found")
+    owned_or_404(repo, p, document, "document not found")
     if not document.get("storage_key") or not document.get("storage_kind"):
         raise HTTPException(404, "document file not found")
     url, expires = _signed_url(request, document, get_settings())

@@ -69,7 +69,7 @@ export default function Children() {
             <Label label="장애등록 여부"><Select value={f.disability} onChange={(e) => setF({ ...f, disability: e.target.value })}>
               <option value="">미입력</option><option value="Y">Y (등록)</option><option value="N">N (미등록)</option></Select></Label>
             <Label label="바우처 등급"><Select value={f.voucher_grade} onChange={(e) => setF({ ...f, voucher_grade: e.target.value })}>
-              <option value="">바우처 없음 (유료)</option>{GRADES.map(([g, d]) => <option key={g} value={g}>{g}형 ({d})</option>)}</Select></Label>
+              <option value="">유형 미설정</option>{GRADES.map(([g, d]) => <option key={g} value={g}>{g}형 ({d})</option>)}</Select></Label>
             </div>
             {create.error && <div className="mt-3"><Notice tone="red">{errText(create.error)}</Notice></div>}
             <div className="mt-4 flex gap-2"><Button disabled={create.isPending}>등록</Button><Button type="button" variant="outline" onClick={() => setFormOpen(false)}>닫기</Button></div>
@@ -88,7 +88,7 @@ export default function Children() {
                   <Td>{canWrite
                     ? <Select aria-label={`${c.display_name} 바우처 등급`} className="w-24 min-w-24 py-1" value={(c as any).voucher_grade ?? ""} disabled={grade.isPending}
                         onChange={(e) => grade.mutate({ id: c.id, voucher_grade: e.target.value || null })}>
-                        <option value="">없음</option>{GRADES.map(([g]) => <option key={g} value={g}>{g}형</option>)}</Select>
+                        <option value="">미설정</option>{GRADES.map(([g]) => <option key={g} value={g}>{g}형</option>)}</Select>
                     : (c as any).voucher_grade ? `${(c as any).voucher_grade}형` : "-"}</Td>
                   <Td>{canWrite
                   ? <Select aria-label={`${c.display_name} 담당 치료사`} className="w-28 min-w-28 py-1" value={(c as any).therapist ?? ""} disabled={assign.isPending}

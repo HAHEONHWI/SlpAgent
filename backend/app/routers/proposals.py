@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from ..auth import Principal, current_principal, require_write
-from ..deps import audit, child_scope, get_repo, in_scope
+from ..deps import audit, child_scope, get_repo, in_scope, owned_or_404
 from ..repo.base import NotFound, now_iso
 from .plans import create_plan_version
 
@@ -15,9 +15,13 @@ class EditIn(BaseModel):
 
 def _get(repo, p, pid):
     try:
-        return repo.get("ai_analyses", p.org_id, pid)
+        pr = repo.get("ai_analyses", p.org_id, pid)
     except NotFound:
         raise HTTPException(404)
+    return owned_or_404(repo, p, pr)
+
+
+LINKS = ("session_id", "job_id")  # set (and checked against the child) when the draft was made; not editable
 
 
 @router.get("")
@@ -31,7 +35,8 @@ def edit(pid: str, body: EditIn, p: Principal = Depends(require_write), repo=Dep
     pr = _get(repo, p, pid)
     if pr["status"] != "draft":
         raise HTTPException(409)
-    return repo.update("ai_analyses", p.org_id, pid, {"payload": body.payload, "edited_by": p.uid})
+    payload = {k: v for k, v in body.payload.items() if k not in LINKS} | {k: pr["payload"][k] for k in LINKS if k in pr["payload"]}
+    return repo.update("ai_analyses", p.org_id, pid, {"payload": payload, "edited_by": p.uid})
 
 
 @router.post("/{pid}/reject")
