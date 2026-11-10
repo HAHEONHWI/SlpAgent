@@ -2,6 +2,12 @@
 
 운영 서비스의 최근 배포 검증은 아래에 기록한다. `cloudbuild.yaml`은 배포 또는 재배포 시 변수를 채워 사용한다. 실제 프로젝트 ID, Secret, 도메인을 저장소에 넣지 않는다.
 
+### 오늘의 업무 홈 배포 (2026-11-10)
+
+- `feat/dashboard-home` (`d5aa0f2`)의 대시보드 변경만 격리 빌드해 Firebase Hosting `slp-agent-2026`에 배포했다. https://slpai.heonhwi.dev/ 에 반영했다. Cloud Run·Firestore와 다른 미커밋 변경은 배포하지 않았다.
+- Python 3.12 pytest 281개, `npm run build` 통과. 배포 후 `/`, `/dashboard`, `/api/healthz`가 200이고 Dashboard JS가 빌드 파일과 일치했다.
+- `npm audit --omit=dev`는 취약점 11개(고위험 6개)를 보고했다. 이번 변경에서는 의존성을 수정하지 않았다.
+
 ## Cloud Run
 
 1. Artifact Registry 저장소 `slp-agent`와 Cloud Run 런타임 서비스 계정을 만든다.
