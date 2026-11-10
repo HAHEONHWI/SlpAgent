@@ -33,7 +33,7 @@ export default function Dashboard() {
   const currentMonth = day.slice(0, 7);
   const nextMonth = monthAfter(currentMonth);
   const therapist = me?.role === "therapist" ? me.therapist_name : undefined;
-  const scopeReady = me?.role !== "therapist" || !!therapist;
+  const scopeReady = !me || me.role === "admin" || (me.role === "therapist" && !!therapist);
   const params = new URLSearchParams({ month: currentMonth });
   if (therapist) params.set("therapist", therapist);
   const agenda = useQuery({
@@ -97,8 +97,8 @@ export default function Dashboard() {
           </article>))}
       </section>
 
-      <Card title="오늘의 치료 일정" action={<Link to="/schedule" className="text-sm font-semibold text-indigo-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2">전체 일정 보기</Link>}>
-        {!scopeReady ? <p className="py-6 text-center text-sm text-slate-500">계정을 기관 치료사 목록에 연결하면 담당 일정이 표시됩니다.</p>
+      <Card title="오늘의 치료 일정" action={scopeReady ? <Link to="/schedule" className="text-sm font-semibold text-indigo-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2">전체 일정 보기</Link> : undefined}>
+        {!scopeReady ? <p className="py-6 text-center text-sm text-slate-500">{me?.role === "therapist" ? "계정을 기관 치료사 목록에 연결하면 담당 일정이 표시됩니다." : "기관 전체 일정은 관리자만 확인할 수 있습니다."}</p>
           : agenda.isLoading ? <p className="py-6 text-center text-sm text-slate-500">오늘 일정을 불러오는 중…</p>
           : agenda.error ? <Notice tone="red">오늘 일정을 불러오지 못했습니다: {errText(agenda.error)}</Notice>
           : todayClasses.length ? <ul className="divide-y divide-slate-200">
@@ -106,7 +106,7 @@ export default function Dashboard() {
               const child = children.find((c) => c.id === r.child_id);
               return <li key={r.schedule_id ?? `${r.child_id}-${index}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-4 first:pt-0 last:pb-0">
                 <span className="w-28 shrink-0 text-sm tabular-nums text-slate-600">{r.start ?? "시간 미정"}{r.end ? `–${r.end}` : ""}</span>
-                <span className="min-w-0 flex-1 font-semibold">{child?.alias ?? "아동"}<span className="ml-2 text-sm font-normal text-slate-500">치료 수업</span></span>
+                <span className="min-w-0 flex-1 font-semibold">{child?.display_name || child?.alias || "아동"}{child?.display_name && child.alias && <span className="ml-2 text-xs font-normal text-slate-500">{child.alias}</span>}<span className="ml-2 text-sm font-normal text-slate-500">치료 수업</span></span>
                 {me?.role === "admin" && r.therapist && <span className="text-sm text-slate-500">{r.therapist}</span>}
                 {r.makeup && <Badge tone="indigo">보강</Badge>}
                 {r.state.status === "absent" && <Badge tone="red">결석</Badge>}
@@ -120,7 +120,7 @@ export default function Dashboard() {
             return <div className="rounded-2xl bg-slate-50 p-4">
               <p className="text-xs font-semibold text-indigo-700">다음 예정 치료</p>
               <p className="mt-2 font-semibold">{dateLabel(item.date)} · {item.start}{item.end ? `–${item.end}` : ""}</p>
-              <p className="mt-1 text-sm text-slate-600">{child?.alias ?? "아동"} · 치료 수업</p>
+              <p className="mt-1 text-sm text-slate-600">{child?.display_name || child?.alias || "아동"}{child?.display_name && child.alias && <span className="ml-2 text-xs text-slate-500">{child.alias}</span>} · 치료 수업</p>
             </div>;
           })()
           : needNextMonth && nextSchedules.isLoading ? <p className="py-6 text-center text-sm text-slate-500">다음 일정을 확인하는 중…</p>
