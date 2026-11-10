@@ -7,6 +7,7 @@
 - `feat/dashboard-home` (`d5aa0f2`)의 대시보드 변경만 격리 빌드해 Firebase Hosting `slp-agent-2026`에 배포했다. https://slpai.heonhwi.dev/ 에 반영했다. Cloud Run·Firestore와 다른 미커밋 변경은 배포하지 않았다.
 - Python 3.12 pytest 281개, `npm run build` 통과. 배포 후 `/`, `/dashboard`, `/api/healthz`가 200이고 Dashboard JS가 빌드 파일과 일치했다.
 - `npm audit --omit=dev`는 취약점 11개(고위험 6개)를 보고했다. 이번 변경에서는 의존성을 수정하지 않았다.
+- 후속 수정 `69052b0`에서 일정에 아동 이름을 표시하고 치료사는 본인 담당 아동·본인 치료사 일정만, 관리자는 기관 전체 일정을 보도록 했다. Python 3.12 pytest 242개와 Node 24 `npm run build` 통과. Firebase Hosting 재배포 후 `/`, `/dashboard`, `/api/healthz` 200 및 Dashboard JS 빌드 일치를 확인했다. Cloud Run·Firestore는 배포하지 않았다.
 
 ## Cloud Run
 
