@@ -9,7 +9,7 @@ export const KNOWLEDGE_ENABLED = false;
 const adminOnly = (me: Me | undefined) => me?.role === "admin";
 const canWrite = (me: Me | undefined) => me?.role === "admin" || me?.role === "therapist";
 
-export const HOME: MenuItem = { to: "/dashboard", label: "대시보드", desc: "담당 아동 수 · 승인 대기 AI 초안" };
+export const HOME: MenuItem = { to: "/dashboard", label: "홈", desc: "오늘 일정 · 처리할 업무" };
 export const ACCOUNT: MenuItem = { to: "/account", label: "내 계정", desc: "비밀번호 변경 · 회원 탈퇴" };
 // Grouped so the everyday screens are short to find. `child` marks screens that need a selected child.
 export const GROUPS: MenuGroup[] = [
