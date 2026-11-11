@@ -2,6 +2,13 @@
 
 운영 서비스의 최근 배포 검증은 아래에 기록한다. `cloudbuild.yaml`은 배포 또는 재배포 시 변수를 채워 사용한다. 실제 프로젝트 ID, Secret, 도메인을 저장소에 넣지 않는다.
 
+### 보안 보강 배포 (2026-11-11)
+
+- 커밋 `2a194d0`(브랜치 `feat/mobile-app`)을 배포했다. 계정별 요청 제한(uid 기준, 주소 기준은 `RATE_LIMIT_ADDRESS_REQUESTS` 기본 1200/분), 보조 계정의 담당 아동 범위 제한, `DELETE /me`의 5분 이내 `auth_time` 확인, Hosting 보안 응답 헤더(CSP 포함)가 들어갔다.
+- Python 3.12 pytest 283개 통과 후 Cloud Build `2452b0d0-15ac-46de-974f-86d956f617c5` SUCCESS. 업로드 73개 파일에 `.env`·가상환경·테스트·원문·추출물·문항 은행 없음. `slp-agent-api-00067-sec`(이미지 `sha256:a848147256aa8e3321730cac0c56a02263e014113b9879b48db34edff8e4b86d`)를 무트래픽 후보로 확인한 뒤 트래픽 100% 전환했다. 이미지 외 runtime 설정 해시는 배포 전과 같다. `keep-current`·`latest`는 새 이미지, `keep-rollback`은 직전 `00050-8wj` 이미지로 옮겼다. Firestore 인덱스·규칙 변경은 없다.
+- Firebase Hosting `slp-agent-2026`을 21:03 KST에 배포했다(53개 파일). frontend build와 테스트 26개 통과. 운영 `/`, `/login`, `/dashboard`, `/api/healthz`는 200, 미인증 `/api/children`·`DELETE /me`는 401이며 `app.html` SHA-256이 빌드와 일치한다. 운영 응답에 CSP·HSTS·`X-Frame-Options`·`nosniff`·`Referrer-Policy`·`Permissions-Policy`가 있고, 공개 홈·로그인 화면에서 CSP 위반이 없다. 새 revision 오류 로그와 5xx는 0건이다.
+- 미확인: 로그인 후 화면(녹음 업로드, 문서 내려받기, API 문서)의 CSP 동작과 실제 계정의 탈퇴 재인증 흐름. 치료사 목록에 연결되지 않은 보조 계정은 이 배포부터 아동을 볼 수 없다. 운영 임상 문서는 읽거나 쓰지 않았다. Android는 변경하지 않았다.
+
 ### 아동 등록 폼·아이 코드 자동 표시 배포 (2026-11-11)
 
 - Firebase Hosting `slp-agent-2026`을 20:23:02 KST에 배포했다(53개 파일). `/`, `/children`, `/api/healthz`는 200, 미인증 `/api/children/next-code`는 401이다. `app.html`, 앱 JavaScript, 아동 관리 번들의 SHA-256이 `frontend/dist`와 일치한다.
