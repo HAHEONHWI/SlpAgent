@@ -22,7 +22,7 @@ def test_create_and_list_consultations(client, repo, child):
     earlier = client.post(f"/children/{child['id']}/consultations", headers=H(),
                           json=_consultation(date="2026-10-01", start=None, end=None, guidance_given=None))
     assert earlier.status_code == 201 and earlier.json()["minutes"] is None
-    listed = client.get(f"/children/{child['id']}/consultations", headers=H("orgA", "assistant", "u2"))
+    listed = client.get(f"/children/{child['id']}/consultations", headers=H("orgA", "assistant", "u1"))
     assert listed.status_code == 200
     assert [row["date"] for row in listed.json()] == ["2026-10-01", "2026-10-20"]
     assert any(row["action"] == "create" and row["collection"] == "parent_consultations"
@@ -76,14 +76,14 @@ def test_document_list_and_link(client, repo, child, tmp_path, monkeypatch):
                         json={"type": "service_record", "month": "2026-09", "format": "docx"}).json()
     second = client.post(f"/children/{child['id']}/documents", headers=H(),
                          json={"type": "schedule", "month": "2026-10", "format": "docx"}).json()
-    listed = client.get(f"/children/{child['id']}/documents", headers=H("orgA", "assistant", "u2"))
+    listed = client.get(f"/children/{child['id']}/documents", headers=H("orgA", "assistant", "u1"))
     assert listed.status_code == 200
     rows = listed.json()
     assert [row["id"] for row in rows] == [second["id"], first["id"]]
     assert set(rows[0]) == {"id", "type", "month", "format", "status", "created_at", "approved_at", "hwpx_validation"}
     assert rows[0]["type"] == "schedule" and rows[0]["status"] == "draft"
 
-    link = client.post(f"/generated-documents/{first['id']}/link", headers=H("orgA", "assistant", "u2"))
+    link = client.post(f"/generated-documents/{first['id']}/link", headers=H("orgA", "assistant", "u1"))
     assert link.status_code == 200 and set(link.json()) == {"download_url", "expires_at"}
     url = urlparse(link.json()["download_url"])
     downloaded = client.get(url.path + "?" + url.query)
@@ -110,7 +110,7 @@ def test_approved_analyses_and_activities_lists(client, repo, child):
     repo.create("therapy_activities", "orgA", {"child_id": child["id"], "payload": {}, "status": "draft"})
     repo.create("therapy_activities", "orgA", {"child_id": other["id"], "payload": {}, "status": "approved"})
 
-    analyses = client.get(f"/children/{child['id']}/clinical-analyses", headers=H("orgA", "assistant", "u2")).json()
+    analyses = client.get(f"/children/{child['id']}/clinical-analyses", headers=H("orgA", "assistant", "u1")).json()
     assert sorted(row["kind"] for row in analyses) == ["behavior_analysis", "integrated_analysis"]
     assert set(analyses[0]) == {"id", "kind", "payload", "approved_by", "created_at"}
     filtered = client.get(f"/children/{child['id']}/clinical-analyses?kind=behavior_analysis", headers=H()).json()

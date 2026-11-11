@@ -8,8 +8,8 @@ from tests.conftest import H
 
 class FakeClient:
     """Scripted Responses API: first turn calls tools, second turn answers."""
-    def __init__(self, calls):
-        self.calls, self.turn, self.seen = calls, 0, []
+    def __init__(self, calls, answer="최종 답변"):
+        self.calls, self.answer, self.turn, self.seen = calls, answer, 0, []
         self.responses = self
 
     def create(self, **kw):
@@ -18,7 +18,7 @@ class FakeClient:
         if self.turn == 1:
             out = [NS(type="function_call", name=n, arguments=json.dumps(a), call_id=f"c{i}") for i, (n, a) in enumerate(self.calls)]
             return NS(output=out, output_text="")
-        return NS(output=[NS(type="message")], output_text="최종 답변")
+        return NS(output=[NS(type="message")], output_text=self.answer)
 
 
 def test_write_tool_creates_unapproved_draft_only(client, repo, child):

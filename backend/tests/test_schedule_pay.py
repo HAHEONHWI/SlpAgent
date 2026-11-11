@@ -29,6 +29,9 @@ def test_private_schedule_stays_private_when_moved_and_can_be_edited(client, chi
 
 
 def test_weekly_payment_flows_into_schedules_and_edits(client, child):
+    settings = client.get("/me/payment-settings", headers=H()).json()
+    assert client.put("/me/payment-settings", headers=H(), json={
+        "same_as_actual": True, "expected_revision": settings["revision"]}).status_code == 200
     config = {"teachers": [{"id": "t", "name": child["therapist"], "short": "김", "color": "#2563eb"}]}
     assert client.put("/timetable/config", headers=H(role="admin"), json=config).status_code == 200
     entry = {"day": 1, "slot": "09:00", "teacher_id": "t", "child_id": child["id"]}
@@ -103,7 +106,8 @@ def test_pay_plan_dates_go_on_the_voucher_form_and_settlement(client, child):
     assert (row["day_sessions"], row["paid_sessions"]) == (5, 4)
     form = client.post(f"/children/{child['id']}/voucher-hwpx", headers=H(), json={"months": [{"month": "2020-10"}]})
     assert form.status_code == 200
-    back = client.put(f"/children/{child['id']}/pay-plan?month=2020-10", headers=H(), json={"same_as_actual": True, "slots": slots})
+    back = client.put(f"/children/{child['id']}/pay-plan?month=2020-10", headers=H(),
+                      json={"same_as_actual": True, "slots": slots, "expected_revision": saved.json()["updated_at"]})
     assert back.json()["slots"] == []
     assert len(client.get(f"/children/{child['id']}/voucher-visits?month=2020-10", headers=H()).json()["visits"]) == 5
 

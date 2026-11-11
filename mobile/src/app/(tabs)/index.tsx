@@ -9,17 +9,19 @@ import { RecordingPresets, requestNotificationPermissionsAsync, requestRecording
 import { Ionicons } from "@expo/vector-icons";
 import { ageLabel, errText } from "@/lib/api";
 import { useChild } from "@/lib/child";
-import { clock, today } from "@/lib/dates";
+import { clock } from "@/lib/dates";
 import { useClassSlot } from "@/lib/hooks";
 import { canWrite, useMe } from "@/lib/me";
 import { CONSENT_TEXT, EXT, MAX_HOURS, MAX_MB, PROCESSOR_TEXT, dropPending, loadPending, mb, putPending, submitRecording, type Kind, type Pending } from "@/lib/recordings";
 import { ChildRow, ChildSheet, useChildSections } from "@/components/ChildPicker";
+import { ClassTimeFields } from "@/components/ClassTimeFields";
 import { JobList, Progress } from "@/components/RecordingJobs";
-import { Button, C, Card, Checkbox, DateField, Empty, Input, Notice, Row, Screen, Segmented, T, TextField, confirm, s } from "@/components/ui";
+import { Button, C, Card, Checkbox, Empty, Input, Notice, Row, Screen, Segmented, T, TextField, confirm, s } from "@/components/ui";
 
 // Speech only: mono AAC at 64 kbps keeps a 3-hour class near 90 MB (the server limit is 200 MB) and uploads quickly.
 const PRESET: RecordingOptions = { ...RecordingPresets.HIGH_QUALITY, numberOfChannels: 1, bitRate: 64000, directory: "document" };
 const LIMIT_MS = MAX_HOURS * 3600 * 1000;
+type RecordingInfo = Pick<Pending, "childId" | "kind" | "date" | "start" | "end" | "counselor">;
 
 /** 녹음 탭: 아이 고르기 → 녹음(또는 파일) → 올리기 → AI 초안 검토·승인 → 아동 기록. */
 export default function Record() {
@@ -29,24 +31,20 @@ export default function Record() {
   const recorder = useAudioRecorder(PRESET);
   const rec = useAudioRecorderState(recorder, 500);
   const [phase, setPhase] = useState<"idle" | "recording" | "paused">("idle");
-  const [kind, setKind] = useState<Kind>("session");
-  const [form, setForm] = useState({ date: today(), start: "", end: "", counselor: "" });
+  const [kind, setKind] = useState<Kind>("consultation");
   const [consent, setConsent] = useState(false);
   const [pending, setPending] = useState<Pending[]>([]);
   const [uploading, setUploading] = useState<{ id: string; progress: number } | null>(null);
   const [err, setErr] = useState("");
   const [pick, setPick] = useState(false);
-  // The child is fixed while a recording is running, even if the header picker changes.
-  const [lockedChild, setLockedChild] = useState<string | null>(null);
-  const target = lockedChild ?? childId;
+  const [activeInfo, setActiveInfo] = useState<RecordingInfo | null>(null);
+  const target = activeInfo?.childId ?? childId;
   const myName = (me?.therapist_name ?? me?.name ?? "").trim();
+  const form = useClassSlot(target, myName);
   const writable = canWrite(me);
 
   const reload = useCallback(() => { loadPending().then(setPending); }, []);
   useFocusEffect(reload);
-  useEffect(() => setForm((f) => ({ ...f, counselor: f.counselor || myName })), [myName]);
-  // 날짜를 고르면 그날 시간표의 수업 시간·담당을 채운다 (수업이 없는 날은 시간을 비운다)
-  useClassSlot(target, form.date, (sl) => setForm((f) => ({ ...f, start: sl?.start ?? "", end: sl?.end ?? "", counselor: sl?.therapist || f.counselor })));
 
   // Stop at the server's 3-hour limit.
   const durationMs = rec.durationMillis ?? 0;
@@ -56,10 +54,19 @@ export default function Record() {
   // Coming back from the background: refresh the job list and the clock.
   useEffect(() => { const sub = AppState.addEventListener("change", (st) => st === "active" && reload()); return () => sub.remove(); }, [reload]);
 
+  const recordingInfo = (): RecordingInfo | null => {
+    const counselor = form.counselor.trim();
+    let problem = form.timeError;
+    if (!target) problem = "아이를 먼저 골라 주세요.";
+    else if (!consent) problem = "녹음 동의를 확인해 주세요.";
+    else if (!counselor) problem = "담당 치료사 이름을 넣어 주세요.";
+    setErr(problem);
+    if (!target || problem) return null;
+    return { childId: target, kind, date: form.date, start: form.start, end: form.end, counselor };
+  };
   const start = async () => {
-    setErr("");
-    if (!target) return setErr("아이를 먼저 골라 주세요.");
-    if (!consent) return setErr("녹음 동의를 확인해 주세요.");
+    const info = recordingInfo();
+    if (!info) return;
     const perm = await requestRecordingPermissionsAsync();
     if (!perm.granted) return setErr("마이크 권한이 필요해요. 휴대폰 설정 › 앱 › SLP AI › 권한에서 마이크를 허용해 주세요.");
     // Android 13+: the "recording" notification keeps the recorder alive while the screen is off.
@@ -68,9 +75,9 @@ export default function Record() {
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true, allowsBackgroundRecording: true, shouldPlayInBackground: true });
       await recorder.prepareToRecordAsync();
       recorder.record();
-      await activateKeepAwakeAsync("recording");
-      setLockedChild(target);
+      setActiveInfo(info);
       setPhase("recording");
+      await activateKeepAwakeAsync("recording").catch(() => {});
     } catch (e) { setErr(`녹음을 시작하지 못했어요: ${errText(e)}`); }
   };
   const pause = () => { recorder.pause(); setPhase("paused"); };
@@ -82,15 +89,15 @@ export default function Record() {
       await setAudioModeAsync({ allowsRecording: false, allowsBackgroundRecording: false, shouldPlayInBackground: false });
       const uri = recorder.uri;
       setPhase("idle");
-      if (!uri || !lockedChild) throw new Error("녹음 파일을 찾지 못했어요.");
+      if (!uri || !activeInfo) throw new Error("녹음 파일을 찾지 못했어요.");
       const file = new File(uri);
-      const p: Pending = { id: String(Date.now()), uri, filename: `녹음_${form.date}_${Date.now()}.m4a`, size: file.size, contentType: "audio/mp4", ownFile: true,
-        childId: lockedChild, kind, date: form.date, start: form.start, end: form.end, counselor: form.counselor.trim() || myName, durationMs, createdAt: new Date().toISOString() };
-      setLockedChild(null);
+      const p: Pending = { ...activeInfo, id: String(Date.now()), uri, filename: `녹음_${activeInfo.date}_${Date.now()}.m4a`, size: file.size, contentType: "audio/mp4", ownFile: true,
+        durationMs, createdAt: new Date().toISOString() };
+      setActiveInfo(null);
       await putPending(p);
       reload();
       upload(p);
-    } catch (e) { setErr(errText(e)); setPhase("idle"); setLockedChild(null); }
+    } catch (e) { setErr(errText(e)); setPhase("idle"); setActiveInfo(null); }
   };
   stopRef.current = stop;
 
@@ -107,9 +114,8 @@ export default function Record() {
   };
 
   const fromFile = async () => {
-    setErr("");
-    if (!target) return setErr("아이를 먼저 골라 주세요.");
-    if (!consent) return setErr("녹음 동의를 확인해 주세요.");
+    const info = recordingInfo();
+    if (!info) return;
     const r = await DocumentPicker.getDocumentAsync({ type: ["audio/*", "video/mp4"], copyToCacheDirectory: true });
     if (r.canceled || !r.assets?.[0]) return;
     const a = r.assets[0];
@@ -120,8 +126,8 @@ export default function Record() {
     // The picker's copy sits in the cache, which Android may clear before a retry: keep our own copy until it is uploaded.
     const kept = new File(Paths.document, `picked-${Date.now()}${ext}`);
     try { await new File(a.uri).copy(kept); } catch (e) { return setErr(`파일을 읽지 못했어요: ${errText(e)}`); }
-    const p: Pending = { id: String(Date.now()), uri: kept.uri, filename: a.name, size, contentType: a.mimeType || "application/octet-stream", ownFile: true,
-      childId: target, kind, date: form.date, start: form.start, end: form.end, counselor: form.counselor.trim() || myName, createdAt: new Date().toISOString() };
+    const p: Pending = { ...info, id: String(Date.now()), uri: kept.uri, filename: a.name, size, contentType: a.mimeType || "application/octet-stream", ownFile: true,
+      createdAt: new Date().toISOString() };
     await putPending(p);
     reload();
     upload(p);
@@ -148,21 +154,19 @@ export default function Record() {
           </Card>
 
           <Card title="기록 정보">
-            <Segmented value={kind} onChange={setKind} disabled={recording} items={[["session", "치료 회기"], ["consultation", "보호자 상담"]]} />
-            <DateField label="날짜" value={form.date} onChange={(date) => setForm({ ...form, date })} />
-            <Row style={{ flexWrap: "nowrap" }}>
-              <View style={{ flex: 1 }}><DateField label="시작 (선택)" mode="time" optional value={form.start} onChange={(v) => setForm({ ...form, start: v })} /></View>
-              <View style={{ flex: 1 }}><DateField label="종료 (선택)" mode="time" optional value={form.end} onChange={(v) => setForm({ ...form, end: v })} /></View>
-            </Row>
-            <TextField label="담당 치료사" value={form.counselor} onChangeText={(v) => setForm({ ...form, counselor: v })} maxLength={40} />
+            <Segmented value={activeInfo?.kind ?? kind} onChange={setKind} disabled={recording} items={[["consultation", "보호자 상담"], ["session", "치료 회기"]]} />
+            {activeInfo ? <T>{[activeInfo.date, activeInfo.start && `${activeInfo.start}–${activeInfo.end}`, activeInfo.counselor].filter(Boolean).join(" · ")}</T> : <>
+              <ClassTimeFields form={form} />
+              <TextField label="담당 치료사" value={form.counselor} onChangeText={(v) => form.edit("counselor", v)} maxLength={40} />
+            </>}
             <Checkbox checked={consent} onChange={setConsent} disabled={recording} label={<T small>{CONSENT_TEXT}</T>} />
             <T small muted>{PROCESSOR_TEXT}</T>
           </Card>
 
-          <Card>
+          <Card title="앱에서 녹음">
             <View style={{ alignItems: "center", gap: 10, paddingVertical: 8 }}>
               <Text style={{ fontSize: 44, fontWeight: "300", color: recording ? C.accent : C.ink, fontVariant: ["tabular-nums"] }}>{clock(recording ? durationMs : 0)}</Text>
-              <T small muted>{phase === "recording" ? "녹음 중 · 화면을 꺼도 계속 녹음돼요" : phase === "paused" ? "일시정지됨" : `최대 ${MAX_HOURS}시간 · 수업이 끝나면 정지를 누르세요`}</T>
+              <T small muted>{phase === "recording" ? "녹음 중 · 화면을 꺼도 계속 녹음돼요" : phase === "paused" ? "일시정지됨" : `최대 ${MAX_HOURS}시간 · 녹음을 마치면 정지를 누르세요`}</T>
               {!recording ? (
                 <Pressable accessibilityRole="button" accessibilityLabel="녹음 시작" onPress={start} disabled={!!uploading}
                   style={({ pressed }) => ({ width: 92, height: 92, borderRadius: 99, backgroundColor: C.accent, alignItems: "center", justifyContent: "center", opacity: uploading ? 0.4 : pressed ? 0.8 : 1 })}>
@@ -182,7 +186,7 @@ export default function Record() {
               )}
               {recording && <T small muted>정지하면 바로 올리고 받아쓰기를 시작해요.</T>}
             </View>
-            {!recording && <Button variant="ghost" icon="folder-open-outline" title="녹음 파일에서 올리기" disabled={!!uploading} onPress={fromFile} />}
+            {!recording && <Button variant="outline" icon="cloud-upload-outline" title="녹음 파일 수동 업로드" disabled={!!uploading} onPress={fromFile} />}
             {!!err && <Notice tone="red">{err}</Notice>}
           </Card>
         </>
@@ -218,7 +222,7 @@ function PickChild({ onPick }: { onPick: (id: string) => void }) {
   const { loading } = useChild();
   return (
     <View style={{ gap: 10 }}>
-      <Text style={{ fontSize: 22, fontWeight: "800", color: C.inkDark }}>누구의 수업을 녹음할까요?</Text>
+      <Text style={{ fontSize: 22, fontWeight: "800", color: C.inkDark }}>어느 아이의 상담을 녹음할까요?</Text>
       <T small muted>아이를 고르면 오늘 시간표의 수업 시간과 담당 치료사가 자동으로 채워져요.</T>
       <Input value={q} onChangeText={setQ} placeholder="이름·코드·초성 검색" autoCorrect={false} />
       {sections.map((sec) => (

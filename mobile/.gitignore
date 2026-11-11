@@ -42,5 +42,6 @@ yarn-error.*
 
 # Play Console service account key and local build outputs
 google-service-account*.json
+/releases/
 *.aab
 *.apk

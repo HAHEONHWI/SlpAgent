@@ -4,6 +4,7 @@ from collections import Counter
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from ..repo.base import NotFound, now_iso
+from .child_codes import counter_id
 
 
 class MergeIn(BaseModel):
@@ -34,6 +35,8 @@ def build_merge(repo, source: str, target: str):
         raise HTTPException(409, "account membership needs reconciliation before merge")
     signups = [r for r in repo.list("signup_requests", "_platform") if r.get("org_id") == source]
     revision = [(col, d["id"], d.get("updated_at")) for col, d in docs]
+    revision += [("target_child_code_counters", d["id"], d.get("updated_at"))
+                 for d in repo.list("child_code_counters", target)]
     revision += [("access", d["id"], d.get("updated_at")) for d in access]
     revision += [("signup", d["id"], d.get("updated_at")) for d in signups]
     revision += [("target", target, target_org.get("updated_at")),
@@ -58,8 +61,24 @@ def merge_organizations(repo, source: str, body: MergeIn, actor: str):
         raise HTTPException(422, "confirmation must match source organization ID")
     target = body.target_org_id
     timestamp = now_iso()
-    writes = [(col, doc["id"], {**doc, "organization_id": target, "updated_at": timestamp})
-              for col, doc in docs if col != "organizations"]
+    writes = []
+    for col, doc in docs:
+        if col == "organizations":
+            continue
+        if col == "child_code_counters" and doc.get("prefix"):
+            prefix = doc["prefix"]
+            target_id = counter_id(target, prefix)
+            try:
+                target_counter = repo.get("child_code_counters", target, target_id)
+            except NotFound:
+                target_counter = {}
+            used = sorted(set(doc.get("used_numbers") or []) | set(target_counter.get("used_numbers") or []))
+            next_number = max(doc.get("next_number", 1), target_counter.get("next_number", 1), max(used, default=0) + 1)
+            writes.append((col, target_id, {**doc, **target_counter, "id": target_id, "organization_id": target,
+                                            "prefix": prefix, "next_number": next_number, "used_numbers": used,
+                                            "updated_at": timestamp}))
+        elif col != "child_code_counters":
+            writes.append((col, doc["id"], {**doc, "organization_id": target, "updated_at": timestamp}))
     for member in members:
         writes.append(("account_access", member["uid"], {"id": member["uid"], "organization_id": "_platform",
                        "org_id": target, "role": member["role"], "updated_at": timestamp}))

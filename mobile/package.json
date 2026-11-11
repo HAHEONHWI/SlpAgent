@@ -1,7 +1,8 @@
 {
   "name": "slp-ai-mobile",
-  "version": "1.0.0",
-  "main": "expo-router/entry",
+  "version": "1.0.4",
+  "license": "UNLICENSED",
+  "main": "./index.ts",
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -27,6 +28,7 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-native": "0.88.1",
+    "react-native-android-widget": "0.26.0",
     "react-native-safe-area-context": "~5.10.1",
     "react-native-screens": "~4.30.1"
   },
@@ -40,7 +42,8 @@
     "typecheck": "tsc --noEmit",
     "doctor": "expo-doctor",
     "build:android": "eas build --platform android --profile production",
-    "submit:android": "eas submit --platform android --profile production"
+    "submit:android": "eas submit --platform android --profile production",
+    "test:widgets": "node --experimental-strip-types --test tests/*.test.mjs"
   },
   "private": true
 }

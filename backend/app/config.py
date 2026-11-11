@@ -42,7 +42,9 @@ class Settings(BaseSettings):
     document_url_signing_key: str = ""
     pdf_font_path: str = ""
     hwpx_template_path: str = ""
-    rate_limit_requests: int = Field(default=120, ge=1, le=10000)
+    rate_limit_requests: int = Field(default=120, ge=1, le=10000)  # per verified account
+    # Per TCP peer, before authentication. Cloud Run requests share a proxy address, so this is a service-wide flood guard.
+    rate_limit_address_requests: int = Field(default=1200, ge=1, le=100000)
     rate_limit_window_seconds: int = Field(default=60, ge=1, le=3600)
     dev_seed: bool = False
     # Development + memory storage only: load locally extracted 검사 서류 (../extracted) as AI knowledge at startup.

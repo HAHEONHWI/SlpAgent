@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 from app.main import app
 from app.deps import get_repo
+from app.rate_limit import account_limiter
 from app.repo.memory import MemoryRepo
 
 
@@ -23,6 +24,7 @@ def repo():
 @pytest.fixture
 def client(repo):
     app.middleware_stack = app.build_middleware_stack()
+    account_limiter.cache_clear()  # each test starts with fresh request quotas
     with TestClient(app) as test_client:
         yield test_client
 

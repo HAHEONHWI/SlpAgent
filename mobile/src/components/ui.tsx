@@ -126,11 +126,11 @@ export function DateField({ label, value, onChange, mode = "date", optional, pla
 }
 
 /** ‹ 2026년 11월 › */
-export const MonthNav = ({ value, onChange }: { value: string; onChange: (m: string) => void }) => (
+export const MonthNav = ({ value, onChange, disabled }: { value: string; onChange: (m: string) => void; disabled?: boolean }) => (
   <View style={[s.row, { justifyContent: "space-between" }]}>
-    <IconButton icon="chevron-back" label="이전 달" onPress={() => onChange(plusMonths(value, -1))} />
+    <IconButton icon="chevron-back" label="이전 달" disabled={disabled} onPress={() => onChange(plusMonths(value, -1))} />
     <Text style={{ fontSize: 17, fontWeight: "700", color: C.inkDark }}>{monthLabel(value)}</Text>
-    <IconButton icon="chevron-forward" label="다음 달" onPress={() => onChange(plusMonths(value, 1))} />
+    <IconButton icon="chevron-forward" label="다음 달" disabled={disabled} onPress={() => onChange(plusMonths(value, 1))} />
   </View>
 );
 /** ‹ 2026. 11. 2. (월) › — tap the date to pick any day. */
@@ -210,18 +210,20 @@ export const Row = ({ children, style, gap = 8 }: { children: ReactNode; style?:
 export const Divider = () => <View style={{ height: 1, backgroundColor: C.line }} />;
 
 /** Bottom sheet modal. */
-export function Sheet({ visible, onClose, title, children }: { visible: boolean; onClose: () => void; title: string; children: ReactNode }) {
+export function Sheet({ visible, onClose, title, children, expanded = false }: { visible: boolean; onClose: () => void; title: string; children: ReactNode; expanded?: boolean }) {
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={{ flex: 1, backgroundColor: "rgba(46,37,32,.35)" }} onPress={onClose} accessibilityLabel="닫기" />
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <View style={{ backgroundColor: C.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: insets.bottom + 12, maxHeight: "92%" }}>
-          <View style={[s.row, { justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderColor: C.line }]}>
-            <Text style={{ fontSize: 17, fontWeight: "700", color: C.inkDark, flex: 1 }} numberOfLines={1}>{title}</Text>
-            <IconButton icon="close" label="닫기" onPress={onClose} />
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+        <View style={{ flex: 1, justifyContent: "flex-end", paddingTop: insets.top }}>
+          <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(46,37,32,.35)" }]} onPress={onClose} accessibilityLabel="닫기" />
+          <View style={{ backgroundColor: C.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "92%", height: expanded ? "92%" : undefined }}>
+            <View style={[s.row, { justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderColor: C.line }]}>
+              <Text style={{ fontSize: 17, fontWeight: "700", color: C.inkDark, flex: 1 }} numberOfLines={1}>{title}</Text>
+              <IconButton icon="close" label="닫기" onPress={onClose} />
+            </View>
+            <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 20, gap: 12 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>{children}</ScrollView>
           </View>
-          <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>{children}</ScrollView>
         </View>
       </KeyboardAvoidingView>
     </Modal>

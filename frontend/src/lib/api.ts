@@ -45,5 +45,5 @@ export async function download(path: string, json: unknown, fallbackName: string
   return name;
 }
 
-export type Child = { id: string; alias: string; display_name: string; birth_date: string; sex?: string; age_months?: number };
+export type Child = { id: string; alias: string; display_name: string; birth_date: string; sex?: string; age_months?: number; voucher_grade?: string | null; disability_registered?: boolean | null };
 export const ageLabel = (m?: number) => (m == null ? "" : `${Math.floor(m / 12)}세 ${m % 12}개월`);

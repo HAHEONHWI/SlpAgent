@@ -18,7 +18,7 @@ export default function OrgHolidays() {
   const [f, setF] = useState({ date: "", name: "" });
   const save = useMutation({
     mutationFn: (rows: Holiday[]) => api<Holiday[]>("/org/holidays", { method: "PUT", json: { holidays: rows } }),
-    onSuccess: () => { setF({ date: "", name: "" }); ["holidays", "timetable", "schedules", "attendance", "settlement", "voucher-visits"].forEach((k) => qc.invalidateQueries({ queryKey: [k] })); },
+    onSuccess: () => { setF({ date: "", name: "" }); ["holidays", "timetable", "schedules", "month-sheet", "attendance", "settlement", "voucher-visits"].forEach((k) => qc.invalidateQueries({ queryKey: [k] })); },
   });
   const all = list.data ?? [];
   const rows = all.filter((h) => h.scope === "org").map(({ date, name }) => ({ date, name }));  // only the organization's own ones are saved here

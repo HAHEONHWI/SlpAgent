@@ -1,5 +1,5 @@
 """All time/count/amount arithmetic lives here. AI never produces these numbers."""
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from fractions import Fraction
 
@@ -10,6 +10,18 @@ def minutes_between(start: str, end: str) -> int:
     if m <= 0:
         raise ValueError("end must be after start")
     return m
+
+
+def recording_end(start: str | None) -> str | None:
+    """Suggest a 40-minute recording interval within the record's single date."""
+    if not isinstance(start, str) or len(start) != 5:
+        return None
+    try:
+        begins = datetime.strptime(start, "%H:%M")
+    except ValueError:
+        return None
+    ends = begins + timedelta(minutes=40)
+    return ends.strftime("%H:%M") if ends.date() == begins.date() else None
 
 
 def accuracy(correct: int, trials: int) -> float | None:
@@ -82,7 +94,7 @@ def voucher_price(classes: list[dict], day_price: int = DAY_PRICE, night_price: 
 
 def settlement(grade: str | None, voucher_classes: list[dict], paid_classes: list[dict] | int, paid_price: int | None,
                day_price: int = DAY_PRICE, night_price: int = NIGHT_PRICE, paid_night_price: int | None = None,
-               cognitive_classes: list[dict] = ()) -> dict:
+               cognitive_classes: list[dict] = (), pending_classes: list[dict] = ()) -> dict:
     """One child's month. voucher_classes / paid_classes: held classes ({'date','start'}); a bare count of paid
     classes counts them all as 일반. 야간 유료 classes cost paid_night_price (unset = the 일반 유료 price).
     본인부담금 is monthly and used in proportion to the voucher spent (사용액 ÷ 월 26만원; with the default prices
@@ -96,12 +108,13 @@ def settlement(grade: str | None, voucher_classes: list[dict], paid_classes: lis
     cost = lambda cs: None if paid_price is None else int(sum(Decimal(pn if is_night(c["date"], c["start"]) else paid_price) for c in cs))
     paid_amount = cost(paid)
     cognitive_amount = cost(cognitive_classes)  # 인지: same prices as 사비, counted apart
-    out: dict = {"grade": grade, "day_sessions": day, "night_sessions": night, "paid_sessions": paid_sessions, "paid_night_sessions": paid_night,
+    out: dict = {"grade": grade, "day_sessions": day, "night_sessions": night, "pending_sessions": len(pending_classes), "paid_sessions": paid_sessions, "paid_night_sessions": paid_night,
                  "cognitive_sessions": len(cognitive_classes), "cognitive_amount": cognitive_amount,
                  "copay": None, "copay_charged": None, "copay_refund": None, "voucher_amount": None,
                  "support": None, "over_budget": False, "paid_amount": paid_amount}
-    if grade in VOUCHER_COPAY:
-        copay = VOUCHER_COPAY[grade]
+    copay = VOUCHER_COPAY.get(grade)
+    out["copay"] = copay
+    if copay is not None and not pending_classes:
         amount = day * day_price + night * night_price
         used = min(Fraction(amount, VOUCHER_TOTAL), Fraction(1))
         charged = int(copay * used)
@@ -109,7 +122,7 @@ def settlement(grade: str | None, voucher_classes: list[dict], paid_classes: lis
                    support=min(amount, VOUCHER_TOTAL) - charged, over_budget=amount > VOUCHER_TOTAL)
     unpriced = (paid_sessions or cognitive_classes) and paid_price is None
     ungraded = bool(voucher_classes) and grade not in VOUCHER_COPAY
-    out["guardian_total"] = None if unpriced or ungraded else (out["copay_charged"] or 0) + (paid_amount or 0) + (cognitive_amount or 0)
+    out["guardian_total"] = None if unpriced or ungraded or pending_classes else (out["copay_charged"] or 0) + (paid_amount or 0) + (cognitive_amount or 0)
     return out
 
 
@@ -124,7 +137,7 @@ def chosen_other(c: dict) -> bool:
 
 
 def pay_days(plan: dict | None) -> set[str] | None:
-    """The 결제 일정's dates, or None when the month is 실제와 동일 (no plan saved = 실제와 동일)."""
+    """Claim dates for a resolved plan. None selects first-five, including historical defaults."""
     if plan is None or plan.get("same_as_actual", True):
         return None
     return {s["date"] for s in plan.get("slots", [])}
@@ -141,6 +154,9 @@ def assign_pay(classes: list[dict], plan: dict | None = None) -> list[dict]:
     for c in sorted(classes, key=lambda c: (c["date"], c["start"])):
         if chosen_other(c):
             out.append({**c, "pay": c.get("pay") or "private", "pay_auto": False})
+            continue
+        if plan and plan.get("mode") == "unset":
+            out.append({**c, "pay": "pending", "pay_auto": False})
             continue
         voucher = c["date"] in days if days is not None else used < DAY_SESSIONS
         used += voucher

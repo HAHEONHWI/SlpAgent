@@ -6,6 +6,7 @@ import { errText, useClassSlot, useCreate, useRecords } from "../lib/hooks";
 import RequireChild from "../components/RequireChild";
 import RecordingConsultation from "../components/RecordingConsultation";
 import RecordingRecords from "../components/RecordingRecords";
+import ClassTimeFields from "../components/ClassTimeFields";
 import { Badge, Button, Card, Empty, Input, Label, Notice, PageTitle, Section, Select, Textarea } from "../components/ui";
 
 // 수업 기록 = what used to be two screens (회기별 치료기록 + 보호자 상담): after each class the therapist writes what was
@@ -17,8 +18,7 @@ type Session = { id: string; date: string; start: string; end: string; minutes: 
   activity_accuracy: { accuracy_pct: number | null }[]; utterances: string[]; observed_behaviors: string[]; created_at: string };
 type A = { name: string; correct: string; trials: string; prompt_level: string };
 const blankA: A = { name: "", correct: "", trials: "", prompt_level: "" };
-const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-const blank = { date: today(), start: "", end: "", counselor: "", summary: "", guidance_given: "", follow_up: "", topics: "", participants: "", utterances: "", behaviors: "" };
+const blank = { summary: "", guidance_given: "", follow_up: "", topics: "", participants: "", utterances: "", behaviors: "" };
 const csv = (s: string) => s.split(",").map((x) => x.trim()).filter(Boolean);
 const lines = (s: string) => s.split("\n").map((x) => x.trim()).filter(Boolean);
 
@@ -32,8 +32,7 @@ function Inner({ childId }: { childId: string }) {
   const [details, setDetails] = useState(false);
   const [acts, setActs] = useState<A[]>([{ ...blankA }]);
   const [err, setErr] = useState("");
-  // 날짜를 고르면 그날 시간표의 수업 시간·담당을 채운다
-  useClassSlot(childId, f.date, (s) => setF((x) => ({ ...x, start: s?.start ?? "", end: s?.end ?? "", counselor: s?.therapist || x.counselor })));
+  const slot = useClassSlot(childId);
   const set = (k: keyof typeof blank) => (e: any) => setF({ ...f, [k]: e.target.value });
   const upd = (i: number, k: keyof A, v: string) => setActs(acts.map((a, j) => (j === i ? { ...a, [k]: v } : a)));
   const filledActs = acts.filter((a) => a.name.trim());
@@ -41,14 +40,14 @@ function Inner({ childId }: { childId: string }) {
 
   const submit = async () => {
     setErr("");
-    if (hasDetails && (!f.start || !f.end)) return setErr("활동·발화·관찰을 함께 저장하려면 시작·종료 시간을 넣어 주세요.");
+    if (hasDetails && (!slot.start || !slot.end)) return setErr("활동·발화·관찰을 함께 저장하려면 시작·종료 시간을 넣어 주세요.");
     try {
-      await saveConsult.mutateAsync({ date: f.date, start: f.start || null, end: f.end || null, counselor: f.counselor, participants: csv(f.participants), topics: csv(f.topics),
+      await saveConsult.mutateAsync({ date: slot.date, start: slot.start || null, end: slot.end || null, counselor: slot.counselor, participants: csv(f.participants), topics: csv(f.topics),
         summary: f.summary, guidance_given: f.guidance_given || null, follow_up: f.follow_up || null });
-      if (hasDetails) await saveSession.mutateAsync({ date: f.date, start: f.start, end: f.end, therapist: f.counselor, status: "completed",
+      if (hasDetails) await saveSession.mutateAsync({ date: slot.date, start: slot.start, end: slot.end, therapist: slot.counselor, status: "completed",
         utterances: lines(f.utterances), observed_behaviors: lines(f.behaviors),
         activities: filledActs.map((a) => ({ name: a.name.trim(), correct: Number(a.correct || 0), trials: Number(a.trials || 0), prompt_level: a.prompt_level || null })) });
-      setF({ ...blank, date: f.date, counselor: f.counselor, start: f.start, end: f.end }); setActs([{ ...blankA }]); setDetails(false);
+      setF(blank); setActs([{ ...blankA }]); setDetails(false);
     } catch (e) { setErr(errText(e)); }
   };
 
@@ -59,11 +58,10 @@ function Inner({ childId }: { childId: string }) {
     <div className="grid items-start gap-10 lg:grid-cols-2">
       <Section title="수업 기록 쓰기">
         <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); submit(); }}>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3"><div className="col-span-2 sm:col-span-1"><Label label="날짜"><Input type="date" value={f.date} onChange={set("date")} required /></Label></div>
-            <Label label="시작 (선택)"><Input type="time" value={f.start} onChange={set("start")} /></Label><Label label="종료 (선택)"><Input type="time" value={f.end} onChange={set("end")} /></Label></div>
+          <ClassTimeFields slot={slot} />
           <Label label="담당 치료사">{therapists.length
-            ? <Select value={f.counselor} onChange={set("counselor")} required><option value="">선택</option>{therapists.map((t) => <option key={t}>{t}</option>)}</Select>
-            : <Input value={f.counselor} onChange={set("counselor")} required />}</Label>
+            ? <Select value={slot.counselor} onChange={(e) => slot.setCounselor(e.target.value)} required><option value="">선택</option>{therapists.map((t) => <option key={t}>{t}</option>)}</Select>
+            : <Input value={slot.counselor} onChange={(e) => slot.setCounselor(e.target.value)} required />}</Label>
           <Label label="수업 내용"><Textarea className="min-h-28" value={f.summary} onChange={set("summary")} required placeholder="오늘 한 활동과 아동의 반응" /></Label>
           <Label label="보호자에게 안내한 내용 (선택)"><Textarea value={f.guidance_given} onChange={set("guidance_given")} placeholder="가정에서 할 활동, 전달 사항" /></Label>
           <Label label="다음 수업·후속 조치 (선택)"><Textarea value={f.follow_up} onChange={set("follow_up")} /></Label>
@@ -135,4 +133,4 @@ function Inner({ childId }: { childId: string }) {
     </div>
   );
 }
-export default function Sessions() { return <><PageTitle title="수업 기록" sub="매 수업 후 한 일과 보호자에게 안내한 내용을 기록해요. 녹음 파일로 초안을 만들 수도 있어요." /><RequireChild>{(id) => <Inner childId={id} />}</RequireChild></>; }
+export default function Sessions() { return <><PageTitle title="수업 기록" sub="매 수업 후 한 일과 보호자에게 안내한 내용을 기록해요. 녹음 파일로 초안을 만들 수도 있어요." /><RequireChild>{(id) => <Inner key={id} childId={id} />}</RequireChild></>; }

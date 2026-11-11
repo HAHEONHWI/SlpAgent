@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useChild } from "../lib/child";
@@ -12,6 +12,8 @@ import { EXTRA, PAY, type Extra, type Pay } from "../lib/extraClass";
 import { Badge, Button, Card, Empty, Input, Label, Notice, PageTitle, Select, Table, Tabs, Td } from "../components/ui";
 
 type ScheduleRow = { id: string; child_id: string; date: string; start: string; end: string; therapist: string; status: string;
+  moved_from?: string | null;
+  cancel_reason?: string | null; closure?: string | null;
   pay: Pay; extra?: Extra | null; timetable_entry_id?: string | null; timetable_date?: string | null; note?: string | null };
 
 export default function Schedule() {
@@ -32,10 +34,20 @@ function DatedSchedule() {
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [f, setF] = useState({ child_id: childId ?? "", date: "", start: "", end: "", therapist: "", note: "", extra: "voucher" });
   const list = useQuery({ queryKey: ["schedules", month], queryFn: () => api<ScheduleRow[]>(`/schedules?month=${month}`) });
-  const refresh = () => ["schedules", "attendance", "settlement", "voucher-visits", "class-records"].forEach((key) => qc.invalidateQueries({ queryKey: [key] }));
+  const refresh = () => ["schedules", "attendance", "settlement", "month-sheet", "voucher-visits", "class-records"].forEach((key) => qc.invalidateQueries({ queryKey: [key] }));
   const create = useMutation({ mutationFn: () => api("/schedules", { method: "POST", json: { ...f, end: f.end || null, therapist: f.therapist.trim() || null, note: f.note || null } }), onSuccess: refresh });
   const [editing, setEditing] = useState<string | null>(null);
-  const cancel = useMutation({ mutationFn: (id: string) => api(`/schedules/${id}/cancel`, { method: "POST" }), onSuccess: refresh });
+  const [removing, setRemoving] = useState<ScheduleRow | null>(null);
+  const removalDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => { if (removing) removalDialog.current?.showModal(); }, [removing]);
+  const [moving, setMoving] = useState<ScheduleRow | null>(null);
+  const [destination, setDestination] = useState({ date: "", start: "", reason: "" });
+  const moveDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => { if (moving) moveDialog.current?.showModal(); }, [moving]);
+  const move = useMutation({ mutationFn: () => api(`/schedules/${moving!.id}/move`, { method: "POST", json: destination }),
+    onSuccess: () => { setMoving(null); refresh(); } });
+  const cancel = useMutation({ mutationFn: (id: string) => api(`/schedules/${id}/cancel`, { method: "POST" }), onSuccess: () => { setRemoving(null); refresh(); } });
+  const restore = useMutation({ mutationFn: (id: string) => api(`/schedules/${id}/restore`, { method: "POST" }), onSuccess: refresh });
   const childLabel = (id: string) => {
     const child = children.find((c) => c.id === id);
     return child ? [child.display_name, child.alias].filter(Boolean).join(" · ") : "-";
@@ -43,7 +55,7 @@ function DatedSchedule() {
   const set = (k: keyof typeof f) => (e: any) => setF({ ...f, [k]: e.target.value });
   return (
     <>
-      <p className="mb-3 text-sm text-slate-500">주간 시간표의 수업이 자동으로 들어와요. 여기서 수정한 날짜·시간·메모는 해당 수업에만 적용되며, 고정 주간 시간표는 유지됩니다. 바우처 서류에는 월간 일정표의 결제 일정이 올라가요(실제와 동일이면 처음 5회). 사비 수업은 바우처 서류에서 빠집니다. 같은 치료사 또는 같은 아동의 겹치는 시간은 등록되지 않습니다.</p>
+      <p className="mb-3 text-sm text-slate-500">주간 시간표의 수업이 자동으로 들어와요. 여기서 수정한 날짜·시간·메모는 해당 수업에만 적용되며, 고정 주간 시간표는 유지됩니다. 바우처 날짜는 월간 일정표에서 확인해요. 담당 치료사가 ‘실제 일정과 동일’을 저장하면 아동별 월 첫 5회, 직접 입력한 달은 지정한 결제 날짜를 사용해요. 같은 치료사 또는 같은 아동의 겹치는 시간은 등록되지 않습니다.</p>
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="수업 추가">
           <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); create.mutate(); }}>
@@ -64,14 +76,39 @@ function DatedSchedule() {
                 <tr key={s.id}><td colSpan={7} className="px-2"><EditClassForm c={s} onCancel={() => setEditing(null)} onDone={() => { setEditing(null); refresh(); }} /></td></tr>
               ) : (
                 <tr key={s.id}><Td>{s.date}{s.timetable_date && <div className="text-xs text-indigo-600">개별 수정</div>}</Td><Td>{s.start}–{s.end}</Td><Td>{childLabel(s.child_id)}{s.note && <div className="text-xs text-slate-500">{s.note}</div>}</Td><Td><Badge tone={s.pay === "voucher" ? "indigo" : s.pay === "cognitive" ? "green" : "amber"}>{PAY[s.pay]}</Badge></Td><Td>{s.therapist}</Td>
-                  <Td><Badge tone={s.status === "scheduled" ? "indigo" : "slate"}>{s.status === "scheduled" ? "예정" : "취소"}</Badge></Td>
+                  <Td><Badge tone={s.status === "scheduled" ? "indigo" : "slate"}>{s.status === "scheduled" ? "예정" : s.status === "moved" ? "보강 이동" : "취소"}</Badge>{s.moved_from && <Badge>보강</Badge>}</Td>
                   <Td>{s.status === "scheduled" && <div className="flex flex-col items-start">
                     <Button variant="ghost" className="px-2 py-1" onClick={() => setEditing(s.id)}>수정</Button>
-                    <Button variant="ghost" className="px-2 py-1" onClick={() => cancel.mutate(s.id)}>취소</Button></div>}</Td></tr>))}
+                    {!s.moved_from && <Button variant="ghost" className="px-2 py-1" onClick={() => { move.reset(); setDestination({ date: "", start: s.start, reason: "" }); setMoving(s); }}>보강 잡기</Button>}
+                    <Button variant="ghost" className="px-2 py-1" onClick={() => { cancel.reset(); setRemoving(s); }}>취소</Button></div>}
+                    {s.status === "cancelled" && !s.cancel_reason && !s.closure && <Button variant="ghost" className="px-2 py-1"
+                      disabled={restore.isPending} onClick={() => { restore.reset(); restore.mutate(s.id); }}>되돌리기</Button>}</Td></tr>))}
             </Table>)}
           {cancel.error && <div className="mt-2"><Notice tone="red">{errText(cancel.error)}</Notice></div>}
+          {restore.error && <div className="mt-2"><Notice tone="red">{errText(restore.error)}</Notice></div>}
         </Card>
       </div>
+      {moving && <dialog ref={moveDialog} aria-labelledby="move-class-title" className="fixed inset-0 z-50 m-auto w-full max-w-sm rounded-2xl border p-5 shadow-xl backdrop:bg-black/30"
+        onCancel={e => { e.preventDefault(); if (!move.isPending) setMoving(null); }}>
+        <form className="space-y-3" onSubmit={e => { e.preventDefault(); move.mutate(); }}>
+          <h3 id="move-class-title" className="font-semibold">보강 잡기</h3>
+          <p>{childLabel(moving.child_id)} · {moving.date} {moving.start}~{moving.end}</p>
+          <Label label="보강 날짜"><Input required type="date" value={destination.date} onChange={e => setDestination({ ...destination, date: e.target.value })} /></Label>
+          <Label label="보강 시작"><Input required type="time" value={destination.start} onChange={e => setDestination({ ...destination, start: e.target.value })} /></Label>
+          <Label label="변경 사유"><Input maxLength={200} value={destination.reason} onChange={e => setDestination({ ...destination, reason: e.target.value })} /></Label>
+          {move.error && <Notice tone="red">{errText(move.error)}</Notice>}
+          <div className="flex justify-end gap-2"><Button type="button" variant="ghost" disabled={move.isPending} onClick={() => setMoving(null)}>돌아가기</Button><Button disabled={move.isPending}>보강 저장</Button></div>
+        </form>
+      </dialog>}
+      {removing && <dialog ref={removalDialog} aria-labelledby="cancel-class-title" className="fixed inset-0 z-50 m-auto w-full max-w-sm rounded-2xl border p-5 shadow-xl backdrop:bg-black/30"
+        onCancel={e => { e.preventDefault(); if (!cancel.isPending) setRemoving(null); }}>
+        <h3 id="cancel-class-title" className="font-semibold">이 수업을 취소할까요?</h3>
+        <p className="my-3">{childLabel(removing.child_id)}<br />{removing.date} {removing.start}~{removing.end}</p>
+        <p className="text-sm">해당 회차가 월간 일정표와 출결·정산에서 빠집니다. 직접 취소한 일정은 목록에서 되돌릴 수 있어요.</p>
+        {cancel.error && <Notice tone="red">{errText(cancel.error)}</Notice>}
+        <div className="mt-4 flex justify-end gap-2"><Button autoFocus variant="ghost" disabled={cancel.isPending} onClick={() => setRemoving(null)}>돌아가기</Button>
+          <Button disabled={cancel.isPending} onClick={() => cancel.mutate(removing.id)}>수업 취소</Button></div>
+      </dialog>}
     </>
   );
 }

@@ -14,7 +14,8 @@ from ..deps import audit, child_or_404, get_repo
 from ..repo.base import NotFound, now_iso
 from ..services import agent, knowledge
 from ..services.ai_tools import READ, WRITE, ToolRunner
-from ..services.privacy import sanitize_external_text
+from ..services.privacy import (organization_child_sensitive_values, pseudonymize_child_text,
+                                restore_child_code, sanitize_external_text)
 from ..services.prompt_safety import is_privilege_override_request
 
 router = APIRouter(prefix="/ai/dialogue", tags=["ai-dialogue"])
@@ -58,6 +59,12 @@ def _message_view(message: dict) -> dict:
     }
 
 
+def _external_text(value: str, sensitive_values: list[str], child: dict | None = None) -> str:
+    if child:
+        return pseudonymize_child_text(value, child, sensitive_values)
+    return sanitize_external_text(value, sensitive_values)
+
+
 def _conversation_mode(conversation) -> agent.DialogueMode:
     stored = conversation.get("mode")
     if stored is None:
@@ -84,10 +91,10 @@ def conversations(p: Principal = Depends(current_principal), repo=Depends(get_re
     return result
 
 
-def _safe_filename(value: str, sensitive_values: list[str | None]) -> str:
+def _safe_filename(value: str, sensitive_values: list[str | None], child: dict | None = None) -> str:
     name = (value or "첨부파일").replace("\\", "/").split("/")[-1]
     name = re.sub(r"[\x00-\x1f\x7f]", "", name).strip()[:180] or "첨부파일"
-    return sanitize_external_text(name, sensitive_values)
+    return _external_text(name, sensitive_values, child)
 
 
 def _docx_text(data: bytes) -> str:
@@ -138,7 +145,8 @@ def _hwp_text(data: bytes, extension: str) -> str:
     return content[:MAX_ATTACHMENT_TEXT]
 
 
-async def _prepare_attachments(files: list[UploadFile], sensitive_values: list[str | None]) -> tuple[list[dict], list[dict]]:
+async def _prepare_attachments(files: list[UploadFile], sensitive_values: list[str | None],
+                               child: dict | None = None) -> tuple[list[dict], list[dict]]:
     if len(files) > MAX_CHAT_FILES:
         raise HTTPException(413, f"파일은 한 번에 {MAX_CHAT_FILES}개까지 첨부할 수 있습니다.")
     total_bytes = 0
@@ -150,7 +158,7 @@ async def _prepare_attachments(files: list[UploadFile], sensitive_values: list[s
         total_bytes += len(raw)
         if total_bytes > MAX_CHAT_TOTAL_BYTES:
             raise HTTPException(413, "첨부 파일 전체 크기는 20MB 이하여야 합니다.")
-        name = _safe_filename(upload.filename or "첨부파일", sensitive_values)
+        name = _safe_filename(upload.filename or "첨부파일", sensitive_values, child)
         extension = Path(name).suffix.lower()
         if extension == ".pdf":
             if not raw.startswith(b"%PDF-"):
@@ -188,15 +196,15 @@ async def _prepare_attachments(files: list[UploadFile], sensitive_values: list[s
                 content = raw.decode("utf-8-sig")[:MAX_ATTACHMENT_TEXT]
             except UnicodeDecodeError as error:
                 raise HTTPException(415, "텍스트 파일은 UTF-8 형식이어야 합니다.") from error
-            content = sanitize_external_text(content, sensitive_values)
+            content = _external_text(content, sensitive_values, child)
             parts.append({"type": "input_text", "text": f"[첨부 {index}: {name}]\n{content}"})
             file_type = "텍스트"
         elif extension == ".docx":
-            content = sanitize_external_text(_docx_text(raw), sensitive_values)
+            content = _external_text(_docx_text(raw), sensitive_values, child)
             parts.append({"type": "input_text", "text": f"[첨부 {index}: {name}]\n{content}"})
             file_type = "DOCX"
         elif extension in {".hwp", ".hwpx"}:
-            content = sanitize_external_text(_hwp_text(raw, extension), sensitive_values)
+            content = _external_text(_hwp_text(raw, extension), sensitive_values, child)
             parts.append({"type": "input_text", "text": f"[첨부 {index}: {name}]\n{content}"})
             file_type = "HWP"
         else:
@@ -285,27 +293,27 @@ async def chat(request: Request, p: Principal = Depends(current_principal), repo
         raise HTTPException(422, "초안 생성은 아동을 선택한 임상 모드에서만 허용할 수 있습니다.")
     if body.allow_drafts and not p.can_write:
         raise HTTPException(403, "read-only role")
-    sensitive_values = [child.get("display_name"), child.get("guardian_contact")] if child_id else []
+    sensitive_values = organization_child_sensitive_values(repo, p.org_id)
     if uploads:
-        attachment_parts, attachments = await _prepare_attachments(uploads, sensitive_values)
+        attachment_parts, attachments = await _prepare_attachments(uploads, sensitive_values, child)
     else:
         attachment_parts, attachments = [], []
     if not body.conversation_id:
         conv = repo.create("chat_conversations", p.org_id, {
             "user_id": p.uid, "child_id": child_id, "mode": mode,
-            "title": _title(sanitize_external_text(body.message, sensitive_values)),
+            "title": _title(_external_text(body.message, sensitive_values, child)),
         })
         audit(repo, p, "create", "chat_conversations", conv["id"], child_id)
     prior = (sorted(repo.list("chat_messages", p.org_id, conversation_id=conv["id"]), key=lambda m: m["created_at"])
              if body.conversation_id else [])
-    clean_message = sanitize_external_text(body.message, sensitive_values)
+    clean_message = _external_text(body.message, sensitive_values, child)
     history = []
     for message in prior:
-        content = sanitize_external_text(message["content"], sensitive_values)
+        content = _external_text(message["content"], sensitive_values, child)
         previous_files = message.get("attachments", [])
         if previous_files:
             names = ", ".join(item["name"] for item in previous_files)
-            content += f"\n[이전 첨부 원문은 현재 대화에서 다시 참조할 수 없음: {names}]"
+            content += f"\n[이전 첨부 원문은 현재 대화에서 다시 참조할 수 없음: {_external_text(names, sensitive_values, child)}]"
         history.append({"role": message["role"], "content": content})
     user_content = [{"type": "input_text", "text": clean_message}, *attachment_parts] if attachment_parts else clean_message
     history.append({"role": "user", "content": user_content})
@@ -325,22 +333,24 @@ async def chat(request: Request, p: Principal = Depends(current_principal), repo
         logger.exception("knowledge search failed for organization %s", p.org_id)
         search_status = "error"
         matches = []
-    sources = [{"citation": f"자료 {index}", "document": match["document"], "page": match["page"],
+    sources = [{"citation": f"자료 {index}", "document": _external_text(match["document"], sensitive_values, child), "page": match["page"],
                 "test_code": match.get("test_code"), "item_ids": match.get("item_ids", [])}
                for index, match in enumerate(matches, start=1)]
     excerpts = []
     for source, match in zip(sources, matches):
-        excerpt = sanitize_external_text(match["text"], sensitive_values)
+        excerpt = _external_text(match["text"], sensitive_values, child)
         if excerpt.strip():
             excerpts.append(f"[{source['citation']}] {source['document']} p.{source['page']}\n{excerpt}")
     reference_context = "\n\n".join(excerpts)
     reference_status = "used" if reference_context else "error" if search_status == "error" else "not_found"
     allowed_tools = frozenset(READ | (WRITE if body.allow_drafts else set())) if mode == "clinical" else frozenset()
-    runner = ToolRunner(repo, p, child_id, allowed_tools=allowed_tools, sensitive_values=tuple(sensitive_values))
+    runner = ToolRunner(repo, p, child_id, allowed_tools=allowed_tools, sensitive_values=tuple(sensitive_values), child=child)
     result = agent.run_chat(client, get_settings().openai_model, history, runner, mode=mode,
                             reference_context=reference_context,
                             allow_tools=mode == "clinical" and not bool(attachment_parts))
     result["text"] = sanitize_external_text(result["text"], sensitive_values)
+    if child:
+        result["text"] = restore_child_code(result["text"], child)
     assistant_message = repo.create("chat_messages", p.org_id, {"conversation_id": conv["id"], "role": "assistant", "content": result["text"],
                                                                  "proposal_ids": result["proposals"], "sources": sources,
                                                                  "reference_status": reference_status})

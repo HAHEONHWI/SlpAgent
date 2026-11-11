@@ -9,7 +9,8 @@ import { useClassSlot, useCreate, useRecords, useTherapists } from "@/lib/hooks"
 import { canWrite, useMe } from "@/lib/me";
 import { SECTIONS } from "@/lib/recordings";
 import { ChildPicker, RequireChild } from "@/components/ChildPicker";
-import { Badge, Button, C, Card, Checkbox, DateField, Empty, IconButton, Input, Loading, MonthNav, Notice, Row, Screen, Select, T, Tabs, TextField, type Tone } from "@/components/ui";
+import { ClassTimeFields } from "@/components/ClassTimeFields";
+import { Badge, Button, C, Card, Checkbox, Empty, IconButton, Input, Loading, MonthNav, Notice, Row, Screen, Select, T, Tabs, TextField, type Tone } from "@/components/ui";
 
 type Consultation = { id: string; date: string; start: string | null; end: string | null; minutes: number | null; counselor: string; participants: string[]; topics: string[];
   summary: string; guidance_given: string | null; follow_up: string | null; created_at: string; session_summary?: string | null; parent_concerns?: string[] | null;
@@ -47,13 +48,12 @@ function Sessions({ childId }: { childId: string }) {
   const saveConsult = useCreate(childId, "consultations");
   const saveSession = useCreate(childId, "sessions");
   const therapists = useTherapists();
-  const blank = { date: today(), start: "", end: "", counselor: "", summary: "", guidance_given: "", follow_up: "", topics: "", participants: "", utterances: "", behaviors: "" };
+  const blank = { summary: "", guidance_given: "", follow_up: "", topics: "", participants: "", utterances: "", behaviors: "" };
   const [f, setF] = useState(blank);
   const [open, setOpen] = useState(false), [details, setDetails] = useState(false);
   const [acts, setActs] = useState<A[]>([{ ...blankA }]);
   const [err, setErr] = useState(""), [saved, setSaved] = useState(false);
-  // 날짜를 고르면 그날 시간표의 수업 시간·담당을 채운다
-  useClassSlot(childId, f.date, (sl) => setF((x) => ({ ...x, start: sl?.start ?? "", end: sl?.end ?? "", counselor: sl?.therapist || x.counselor })));
+  const slot = useClassSlot(childId);
   const set = (k: keyof typeof blank) => (v: string) => setF({ ...f, [k]: v });
   const upd = (i: number, k: keyof A, v: string) => setActs(acts.map((a, j) => (j === i ? { ...a, [k]: v } : a)));
   const filledActs = acts.filter((a) => a.name.trim());
@@ -61,15 +61,16 @@ function Sessions({ childId }: { childId: string }) {
 
   const submit = async () => {
     setErr(""); setSaved(false);
-    if (!f.counselor.trim() || !f.summary.trim()) return setErr("담당 치료사와 수업 내용을 넣어 주세요.");
-    if (hasDetails && (!f.start || !f.end)) return setErr("활동·발화·관찰을 함께 저장하려면 시작·종료 시간을 넣어 주세요.");
+    if (slot.timeError) return setErr(slot.timeError);
+    if (!slot.counselor.trim() || !f.summary.trim()) return setErr("담당 치료사와 수업 내용을 넣어 주세요.");
+    if (hasDetails && (!slot.start || !slot.end)) return setErr("활동·발화·관찰을 함께 저장하려면 시작·종료 시간을 넣어 주세요.");
     try {
-      await saveConsult.mutateAsync({ date: f.date, start: f.start || null, end: f.end || null, counselor: f.counselor, participants: csv(f.participants), topics: csv(f.topics),
+      await saveConsult.mutateAsync({ date: slot.date, start: slot.start || null, end: slot.end || null, counselor: slot.counselor, participants: csv(f.participants), topics: csv(f.topics),
         summary: f.summary, guidance_given: f.guidance_given || null, follow_up: f.follow_up || null });
-      if (hasDetails) await saveSession.mutateAsync({ date: f.date, start: f.start, end: f.end, therapist: f.counselor, status: "completed",
+      if (hasDetails) await saveSession.mutateAsync({ date: slot.date, start: slot.start, end: slot.end, therapist: slot.counselor, status: "completed",
         utterances: lines(f.utterances), observed_behaviors: lines(f.behaviors),
         activities: filledActs.map((a) => ({ name: a.name.trim(), correct: Number(a.correct || 0), trials: Number(a.trials || 0), prompt_level: a.prompt_level || null })) });
-      setF({ ...blank, date: f.date, counselor: f.counselor, start: f.start, end: f.end }); setActs([{ ...blankA }]); setDetails(false); setSaved(true); setOpen(false);
+      setF(blank); setActs([{ ...blankA }]); setDetails(false); setSaved(true); setOpen(false);
     } catch (e) { setErr(errText(e)); }
   };
 
@@ -82,14 +83,10 @@ function Sessions({ childId }: { childId: string }) {
       {saved && <Notice tone="green">기록을 저장했어요.</Notice>}
       {writable && (!open ? <Button icon="create-outline" title="수업 기록 쓰기" onPress={() => { setOpen(true); setSaved(false); }} /> : (
         <Card title="수업 기록 쓰기" action={<IconButton icon="close" label="닫기" onPress={() => setOpen(false)} />}>
-          <DateField label="날짜" value={f.date} onChange={set("date")} />
-          <Row style={{ flexWrap: "nowrap" }}>
-            <View style={{ flex: 1 }}><DateField label="시작 (선택)" mode="time" optional value={f.start} onChange={set("start")} /></View>
-            <View style={{ flex: 1 }}><DateField label="종료 (선택)" mode="time" optional value={f.end} onChange={set("end")} /></View>
-          </Row>
+          <ClassTimeFields form={slot} />
           {therapists.length
-            ? <Select label="담당 치료사" value={f.counselor} options={[...new Set([...therapists, ...(f.counselor ? [f.counselor] : [])])].map((t) => [t, t] as [string, string])} onChange={set("counselor")} />
-            : <TextField label="담당 치료사" value={f.counselor} onChangeText={set("counselor")} />}
+            ? <Select label="담당 치료사" value={slot.counselor} options={[...new Set([...therapists, ...(slot.counselor ? [slot.counselor] : [])])].map((t) => [t, t] as [string, string])} onChange={(v) => slot.edit("counselor", v)} />
+            : <TextField label="담당 치료사" value={slot.counselor} onChangeText={(v) => slot.edit("counselor", v)} />}
           <TextField label="수업 내용" multiline value={f.summary} onChangeText={set("summary")} placeholder="오늘 한 활동과 아동의 반응" />
           <TextField label="보호자에게 안내한 내용 (선택)" multiline value={f.guidance_given} onChangeText={set("guidance_given")} placeholder="가정에서 할 활동, 전달 사항" />
           <TextField label="다음 수업·후속 조치 (선택)" multiline value={f.follow_up} onChangeText={set("follow_up")} />

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>언어치료 AI 업무 도우미 | SLP AI</title>
-  <meta name="description" content="언어치료 AI 업무 도우미 SLP AI는 언어재활사와 언어치료 기관의 수업 기록·치료계획·바우처 업무를 지원합니다. 녹음 기반 기록과 AI 초안은 치료사가 검토·승인하고, 일정·출결과 월별 정산을 함께 관리합니다.">
+  <meta name="description" content="언어치료 AI 업무 도우미 SLP AI. AI·일지 작성·ERP를 하나로 연결합니다. 보호자 상담 녹음으로 오늘의 일지 초안을 작성하고, 치료사 검토·승인 후 기록합니다. AI 치료계획과 일정·출결·바우처·정산도 함께 관리하세요.">
   <meta name="robots" content="index, follow, max-image-preview:large">
   <meta name="theme-color" content="#fcf8f2">
   <meta name="google-site-verification" content="H_nQHswMBnA1hu4_VT2MRnUarqhfqJR4imFKfLf8sfs">
@@ -13,11 +13,13 @@
   <link rel="canonical" href="https://slpai.heonhwi.dev/">
   <link rel="icon" type="image/png" href="/brand/slp-ai-logo.png">
   <link rel="stylesheet" href="/home.css">
+  <script src="/console-warning.js" defer></script>
+  <script src="/home.js" defer></script>
   <meta property="og:type" content="website">
   <meta property="og:locale" content="ko_KR">
   <meta property="og:site_name" content="SLP AI">
   <meta property="og:title" content="언어치료 AI 업무 도우미 | SLP AI">
-  <meta property="og:description" content="언어치료 AI 업무 도우미 SLP AI는 언어재활사와 언어치료 기관의 수업 기록·치료계획·바우처 업무를 지원합니다. 녹음 기반 기록과 AI 초안은 치료사가 검토·승인하고, 일정·출결과 월별 정산을 함께 관리합니다.">
+  <meta property="og:description" content="언어치료 AI 업무 도우미 SLP AI. AI·일지 작성·ERP를 하나로 연결합니다. 보호자 상담 녹음으로 오늘의 일지 초안을 작성하고, 치료사 검토·승인 후 기록합니다. AI 치료계획과 일정·출결·바우처·정산도 함께 관리하세요.">
   <meta property="og:url" content="https://slpai.heonhwi.dev/">
   <meta property="og:image" content="https://slpai.heonhwi.dev/brand/slp-ai-logo.png">
   <meta property="og:image:width" content="627">
@@ -25,127 +27,234 @@
   <meta property="og:image:alt" content="SLP AI 로고">
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="언어치료 AI 업무 도우미 | SLP AI">
-  <meta name="twitter:description" content="언어치료 AI 업무 도우미 SLP AI는 언어재활사와 언어치료 기관의 수업 기록·치료계획·바우처 업무를 지원합니다. 녹음 기반 기록과 AI 초안은 치료사가 검토·승인하고, 일정·출결과 월별 정산을 함께 관리합니다.">
+  <meta name="twitter:description" content="언어치료 AI 업무 도우미 SLP AI. AI·일지 작성·ERP를 하나로 연결합니다. 보호자 상담 녹음으로 오늘의 일지 초안을 작성하고, 치료사 검토·승인 후 기록합니다. AI 치료계획과 일정·출결·바우처·정산도 함께 관리하세요.">
   <meta name="twitter:image" content="https://slpai.heonhwi.dev/brand/slp-ai-logo.png">
   <script type="application/ld+json">
   {
-    "@context": "https://schema.org",
-    "@graph": [
-      {
-        "@type": "Organization", "@id": "https://slpai.heonhwi.dev/#organization",
-        "name": "SLP AI", "url": "https://slpai.heonhwi.dev/",
-        "logo": "https://slpai.heonhwi.dev/brand/slp-ai-logo.png",
-        "email": "contact@heonhwi.dev"
-      },
-      {
-        "@type": "WebSite", "@id": "https://slpai.heonhwi.dev/#website",
-        "name": "SLP AI", "alternateName": "SLP Agent", "url": "https://slpai.heonhwi.dev/",
-        "inLanguage": "ko-KR", "publisher": {"@id": "https://slpai.heonhwi.dev/#organization"}
-      },
-      {
-        "@type": "WebApplication", "@id": "https://slpai.heonhwi.dev/#application",
-        "name": "SLP AI", "url": "https://slpai.heonhwi.dev/", "inLanguage": "ko-KR",
-        "applicationCategory": "BusinessApplication", "operatingSystem": "Web browser",
-        "description": "언어재활사와 언어치료 기관의 수업 기록, AI 초안, 치료계획, 일정·출결, 바우처 기록지와 정산을 돕는 언어치료 AI 서비스.",
-        "featureList": ["수업 기록과 녹음 기반 AI 초안", "치료계획과 치료활동 초안", "일정과 출결 관리", "바우처 문서 생성", "월별 정산", "기관별 접근 권한"],
-        "publisher": {"@id": "https://slpai.heonhwi.dev/#organization"}
-      },
-      {
-        "@type": "FAQPage", "@id": "https://slpai.heonhwi.dev/#faq",
-        "mainEntity": [
-          {"@type":"Question","name":"SLP AI는 어떤 서비스인가요?","acceptedAnswer":{"@type":"Answer","text":"SLP AI는 언어재활사와 언어치료 기관의 업무를 지원하는 언어치료 AI 서비스입니다. 아동별 수업 기록과 녹음 기반 초안, 치료계획·활동, 일정·출결, 바우처 기록지, 월별 정산을 관리합니다."}},
-          {"@type":"Question","name":"AI가 치료사의 판단을 대신하나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. AI 분석과 치료활동, 녹음 기반 기록은 초안으로 생성됩니다. 치료사가 검토하고 승인해야 임상 기록에 반영됩니다. AI는 진단이나 치료 효과를 보장하지 않습니다."}},
-          {"@type":"Question","name":"녹음 파일로 언어치료 기록을 만들 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"녹음 파일을 업로드하면 수업 기록 초안이 생성됩니다. 치료사가 확인·수정 후 승인합니다. 녹음 전 보호자 등 관련자의 동의를 확인하고, 불필요한 개인정보는 포함하지 않아야 합니다."}},
-          {"@type":"Question","name":"발달재활 바우처 기록지와 정산도 지원하나요?","acceptedAnswer":{"@type":"Answer","text":"월별 수업과 출결을 바탕으로 발달재활 바우처 기록지와 정산 내역을 정리합니다. 문서는 DOCX, PDF, HWPX 형식으로 출력할 수 있으며, 서식과 설정에 따라 지원 범위가 달라집니다."}},
-          {"@type":"Question","name":"가입하면 바로 사용할 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"회원가입 후 사이트 관리자의 승인이 필요합니다. 승인된 계정은 부여된 기관과 역할에 따라 접근할 수 있는 기능이 달라집니다. 개인정보 처리와 AI 기능의 외부 전송 안내는 개인정보처리방침에서 확인할 수 있습니다."}}
-        ]
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://slpai.heonhwi.dev/#organization",
+      "name": "SLP AI",
+      "url": "https://slpai.heonhwi.dev/",
+      "logo": "https://slpai.heonhwi.dev/brand/slp-ai-logo.png",
+      "email": "contact@heonhwi.dev"
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://slpai.heonhwi.dev/#website",
+      "name": "SLP AI",
+      "alternateName": "SLP Agent",
+      "url": "https://slpai.heonhwi.dev/",
+      "inLanguage": "ko-KR",
+      "publisher": {
+        "@id": "https://slpai.heonhwi.dev/#organization"
       }
-    ]
-  }
+    },
+    {
+      "@type": "WebApplication",
+      "@id": "https://slpai.heonhwi.dev/#application",
+      "name": "SLP AI",
+      "url": "https://slpai.heonhwi.dev/",
+      "inLanguage": "ko-KR",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web browser",
+      "description": "AI·일지 작성·ERP를 연결하는 언어치료 업무 도우미. 보호자 상담 녹음 기반 일지 초안과 치료사 승인, AI 치료계획·활동, 일정·출결·바우처 기록지·정산을 지원합니다.",
+      "featureList": [
+        "보호자 상담 녹음 기반 일지 초안",
+        "수업 전체 녹음 기반 기록 초안",
+        "AI 요약용 텍스트 개인정보 마스킹",
+        "AI 대화·치료계획·치료활동 초안",
+        "일정·출결·바우처 문서·정산 ERP",
+        "기관·역할별 접근 권한"
+      ],
+      "publisher": {
+        "@id": "https://slpai.heonhwi.dev/#organization"
+      }
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://slpai.heonhwi.dev/#faq",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "SLP AI는 어떤 서비스인가요?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "SLP AI는 언어재활사와 언어치료 기관을 위한 AI·일지 작성·ERP 통합 업무 서비스입니다. 보호자 상담 녹음 기반 일지 초안, 치료계획·활동, 일정·출결, 바우처 기록지와 월별 정산을 같은 공간에서 관리합니다."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "AI가 치료사의 판단을 대신하나요?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "아니요. AI 분석과 치료활동, 녹음 기반 기록은 초안으로 생성됩니다. 치료사가 검토하고 승인해야 임상 기록에 반영됩니다. AI는 진단이나 치료 효과를 보장하지 않습니다."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "보호자 상담만 녹음해도 오늘 일지를 만들 수 있나요?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "네. 오늘의 활동과 아동 반응을 이야기한 보호자 상담 녹음 파일을 올리면 AI가 녹취 내용을 바탕으로 일지 초안을 작성합니다. 녹음에 없는 내용은 추측해 채우지 않으며, 치료사가 확인·수정한 뒤 승인합니다. 수업 전체 녹음도 사용할 수 있습니다. 녹음 전 관련자의 동의를 확인해 주세요."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "발달재활 바우처 기록지와 정산도 지원하나요?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "월별 수업과 출결을 바탕으로 발달재활 바우처 기록지와 정산 내역을 정리합니다. 바우처 기록지는 HWP·HWPX, 그 밖의 문서는 설정과 서식에 따라 DOCX·PDF 출력을 지원합니다."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "가입하면 바로 사용할 수 있나요?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "회원가입 후 사이트 관리자의 승인이 필요합니다. 승인된 계정은 부여된 기관과 역할에 따라 접근할 수 있는 기능이 달라집니다. 개인정보 처리와 AI 기능의 외부 전송 안내는 개인정보처리방침에서 확인할 수 있습니다."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "아이의 개인정보는 어떻게 처리되나요?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "이름과 연락처 같은 직접 식별정보는 제거하거나 가린 뒤 AI 요청을 처리해요. 자료 제작에 필요한 연령, 교육·치료 맥락과 첨부 이미지는 기능 제공을 위해 처리될 수 있으므로 자유 입력란에는 불필요한 개인정보를 적지 않는 것이 좋아요."
+          }
+        }
+      ]
+    }
+  ]
+}
   </script>
 </head>
 <body>
   <a class="skip-link" href="#main">본문으로 건너뛰기</a>
   <header class="site-header wrap">
     <a class="brand" href="/" aria-label="SLP AI 홈"><img src="/brand/slp-ai-logo.png" width="116" height="58" alt="SLP AI"></a>
-    <nav aria-label="주요 메뉴">
-      <a href="#features">주요 기능</a>
-      <a href="#workflow">이용 흐름</a>
-      <a href="#pricing">요금제</a>
-      <a href="#faq">자주 묻는 질문</a>
-    </nav>
+    <nav aria-label="주요 메뉴"><a href="#recording">AI 일지</a><a href="#erp">기관 운영</a><a href="#pricing">요금제</a><a href="#faq">자주 묻는 질문</a></nav>
     <a class="login-link" href="/login">로그인 <span aria-hidden="true">↗</span></a>
   </header>
   <main id="main">
     <section class="hero wrap" aria-labelledby="hero-title">
       <div class="hero-copy">
-        <p class="eyebrow">언어재활사를 위한 언어치료 AI</p>
-        <h1 id="hero-title">언어치료 기록부터<br>다음 치료계획까지.</h1>
-        <p class="lead">SLP AI는 언어재활사와 언어치료 기관의 기록·계획·행정 업무를 돕는 AI 서비스입니다. 수업 기록과 녹음 기반 AI 초안, 치료계획, 일정·출결, 바우처 기록지·정산을 연결합니다.</p>
-        <a class="button" href="/login">서비스 시작하기 <span aria-hidden="true">↗</span></a>
+        <p class="eyebrow">언어재활사를 위한 언어치료 AI · SLP AI</p>
+        <h1 id="hero-title"><span>AI·일지 작성·ERP까지,</span><br><em>하나로.</em></h1>
+        <p class="hero-statement">보호자 상담을 녹음하면,<br>오늘의 일지 초안이 작성돼요.</p>
+        <p class="lead">AI가 기록을 정리하고, 일정·출결·바우처·정산까지.<br class="wide-only"> 치료와 기관 운영을 하나의 업무 공간에서 연결해요.</p>
+        <div class="hero-actions"><a class="button" href="/login">서비스 시작하기 <span aria-hidden="true">↗</span></a><a class="text-link" href="#recording">AI 일지 살펴보기 <span aria-hidden="true">↓</span></a></div>
         <p class="caption">가입 후 관리자 승인 필요 · 웹 브라우저에서 이용</p>
       </div>
-      <figure class="workflow-preview">
-        <figcaption>기록이 다음 치료로 이어지는 과정 <span>가상 예시</span></figcaption>
-        <div class="preview-heading"><span class="child-mark" aria-hidden="true">A</span><div><strong>아동 A의 치료 노트</strong><p>실제 아동 정보가 없는 설명용 예시</p></div></div>
-        <ol class="preview-steps">
-          <li><span class="step-number">01</span><div><strong>수업 기록</strong><p>오늘의 활동과 관찰 내용을 남깁니다.</p><div class="note-example">그림 카드를 보며 낱말을 표현하는 활동을 진행했어요.</div></div></li>
-          <li><span class="step-number">02</span><div><strong>AI 초안 검토</strong><p>기록을 바탕으로 제안된 내용을 확인합니다.</p><span class="draft-label">치료사 승인 전 초안</span></div></li>
-          <li><span class="step-number">03</span><div><strong>다음 치료계획</strong><p>치료사가 검토한 목표와 활동으로 이어갑니다.</p></div></li>
-        </ol>
-        <p class="preview-footer">AI가 제안하고, 치료사가 결정합니다.</p>
+      <figure class="record-preview">
+        <figcaption><strong>상담이 오늘의 일지가 되기까지</strong><span>가상 예시</span></figcaption>
+        <div class="review-result" aria-live="polite" hidden>
+          <p class="review-state">검토 완료 · 아동 기록에 반영됨</p>
+          <p><strong>오늘의 수업 기록</strong></p>
+          <p>그림 카드를 이용한 낱말 표현 활동을 진행함.</p>
+        </div>
+        <div class="record-source">
+          <svg class="source-icon" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg>
+          <div><strong>보호자 상담 녹음</strong><p>오늘의 활동과 반응을 나눈 대화</p></div>
+          <span class="file-format">.m4a</span>
+        </div>
+        <div class="record-bridge"><span aria-hidden="true">↓</span><p>녹취 내용을 바탕으로 AI가 정리</p></div>
+        <div class="draft-sheet">
+          <div class="draft-heading"><h2>오늘의 일지</h2><span class="draft-label">검토 전 초안</span></div>
+          <dl class="draft-content">
+            <div><dt>진행한 활동</dt><dd>그림 카드를 이용한 낱말 표현 활동을 진행함.</dd></div>
+            <div><dt>보호자 상담 및 전달 사항</dt><dd>가정에서 사용한 낱말과 오늘 수업에서 보인 반응을 공유함.</dd></div>
+            <div><dt>다음 회기 계획</dt><dd>가정 연계 활동을 확인하고 표현 활동을 이어갈 예정.</dd></div>
+          </dl>
+          <div class="draft-review"><p>치료사 확인·수정 후 승인하여 저장</p><button class="review-button" type="button" disabled>검토 완료</button></div>
+        </div>
+        <p class="example-note">실제 아동 정보가 없는 설명용 예시입니다.</p>
       </figure>
     </section>
 
-    <section class="principle wrap" aria-labelledby="principle-title">
-      <p class="eyebrow">치료사를 돕는 AI</p>
-      <h2 id="principle-title">초안은 AI와 함께.<br>판단과 승인은 치료사의 손으로.</h2>
-      <p>AI가 만든 분석과 활동, 기록은 검토를 기다리는 초안입니다. 치료사의 승인 후에만 임상 기록에 반영됩니다.</p>
-    </section>
+    <div class="service-overview wrap" aria-label="통합 업무 범위">
+      <p><strong>AI</strong><span>대화·계획·활동을 위한 초안</span></p>
+      <p><strong>일지</strong><span>보호자 상담에서 오늘의 기록으로</span></p>
+      <p><strong>ERP</strong><span>일정·출결부터 바우처·정산까지</span></p>
+    </div>
 
-    <section class="section wrap" id="features" aria-labelledby="features-title">
-      <div class="section-heading"><p class="eyebrow">주요 기능</p><h2 id="features-title">치료와 행정 사이,<br>흩어진 업무를 연결합니다.</h2></div>
-      <dl class="features">
-        <div><dt><span class="feature-index">01 / 기록</span>수업 기록과 녹음 초안</dt><dd>아동별 활동과 관찰을 기록합니다. 녹음 파일로 만든 기록 초안도 치료사가 확인하고 수정합니다.</dd></div>
-        <div><dt><span class="feature-index">02 / 계획</span>치료계획과 활동</dt><dd>장·단기 목표와 계획의 변경 이력을 관리합니다. 조건에 맞는 치료활동을 AI 초안으로 제안받습니다.</dd></div>
-        <div><dt><span class="feature-index">03 / 관찰</span>행동과 어휘의 변화</dt><dd>ABC 행동 관찰, 수용·표현 어휘, 활동별 정반응 기록을 바탕으로 아동의 변화를 살펴봅니다.</dd></div>
-        <div><dt><span class="feature-index">04 / 일정</span>일정과 출결</dt><dd>주간 시간표와 날짜별 일정을 확인합니다. 출결, 보강, 기관 휴무일을 같은 업무 흐름에서 관리합니다.</dd></div>
-        <div><dt><span class="feature-index">05 / 행정</span>바우처 서류와 정산</dt><dd>월별 수업·출결을 바탕으로 서류와 정산 내역을 정리합니다. 설정과 서식에 따라 DOCX·PDF·HWPX 출력을 지원합니다.</dd></div>
-        <div><dt><span class="feature-index">06 / 협업</span>기관별 접근 권한</dt><dd>기관과 역할에 따라 기능 접근을 구분합니다. 담당 아동의 기록과 승인 이력을 기준으로 협업합니다.</dd></div>
-      </dl>
-    </section>
-
-    <section class="section wrap workflow" id="workflow" aria-labelledby="workflow-title">
-      <div><p class="eyebrow">이용 흐름</p><h2 id="workflow-title">오늘 남긴 기록이<br>내일의 출발점이 되도록.</h2><p>처음부터 모든 기능을 쓸 필요는 없습니다. 매일의 일정과 수업 기록부터 시작하세요.</p></div>
-      <ol class="workflow-list">
-        <li><span>01</span><div><h3>가입하고 승인받기</h3><p>회원가입 후 관리자 승인을 받습니다. 부여된 기관과 역할로 업무 공간에 접속합니다.</p></div></li>
-        <li><span>02</span><div><h3>일정과 기록 남기기</h3><p>아동과 수업 일정을 관리하고, 회기별 활동과 관찰 내용을 쌓습니다.</p></div></li>
-        <li><span>03</span><div><h3>검토하고 다음 업무로 잇기</h3><p>필요한 AI 초안을 검토·승인하고 치료계획, 활동, 월별 문서 업무로 이어갑니다.</p></div></li>
+    <section class="section wrap split-section recording-section" id="recording" aria-labelledby="recording-title">
+      <div class="section-copy">
+        <p class="eyebrow">01 / 상담에서 일지로</p>
+        <h2 id="recording-title">상담은 평소처럼.<br>일지는 AI와 함께.</h2>
+        <p>수업 뒤 보호자에게 전한 오늘의 활동과 아동의 반응.<br class="wide-only"> 그 상담 녹음이 오늘 일지의 시작이 됩니다.</p>
+        <div class="record-alternative"><h3>수업 전체 녹음도 가능해요.</h3><p>수업 과정을 자세히 남기고 싶다면 전체 회기 녹음을 올려 기록 초안을 만들 수 있어요.</p></div>
+      </div>
+      <ol class="workflow-list stagger-list">
+        <li id="recording-upload"><span class="step-number">1-1</span><div><h3>보호자 상담 녹음 올리기</h3><p>관련자의 동의를 확인한 뒤, 오늘의 상담 녹음 파일을 올려요.</p></div></li>
+        <li id="recording-draft"><span class="step-number">1-2</span><div><h3>AI가 오늘의 일지 초안 작성</h3><p>받아쓴 내용에서 활동·아동 반응·보호자 전달 사항을 정리해요. 녹음에서 확인되지 않은 내용은 추측해 채우지 않아요.</p></div></li>
+        <li id="recording-review"><span class="step-number">1-3</span><div><h3>치료사가 검토하고 기록에 저장</h3><p>초안을 확인·수정하고 승인해요. 최종 기록은 치료사의 검토를 거쳐 반영됩니다.</p></div></li>
       </ol>
     </section>
 
+    <section class="privacy-band" aria-labelledby="masking-title">
+      <div class="wrap split-section">
+        <div class="section-copy"><p class="eyebrow">02 / 개인정보를 가린 텍스트</p><h2 id="masking-title">AI에 전달할 텍스트,<br>개인정보는 가리고.</h2><p>AI 요약에 필요한 텍스트에서<br class="wide-only"> 이름과 이메일 같은 개인정보를 가려요.</p><a class="text-link" href="/privacy">개인정보 처리방침 보기 <span aria-hidden="true">↗</span></a></div>
+        <div class="privacy-preview">
+          <p class="preview-label">AI 요약용 텍스트 · 가상 예시</p>
+          <div class="mask-output" id="mask-output" aria-live="polite" hidden>
+            <p class="preview-label">AI에 전달되는 텍스트</p>
+            <p class="mask-paragraph">오늘 <span class="mask-field"><span class="original" aria-hidden="true">민지</span><span class="masked">X-01</span></span>는 수업 때 그림 카드를 보고 동물 이름을 말하는 활동을 했고, 보호자에게 수업 내용을 전할 이메일은 <span class="mask-field"><span class="original" aria-hidden="true">emali@example.com</span><span class="masked">[이메일]</span></span></p>
+          </div>
+          <noscript><p class="masked-fallback">AI에 전달되는 텍스트: 오늘 X-01는 수업 때 그림 카드를 보고 동물 이름을 말하는 활동을 했고, 보호자에게 수업 내용을 전할 이메일은 [이메일]</p></noscript>
+          <form class="mask-demo">
+            <p class="prompt-label" id="mask-prompt-label">오늘의 수업을 이야기해 주세요</p>
+            <div class="mask-input" role="textbox" aria-labelledby="mask-prompt-label" aria-readonly="true" aria-multiline="true" tabindex="0">오늘 민지는 수업 때 그림 카드를 보고 동물 이름을 말하는 활동을 했고, 보호자에게 수업 내용을 전할 이메일은 emali@example.com</div>
+            <div class="mask-actions"><span class="example-note">가상 예시 · 실제 AI 전송 없음</span><button class="button" type="submit" aria-label="가상 프롬프트 보내고 마스킹 보기" aria-controls="mask-output" disabled>보내기 <span aria-hidden="true">↑</span></button></div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <section class="section wrap" id="features" aria-labelledby="features-title">
+      <div class="section-heading"><p class="eyebrow">03 / 치료사의 AI 업무 도우미</p><h2 id="features-title">일지 다음의 업무도,<br>AI와 함께 준비해요.</h2></div>
+      <dl class="features stagger-list">
+        <div><dt><span class="feature-index">AI 대화·활동</span>다음 수업의 아이디어</dt><dd>언어치료 지식을 질문하고, 요청한 조건에 맞는 치료활동 초안을 제안받아요. 치료사가 내용을 검토해 수업을 준비해요.</dd></div>
+        <div><dt><span class="feature-index">치료계획·목표</span>이어지는 치료계획</dt><dd>장·단기 목표와 계획의 변경 이력을 관리해요. 필요한 임상 맥락을 선택해 AI 초안을 요청할 수 있어요.</dd></div>
+        <div><dt><span class="feature-index">행동·어휘·활동 기록</span>쌓여가는 아동의 변화</dt><dd>ABC 행동 관찰, 수용·표현 어휘와 활동별 정반응을 기록해요. 아동별 기록을 바탕으로 다음 회기를 검토해요.</dd></div>
+      </dl>
+    </section>
+
+    <section class="section wrap split-section erp-section" id="erp" aria-labelledby="erp-title">
+      <div class="section-copy"><p class="eyebrow">04 / 기관 운영 ERP</p><h2 id="erp-title">치료 기록 옆에,<br>기관의 하루도.</h2><p>일정, 출결, 바우처 서류, 월별 정산.<br class="wide-only"> 치료사와 관리자가 같은 업무 공간에서<br class="wide-only"> 기관 운영을 이어갑니다.</p><a class="text-link" href="/login">우리 기관의 업무 시작하기 <span aria-hidden="true">↗</span></a></div>
+      <dl class="erp-features stagger-list">
+        <div><dt>일정·출결</dt><dd>주간 시간표와 날짜별 수업, 보강과 기관 휴무일을 관리해요.</dd></div>
+        <div><dt>바우처 서류</dt><dd>월별 기록을 바탕으로 발달재활 서비스 제공 기록지를 HWP·HWPX로 내려받아요.</dd></div>
+        <div><dt>월별 정산</dt><dd>수업·출결과 결제 구분을 바탕으로 아동별·기관별 정산 내역을 정리해요.</dd></div>
+        <div><dt>기관별 접근 권한</dt><dd>담당 아동과 역할에 맞춰 접근하고, 치료사·관리자·회계 담당자가 협업해요.</dd></div>
+      </dl>
+    </section>
+
     <section class="section wrap pricing-section" id="pricing" aria-labelledby="pricing-title">
-      <div class="section-heading"><p class="eyebrow">요금제 제안</p><h2 id="pricing-title">필요한 업무 범위에 맞춰<br>시작할 수 있도록.</h2><p class="pricing-notice">아래는 출시 예정 가격안입니다. 현재는 관리자 승인제로 운영하며 결제·정기 과금은 시작되지 않았습니다.</p></div>
+      <div class="section-heading"><p class="eyebrow">요금제 제안</p><h2 id="pricing-title">필요한 업무에 맞춰.</h2><p class="pricing-notice">아래는 출시 예정 가격안입니다. 현재는 관리자 승인제로 운영하며 결제·정기 과금은 시작되지 않았습니다.</p></div>
       <div class="plans">
         <article class="plan" aria-labelledby="starter-title"><p class="plan-audience">기본 기록 중심</p><h3 id="starter-title">스타터</h3><p class="plan-price">0<span>원 / 월</span></p><p>일정과 수업 기록부터 시작하는 치료사.</p><ul><li>아동별 기본 기록 관리</li><li>수업 일정과 주간 시간표</li><li>출결과 보강 관리</li></ul></article>
-        <article class="plan plan-pro" aria-labelledby="pro-title"><p class="plan-audience">치료사 1인 기준 제안</p><h3 id="pro-title">프로</h3><p class="plan-price">29,000<span>원 / 월</span></p><p>기록에 AI 초안과 문서 업무를 더할 때.</p><ul><li>스타터의 모든 기능</li><li>녹음 기반 수업 기록 초안</li><li>AI 분석·치료계획·활동 초안</li><li>바우처 문서 출력</li></ul></article>
+        <article class="plan plan-pro" aria-labelledby="pro-title"><p class="plan-audience">치료사 1인 기준 제안</p><h3 id="pro-title">프로</h3><p class="plan-price">29,000<span>원 / 월</span></p><p>기록에 AI 초안과 문서 업무를 더할 때.</p><ul><li>스타터의 모든 기능</li><li>상담·수업 녹음 기반 일지 초안</li><li>AI 분석·치료계획·활동 초안</li><li>바우처 문서 출력</li></ul></article>
         <article class="plan" aria-labelledby="center-title"><p class="plan-audience">기관 1곳 기준 제안</p><h3 id="center-title">기관</h3><p class="plan-price">99,000<span>원 / 월</span></p><p>치료사와 관리자가 함께 운영하는 기관.</p><ul><li>프로의 모든 기능</li><li>치료사·회계 담당 역할 관리</li><li>기관 단위 월별 정산</li><li>승인 이력과 감사로그</li></ul></article>
       </div>
       <p class="pricing-terms">부가세 포함 제안가. 기관 인원과 AI·녹음 사용량, 기능별 제공 조건은 출시 전 확정·안내합니다. 현재 기능 접근은 승인된 기관과 역할에 따릅니다.</p>
     </section>
 
     <section class="section wrap faq-section" id="faq" aria-labelledby="faq-title">
-      <div class="section-heading"><p class="eyebrow">자주 묻는 질문</p><h2 id="faq-title">시작하기 전에<br>궁금한 점.</h2></div>
+      <div class="section-heading"><p class="eyebrow">자주 묻는 질문</p><h2 id="faq-title">시작 전,<br>확인해 보세요.</h2></div>
       <div class="faq-list">
-        <details><summary>SLP AI는 어떤 서비스인가요?</summary><p>SLP AI는 언어재활사와 언어치료 기관의 업무를 지원하는 언어치료 AI 서비스입니다. 아동별 수업 기록과 녹음 기반 초안, 치료계획·활동, 일정·출결, 바우처 기록지, 월별 정산을 관리합니다.</p></details>
-        <details><summary>AI가 치료사의 판단을 대신하나요?</summary><p>아니요. AI 분석과 치료활동, 녹음 기반 기록은 초안으로 생성됩니다. 치료사가 검토하고 승인해야 임상 기록에 반영됩니다. AI는 진단이나 치료 효과를 보장하지 않습니다.</p></details>
-        <details><summary>녹음 파일로 언어치료 기록을 만들 수 있나요?</summary><p>녹음 파일을 업로드하면 수업 기록 초안이 생성됩니다. 치료사가 확인·수정 후 승인합니다. 녹음 전 보호자 등 관련자의 동의를 확인하고, 불필요한 개인정보는 포함하지 않아야 합니다.</p></details>
-        <details><summary>발달재활 바우처 기록지와 정산도 지원하나요?</summary><p>월별 수업과 출결을 바탕으로 발달재활 바우처 기록지와 정산 내역을 정리합니다. 문서는 DOCX, PDF, HWPX 형식으로 출력할 수 있으며, 서식과 설정에 따라 지원 범위가 달라집니다.</p></details>
-        <details><summary>가입하면 바로 사용할 수 있나요?</summary><p>회원가입 후 사이트 관리자의 승인이 필요합니다. 승인된 계정은 부여된 기관과 역할에 따라 접근할 수 있는 기능이 달라집니다. 개인정보 처리와 AI 기능의 외부 전송 안내는 개인정보처리방침에서 확인할 수 있습니다.</p></details>
+        <details name="public-faq"><summary>SLP AI는 어떤 서비스인가요?</summary><p>SLP AI는 언어재활사와 언어치료 기관을 위한 AI·일지 작성·ERP 통합 업무 서비스입니다. 보호자 상담 녹음 기반 일지 초안, 치료계획·활동, 일정·출결, 바우처 기록지와 월별 정산을 같은 공간에서 관리합니다.</p></details>
+        <details name="public-faq"><summary>AI가 치료사의 판단을 대신하나요?</summary><p>아니요. AI 분석과 치료활동, 녹음 기반 기록은 초안으로 생성됩니다. 치료사가 검토하고 승인해야 임상 기록에 반영됩니다. AI는 진단이나 치료 효과를 보장하지 않습니다.</p></details>
+        <details name="public-faq"><summary>보호자 상담만 녹음해도 오늘 일지를 만들 수 있나요?</summary><p>네. 오늘의 활동과 아동 반응을 이야기한 보호자 상담 녹음 파일을 올리면 AI가 녹취 내용을 바탕으로 일지 초안을 작성합니다. 녹음에 없는 내용은 추측해 채우지 않으며, 치료사가 확인·수정한 뒤 승인합니다. 수업 전체 녹음도 사용할 수 있습니다. 녹음 전 관련자의 동의를 확인해 주세요.</p></details>
+        <details name="public-faq"><summary>발달재활 바우처 기록지와 정산도 지원하나요?</summary><p>월별 수업과 출결을 바탕으로 발달재활 바우처 기록지와 정산 내역을 정리합니다. 바우처 기록지는 HWP·HWPX, 그 밖의 문서는 설정과 서식에 따라 DOCX·PDF 출력을 지원합니다.</p></details>
+        <details name="public-faq"><summary>가입하면 바로 사용할 수 있나요?</summary><p>회원가입 후 사이트 관리자의 승인이 필요합니다. 승인된 계정은 부여된 기관과 역할에 따라 접근할 수 있는 기능이 달라집니다. 개인정보 처리와 AI 기능의 외부 전송 안내는 개인정보처리방침에서 확인할 수 있습니다.</p></details>
+        <details name="public-faq"><summary>아이의 개인정보는 어떻게 처리되나요?</summary><p>이름과 연락처 같은 직접 식별정보는 제거하거나 가린 뒤 AI 요청을 처리해요. 자료 제작에 필요한 연령, 교육·치료 맥락과 첨부 이미지는 기능 제공을 위해 처리될 수 있으므로 자유 입력란에는 불필요한 개인정보를 적지 않는 것이 좋아요.</p><p><a href="/privacy">개인정보 처리방침 보기</a></p></details>
       </div>
     </section>
-    <section class="closing wrap" aria-labelledby="closing-title"><div><p class="eyebrow">SLP AI</p><h2 id="closing-title">다음 수업을 위한<br>업무 공간을 시작하세요.</h2></div><div class="closing-actions"><a class="button" href="/login">서비스 시작하기 <span aria-hidden="true">↗</span></a><a class="contact-link" href="mailto:contact@heonhwi.dev">문의하기</a></div></section>
+    <section class="closing wrap" aria-labelledby="closing-title"><div><p class="eyebrow">함께 시작하는 오늘의 업무</p><h2 id="closing-title">오늘의 상담부터,<br>기관 운영까지.</h2></div><div class="closing-actions"><a class="button" href="/login">서비스 시작하기 <span aria-hidden="true">↗</span></a><a class="contact-link" href="mailto:contact@heonhwi.dev">문의하기</a></div></section>
   </main>
-  <footer class="site-footer wrap"><p>© 2026 SLP AI</p><nav aria-label="하단 메뉴"><a href="/privacy">개인정보처리방침</a><a href="/login">로그인</a><a href="mailto:contact@heonhwi.dev">contact@heonhwi.dev</a></nav><p>언어재활사를 위한 기록과 업무 도우미</p></footer>
+  <footer class="site-footer wrap"><div><p class="footer-brand">SLP AI</p><p>언어재활사를 위한 AI·일지·ERP</p></div><nav aria-label="하단 메뉴"><a href="/terms">이용약관</a><a href="/privacy">개인정보처리방침</a><a href="/refund">환불정책</a></nav><div class="footer-contact"><a href="mailto:contact@heonhwi.dev">contact@heonhwi.dev</a><p>© 2026 SLP AI</p></div></footer>
 </body>
 </html>

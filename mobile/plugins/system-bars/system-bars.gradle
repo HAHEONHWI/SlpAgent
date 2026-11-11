@@ -1,0 +1,119 @@
+import com.android.build.api.instrumentation.AsmClassVisitorFactory
+import com.android.build.api.instrumentation.ClassContext
+import com.android.build.api.instrumentation.ClassData
+import com.android.build.api.instrumentation.FramesComputationMode
+import com.android.build.api.instrumentation.InstrumentationParameters
+import com.android.build.api.instrumentation.InstrumentationScope
+import org.objectweb.asm.ClassReader
+import org.objectweb.asm.ClassVisitor
+import org.objectweb.asm.ClassWriter
+import org.objectweb.asm.MethodVisitor
+import org.objectweb.asm.Opcodes
+
+class SlpSystemBarsVisitor extends ClassVisitor {
+    private static final String PROTECTION = 'dev/heonhwi/slpai/SystemBarProtection'
+
+    SlpSystemBarsVisitor(ClassVisitor next) { super(Opcodes.ASM9, next) }
+
+    @Override
+    MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
+        return new MethodVisitor(Opcodes.ASM9, super.visitMethod(access, name, descriptor, signature, exceptions)) {
+            @Override
+            void visitMethodInsn(int opcode, String owner, String method, String desc, boolean isInterface) {
+                if (opcode == Opcodes.INVOKEVIRTUAL && owner == 'android/view/Window') {
+                    def replacements = [
+                        setStatusBarColor: ['(I)V', 'setStatusBarBackground', '(Landroid/view/Window;I)V'],
+                        setNavigationBarColor: ['(I)V', 'setNavigationBarBackground', '(Landroid/view/Window;I)V'],
+                        getStatusBarColor: ['()I', 'getStatusBarBackground', '(Landroid/view/Window;)I'],
+                        getNavigationBarColor: ['()I', 'getNavigationBarBackground', '(Landroid/view/Window;)I']
+                    ]
+                    def replacement = replacements[method]
+                    if (replacement != null && desc == replacement[0]) {
+                        super.visitMethodInsn(Opcodes.INVOKESTATIC, PROTECTION, replacement[1], replacement[2], false)
+                        return
+                    }
+                }
+                super.visitMethodInsn(opcode, owner, method, desc, isInterface)
+            }
+
+            @Override
+            void visitFieldInsn(int opcode, String owner, String field, String desc) {
+                if (opcode == Opcodes.PUTFIELD && owner == 'android/view/WindowManager$LayoutParams' &&
+                    field == 'layoutInDisplayCutoutMode' && desc == 'I') {
+                    super.visitInsn(Opcodes.POP)
+                    super.visitMethodInsn(Opcodes.INVOKESTATIC, PROTECTION, 'applyDisplayCutoutMode',
+                        '(Landroid/view/WindowManager$LayoutParams;)V', false)
+                    return
+                }
+                super.visitFieldInsn(opcode, owner, field, desc)
+            }
+        }
+    }
+}
+
+abstract class SlpSystemBarsFactory implements AsmClassVisitorFactory<InstrumentationParameters.None> {
+    @Override
+    boolean isInstrumentable(ClassData data) {
+        return !data.className.startsWith('dev.heonhwi.slpai.SystemBarProtection')
+    }
+
+    @Override
+    ClassVisitor createClassVisitor(ClassContext context, ClassVisitor next) {
+        return new SlpSystemBarsVisitor(next)
+    }
+}
+
+androidComponents.onVariants(androidComponents.selector().all()) { variant ->
+    variant.instrumentation.transformClassesWith(SlpSystemBarsFactory, InstrumentationScope.ALL) { }
+    variant.instrumentation.setAsmFramesComputationMode(FramesComputationMode.COMPUTE_FRAMES_FOR_INSTRUMENTED_METHODS)
+}
+
+tasks.register('checkSystemBarMigration') {
+    doLast {
+        def output = new ClassWriter(0)
+        def visitor = new SlpSystemBarsVisitor(output)
+        visitor.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, 'SystemBarFixture', null, 'java/lang/Object', null)
+        def method = visitor.visitMethod(Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC, 'apply',
+            '(Landroid/view/Window;ILandroid/view/WindowManager$LayoutParams;)V', null, null)
+        method.visitCode()
+        ['Status', 'Navigation'].each { bar ->
+            method.visitVarInsn(Opcodes.ALOAD, 0)
+            method.visitVarInsn(Opcodes.ILOAD, 1)
+            method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, 'android/view/Window', "set${bar}BarColor", '(I)V', false)
+            method.visitVarInsn(Opcodes.ALOAD, 0)
+            method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, 'android/view/Window', "get${bar}BarColor", '()I', false)
+            method.visitInsn(Opcodes.POP)
+        }
+        method.visitVarInsn(Opcodes.ALOAD, 2)
+        method.visitVarInsn(Opcodes.ILOAD, 1)
+        method.visitFieldInsn(Opcodes.PUTFIELD, 'android/view/WindowManager$LayoutParams', 'layoutInDisplayCutoutMode', 'I')
+        method.visitVarInsn(Opcodes.ALOAD, 0)
+        method.visitInsn(Opcodes.ACONST_NULL)
+        method.visitMethodInsn(Opcodes.INVOKEVIRTUAL, 'android/view/Window', 'setTitle', '(Ljava/lang/CharSequence;)V', false)
+        method.visitInsn(Opcodes.RETURN)
+        method.visitMaxs(2, 3)
+        method.visitEnd()
+        visitor.visitEnd()
+        def calls = []
+        new ClassReader(output.toByteArray()).accept(new ClassVisitor(Opcodes.ASM9) {
+            @Override
+            MethodVisitor visitMethod(int a, String n, String d, String s, String[] e) {
+                return new MethodVisitor(Opcodes.ASM9) {
+                    @Override
+                    void visitMethodInsn(int op, String owner, String name, String desc, boolean itf) {
+                        calls.add([op, owner, name, desc])
+                    }
+                    @Override
+                    void visitFieldInsn(int op, String owner, String name, String desc) {
+                        assert name != 'layoutInDisplayCutoutMode'
+                    }
+                }
+            }
+        }, 0)
+        assert calls*.getAt(2) == ['setStatusBarBackground', 'getStatusBarBackground',
+            'setNavigationBarBackground', 'getNavigationBarBackground', 'applyDisplayCutoutMode', 'setTitle']
+        assert calls.take(5).every { it[0] == Opcodes.INVOKESTATIC && it[1] == 'dev/heonhwi/slpai/SystemBarProtection' }
+        assert calls.last()[1] == 'android/view/Window'
+        logger.lifecycle('System bar migration: setter/getter/cutout replacement and unrelated-call preservation passed')
+    }
+}

@@ -51,7 +51,7 @@ def test_rate_limit_middleware_is_observable():
     client = TestClient(application)
     headers = {"Authorization": "Bearer test-token"}
     assert client.get("/limited", headers=headers).status_code == 200
-    response = client.get("/limited", headers=headers)
+    response = client.get("/limited", headers={"Authorization": "Bearer attacker-controlled-2"})
     assert response.status_code == 429 and int(response.headers["Retry-After"]) > 0
 
 
@@ -143,3 +143,24 @@ def test_api_responses_are_never_cacheable(client):
     assert client.get("/api/healthz").headers["cache-control"] == "no-store"
     assert client.get("/api/nope").headers["cache-control"] == "no-store"  # 404s too (CDN cached them)
     assert client.get("/api/children", headers=H()).headers["cache-control"] == "no-store"
+
+
+def test_request_quota_is_per_verified_account(client, monkeypatch):
+    from app import rate_limit
+    limiter = WindowLimiter(2, 60)
+    monkeypatch.setattr(rate_limit, "account_limiter", lambda: limiter)
+    assert [client.get("/me", headers=H(uid="busy")).status_code for _ in range(2)] == [200, 200]
+    blocked = client.get("/me", headers=H(uid="busy"))
+    assert blocked.status_code == 429 and int(blocked.headers["Retry-After"]) > 0
+    assert client.get("/me", headers=H(uid="other")).status_code == 200  # another account keeps its own quota
+
+
+def test_withdrawal_needs_a_recent_password_check(client):
+    import time
+    from app.auth import Identity, current_identity
+    app.dependency_overrides[current_identity] = lambda: Identity(uid="leaver", auth_time=int(time.time()) - 3600)
+    assert client.delete("/me").status_code == 403
+    app.dependency_overrides[current_identity] = lambda: Identity(uid="leaver")  # token without auth_time
+    assert client.delete("/me").status_code == 403
+    app.dependency_overrides[current_identity] = lambda: Identity(uid="leaver", auth_time=int(time.time()))
+    assert client.delete("/me").status_code == 200

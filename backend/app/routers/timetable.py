@@ -99,6 +99,11 @@ def _is_closed(cfg: TimetableConfig, day: int, slot: str, teacher_id: str) -> bo
     return f"{day}|{slot}|*" in cfg.closed or f"{day}|{slot}|{teacher_id}" in cfg.closed
 
 
+def _my_teacher_ids(repo, p: Principal, cfg: TimetableConfig) -> set[str]:
+    name = my_therapist_name(repo, p)
+    return {t.id for t in cfg.teachers if t.name.strip() == name}
+
+
 def _validate_entry(repo, p: Principal, body: EntryIn, entry_id: str | None) -> dict:
     cfg = _config(repo, p.org_id)
     am, pm = slots(cfg)
@@ -111,7 +116,11 @@ def _validate_entry(repo, p: Principal, body: EntryIn, entry_id: str | None) -> 
     if _is_closed(cfg, body.day, body.slot, body.teacher_id):
         raise HTTPException(409, "닫아 둔 칸입니다")
     if body.child_id:
-        child_or_404(repo, p, body.child_id)
+        child = child_or_404(repo, p, body.child_id)
+        if child.get("terminated_on") and (not body.valid_to or body.valid_to.isoformat() >= child["terminated_on"]):
+            raise HTTPException(409, "종결일부터는 수업을 등록할 수 없습니다")
+    elif p.role == "therapist" and body.teacher_id not in _my_teacher_ids(repo, p, cfg):
+        raise HTTPException(404, "entry not found")
     d = body.model_dump(mode="json")
     d["label"] = (d["label"] or "").strip() or None
     for e in repo.list("timetable_entries", p.org_id):
@@ -129,7 +138,7 @@ def _visibility(repo, p: Principal, cfg: TimetableConfig):
     scope = child_scope(repo, p)
     if scope is None:
         return lambda e: True
-    mine = {t.id for t in cfg.teachers if t.name.strip() == my_therapist_name(repo, p)}
+    mine = _my_teacher_ids(repo, p, cfg)
     return lambda e: e.get("child_id") in scope or (not e.get("child_id") and e["teacher_id"] in mine)
 
 
@@ -138,7 +147,7 @@ def get_timetable(p: Principal = Depends(current_principal), repo=Depends(get_re
     cfg = _config(repo, p.org_id)
     am, pm = slots(cfg)
     gone = {c["id"] for c in repo.list("children", p.org_id) if c.get("archived")}
-    entries = [e for e in repo.list("timetable_entries", p.org_id) if e.get("child_id") not in gone]
+    entries = [e for e in repo.list("timetable_entries", p.org_id) if e.get("child_id") not in gone and not e.get("disabled")]
     visible = _visibility(repo, p, cfg)
     entries = [e for e in entries if visible(e)]
     entries = sorted(entries, key=lambda e: (e["slot"], e["day"], e.get("valid_from") or ""))
@@ -216,8 +225,8 @@ def sync_schedules(repo, org_id: str, start: date, end: date) -> dict:
     cfg = _config(repo, org_id)
     am, pm = slots(cfg)
     names = {t.id: t.name for t in cfg.teachers}
-    gone = {c["id"] for c in repo.list("children", org_id, archived=True)}
-    entries = [e for e in entries_all if e.get("child_id") not in gone]
+    children = {c["id"]: c for c in repo.list("children", org_id)}
+    entries = [e for e in entries_all if not children.get(e.get("child_id"), {}).get("archived") and not e.get("disabled")]
     from .attendance import holidays
     off = {h["date"] for h in holidays(repo, org_id)}  # 전체·기관 휴무일
     existing = repo.list_range("schedules", org_id, "date", start.isoformat(), end.isoformat())
@@ -229,6 +238,9 @@ def sync_schedules(repo, org_id: str, start: date, end: date) -> dict:
     while day <= end:
         iso = day.isoformat()
         for e in (entries if iso not in off else []):
+            cutoff = children.get(e.get("child_id"), {}).get("terminated_on")
+            if cutoff and iso >= cutoff:
+                continue
             since = e.get("valid_from") or ((e.get("created_at") or "")[:7] + "-01" if e.get("created_at") else "0000")
             if e["day"] != day.isoweekday() or not since <= iso <= (e.get("valid_to") or "9999"):
                 continue

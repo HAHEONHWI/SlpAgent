@@ -234,6 +234,57 @@ def recording_records(child_id: str, p: Principal = Depends(current_principal), 
     return sorted(rows, key=lambda r: (r.get("date", ""), r.get("created_at", "")), reverse=True)
 
 
+@router.delete("/recording-records/{record_id}", status_code=204)
+def delete_recording_record(record_id: str, p: Principal = Depends(require_write), repo=Depends(get_repo),
+                            d: jobs.Deps = Depends(get_stt_deps)):
+    try:
+        record = repo.get("recording_records", p.org_id, record_id)
+    except NotFound:
+        raise HTTPException(404, "record not found")
+    child_id, job_id = record.get("child_id"), record.get("job_id")
+    if not child_id:
+        raise HTTPException(404, "record not found")
+    child_or_404(repo, p, child_id)
+
+    if job_id and not any(r["id"] != record_id for r in repo.list("recording_records", p.org_id, job_id=job_id)):
+        try:
+            job = repo.get("stt_jobs", p.org_id, job_id)
+        except NotFound:
+            job = None
+        if job and job.get("child_id") != child_id:
+            raise HTTPException(404, "record not found")
+        chunks = repo.list("stt_chunks", p.org_id, job_id=job_id)
+        if job:
+            jobs.cleanup_files(d, p.org_id, job)
+            draft_ids = [job["draft_id"]] if job.get("draft_id") else []
+        else:
+            for chunk in chunks:
+                if chunk.get("key"):
+                    d.store.delete(chunk["key"])
+            draft_ids = [draft["id"] for draft in repo.list("ai_analyses", p.org_id, child_id=child_id)
+                         if draft.get("kind") == "recording_summary" and draft.get("result") == record_id
+                         and draft.get("payload", {}).get("job_id") == job_id]
+        for draft_id in draft_ids:
+            try:
+                draft = repo.get("ai_analyses", p.org_id, draft_id)
+                if (draft.get("kind") == "recording_summary" and draft.get("child_id") == child_id
+                        and draft.get("result") == record_id and draft.get("payload", {}).get("job_id") == job_id):
+                    repo.delete("ai_analyses", p.org_id, draft["id"])
+            except NotFound:
+                pass
+        try:
+            repo.delete("stt_transcripts", p.org_id, job_id)
+        except NotFound:
+            pass
+        for chunk in chunks:
+            repo.delete("stt_chunks", p.org_id, chunk["id"])
+        if job:
+            repo.delete("stt_jobs", p.org_id, job_id)
+
+    repo.delete("recording_records", p.org_id, record_id)
+    audit(repo, p, "delete_recording_record", "recording_records", record_id, child_id)
+
+
 class StepIn(BaseModel):
     org_id: str
     job_id: str

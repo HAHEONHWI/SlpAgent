@@ -1,12 +1,39 @@
 # Postponed evaluation: the Protocol defines a method named `list`, which would otherwise shadow the builtin
 # in later annotations and crash at import on Python 3.12 (production).
 from __future__ import annotations
-from typing import Any, Protocol
+from typing import Any, NamedTuple, Protocol
 from pydantic import JsonValue
 
 
 class NotFound(Exception):
     pass
+
+
+class RevisionConflict(Exception):
+    pass
+
+
+class VersionedChange(NamedTuple):
+    collection: str
+    id: str
+    revision: str | None
+    patch: dict | None = None  # a read dependency checked with the writes
+
+
+def versioned_document(current: dict | None, org_id: str, change: VersionedChange) -> dict | None:
+    """A null revision expects a missing document; existing documents must match the caller's last read."""
+    expected_revision = change.revision
+    if current is None:
+        if expected_revision is not None:
+            raise RevisionConflict()
+    elif (current.get("organization_id") != org_id or expected_revision is None
+          or current.get("updated_at") != expected_revision):
+        raise RevisionConflict()
+    if change.patch is None:
+        return None
+    now = now_iso()
+    return {**(current or {}), **change.patch, "id": change.id, "organization_id": org_id,
+            "created_at": (current or {}).get("created_at", now), "updated_at": now}
 
 
 class Repo(Protocol):
@@ -32,6 +59,8 @@ class Repo(Protocol):
         """The `limit` matching docs with the smallest `field`, oldest first."""
         ...
     def update(self, col: str, org_id: str, doc_id: str, patch: dict[str, Any]) -> dict: ...
+    def save_versioned(self, col: str, org_id: str, doc_id: str, data: dict, expected_revision: str | None,
+                       *, also: tuple[VersionedChange, ...] = ()) -> dict: ...
     def delete(self, col: str, org_id: str, doc_id: str) -> None: ...
     def organization_documents(self, org_id: str) -> list[tuple[str, dict[str, Any]]]: ...
     def commit_organization_merge(self, source: str, target: str, token: str,

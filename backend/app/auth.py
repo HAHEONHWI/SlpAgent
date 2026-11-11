@@ -1,8 +1,10 @@
+import time
 from typing import Literal
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from .config import get_settings
+from .rate_limit import check_account
 from .repo.provider import get_repo
 
 Role = Literal["admin", "therapist", "assistant"]
@@ -16,6 +18,7 @@ class Identity(BaseModel):
     org_id: str | None = None
     role: str | None = None
     site_admin: bool = False
+    auth_time: int | None = None  # when the password was last checked (ID token `auth_time`)
 
 
 class Principal(BaseModel):
@@ -43,7 +46,8 @@ def _verify_firebase(token: str) -> Identity:
     except Exception:
         raise HTTPException(401, "invalid token")
     return Identity(uid=claims["uid"], email=claims.get("email"), org_id=claims.get("org_id"),
-                    role=claims.get("role"), site_admin=claims.get("site_admin") is True)
+                    role=claims.get("role"), site_admin=claims.get("site_admin") is True,
+                    auth_time=claims.get("auth_time"))
 
 
 def _dev_identity(token: str) -> Identity:
@@ -54,9 +58,9 @@ def _dev_identity(token: str) -> Identity:
     except ValueError:
         raise HTTPException(401, "invalid dev token")
     if role == "site_admin":
-        return Identity(uid=uid, email=f"{uid}@dev.local", site_admin=True)
+        return Identity(uid=uid, email=f"{uid}@dev.local", site_admin=True, auth_time=int(time.time()))
     return Identity(uid=uid, email=f"{uid}@dev.local", org_id=None if org == "-" else org,
-                    role=role if role in ROLES else None)
+                    role=role if role in ROLES else None, auth_time=int(time.time()))
 
 
 # HTTPBearer (instead of a raw header) lets Swagger UI show an "Authorize" button.
@@ -66,9 +70,18 @@ bearer = HTTPBearer(auto_error=False, description="Firebase ID token. Dev mode: 
 def current_identity(cred: HTTPAuthorizationCredentials | None = Depends(bearer)) -> Identity:
     if not cred or cred.scheme.lower() != "bearer" or not cred.credentials:
         raise HTTPException(401, "missing bearer token")
-    if get_settings().auth_mode == "dev":
-        return _dev_identity(cred.credentials)
-    return _verify_firebase(cred.credentials)
+    identity = _dev_identity(cred.credentials) if get_settings().auth_mode == "dev" else _verify_firebase(cred.credentials)
+    check_account(identity.uid)
+    return identity
+
+
+RECENT_SIGN_IN_SECONDS = 300
+
+
+def require_recent_sign_in(identity: Identity) -> None:
+    """Irreversible account actions need a password check within the last few minutes, verified from the token."""
+    if identity.auth_time is None or time.time() - identity.auth_time > RECENT_SIGN_IN_SECONDS:
+        raise HTTPException(403, "보안을 위해 비밀번호를 다시 확인한 뒤 시도해 주세요.")
 
 
 def effective_identity(identity: Identity, repo) -> Identity:

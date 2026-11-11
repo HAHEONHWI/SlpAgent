@@ -37,7 +37,7 @@ export default function Layout() {
     <div className="flex h-dvh flex-col overflow-hidden bg-slate-50 print:block print:h-auto print:overflow-visible print:bg-white">
       <header className="relative z-40 shrink-0 bg-slate-50 print:hidden">
         <div className="flex h-16 items-center gap-2 px-3 sm:gap-4 sm:px-4 md:px-8">
-          <Link to={HOME.to} title="대시보드로" className="flex shrink-0 items-center gap-2.5 whitespace-nowrap text-xl font-semibold tracking-[-.02em] text-slate-900">
+          <Link to={HOME.to} title="홈으로" className="flex shrink-0 items-center gap-2.5 whitespace-nowrap text-xl font-semibold tracking-[-.02em] text-slate-900">
             <BrandLogo className="w-14 mix-blend-multiply sm:w-24" />
           </Link>
           <ChildPicker variant="header" className="min-w-0 flex-1 sm:flex-none md:ml-6 sm:w-[300px]" value={childId} onChange={setChildId} emptyLabel="아동 선택 안 함 (일반 모드)" aria-label="아동 선택" />
@@ -86,7 +86,6 @@ export default function Layout() {
                     {it.child && <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-[11px] font-normal text-indigo-800">아동 선택</span>}
                   </span>
                   <span className="text-xs leading-[1.45] text-slate-900/70 [word-break:keep-all]">{it.desc}</span>
-                  <span className="mt-auto hidden pt-2 text-[11px] tracking-[.04em] text-slate-500 md:block">{it.to}</span>
                 </NavLink>))}
             </div>
             <div className="border-t border-slate-200 px-6 py-2.5 text-xs text-slate-500">

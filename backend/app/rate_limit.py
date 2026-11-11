@@ -1,8 +1,10 @@
-import hashlib
 import threading
 import time
 from collections import defaultdict, deque
+from functools import lru_cache
+from fastapi import HTTPException
 from starlette.responses import JSONResponse
+from .config import get_settings
 
 
 class WindowLimiter:
@@ -46,16 +48,27 @@ class RateLimitMiddleware:
         if scope["type"] != "http" or scope.get("path") == "/healthz" or scope.get("method") == "OPTIONS":
             await self.app(scope, receive, send)
             return
-        headers = dict(scope.get("headers", []))
-        authorization = headers.get(b"authorization", b"")
-        token = authorization[7:] if authorization.lower().startswith(b"bearer ") else b""
-        token_hash = hashlib.sha256(token).hexdigest() if token else "anonymous"
         client = scope.get("client")
         address = client[0] if client else "unknown"
-        allowed, retry_after = self.limiter.check(f"{address}:{token_hash}")
+        # Coarse flood guard before authentication. Behind a shared proxy every caller has this address, so the
+        # per-person quota is check_account(), applied to the verified uid.
+        allowed, retry_after = self.limiter.check(address)
         if not allowed:
             response = JSONResponse({"detail": "rate limit exceeded"}, status_code=429,
                                     headers={"Retry-After": str(retry_after)})
             await response(scope, receive, send)
             return
         await self.app(scope, receive, send)
+
+
+@lru_cache
+def account_limiter() -> WindowLimiter:
+    settings = get_settings()
+    return WindowLimiter(settings.rate_limit_requests, settings.rate_limit_window_seconds)
+
+
+def check_account(uid: str) -> None:
+    """Per-account quota, keyed by the verified uid: one account cannot use up another's requests."""
+    allowed, retry_after = account_limiter().check(uid)
+    if not allowed:
+        raise HTTPException(429, "rate limit exceeded", headers={"Retry-After": str(retry_after)})

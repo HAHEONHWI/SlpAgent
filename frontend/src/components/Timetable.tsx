@@ -42,7 +42,7 @@ export default function Timetable() {
   const tt = useQuery({ queryKey: ["timetable"], queryFn: () => api<Data>("/timetable") });
   const [week, setWeek] = useState(iso(new Date()));
   const [edit, setEdit] = useState(false), [cell, setCell] = useState<Cell | null>(null), [setup, setSetup] = useState(false);
-  const refresh = () => ["timetable", "schedules", "attendance", "settlement", "voucher-visits", "class-records"].forEach((key) => qc.invalidateQueries({ queryKey: [key] }));
+  const refresh = () => ["timetable", "schedules", "attendance", "month-sheet", "settlement", "voucher-visits", "class-records"].forEach((key) => qc.invalidateQueries({ queryKey: [key] }));
 
   const from = iso(monday(week)), to = iso(plus(monday(week), 6));
   const byCell = useMemo(() => {

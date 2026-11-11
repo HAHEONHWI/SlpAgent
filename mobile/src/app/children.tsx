@@ -3,8 +3,8 @@ import { View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as DocumentPicker from "expo-document-picker";
 import { ageLabel, api, errText, type Child } from "@/lib/api";
+import { today } from "@/lib/dates";
 import { useChild } from "@/lib/child";
-import { useTherapists } from "@/lib/hooks";
 import { canWrite, useMe } from "@/lib/me";
 import { detect, FIELD_LABEL, readRows, toChildren, type Field, type ImportRow, type Mapping } from "@/lib/childImport";
 import { Badge, Button, C, Card, DateField, Empty, IconButton, Input, Notice, Row, Screen, Select, Sheet, T, TextField, Checkbox, confirm, type Tone } from "@/components/ui";
@@ -14,11 +14,13 @@ const yn = (v: string) => (v === "Y" ? true : v === "N" ? false : null);
 const ynOf = (v?: boolean | null) => (v === true ? "Y" : v === false ? "N" : "");
 // 발달재활 바우처 등급과 월 본인부담금 (정산 기준과 같음)
 const GRADES: [string, string][] = [["다", "기초 · 면제"], ["가", "차상위 · 2만"], ["나", "65% 이하 · 4만"], ["라", "120% 이하 · 6만"], ["마", "180% 이하 · 8만"]];
+type TherapistRow = { name: string; code_prefix?: string | null };
 
 export default function Children() {
   const { children, setChildId, childId } = useChild();
   const qc = useQueryClient();
   const role = useMe().data?.role, writable = canWrite(useMe().data);
+  const ended = useQuery({ queryKey: ["children", "terminated"], queryFn: () => api<(Child & { terminated_on: string })[]>("/children/terminated") });
   const [importing, setImporting] = useState(false);
   const [formOpen, setFormOpen] = useState<boolean | null>(null); // null: open only while there are no children
   const showForm = writable && (formOpen ?? children.length === 0);
@@ -28,9 +30,15 @@ export default function Children() {
     .filter((c) => !q.trim() || `${c.display_name}${c.alias}${c.therapist ?? ""}`.toLowerCase().includes(q.trim().toLowerCase()));
   const empty = { alias: "", display_name: "", birth_date: "", sex: "", therapist: "", voucher_grade: "", disability: "" };
   const [f, setF] = useState(empty);
-  const therapists = useTherapists();
+  const therapistRoster = useQuery({ queryKey: ["org", "roster"], queryFn: () => api<{ therapists: TherapistRow[]; suggestions: string[] }>("/org/roster") });
+  const therapistRows = therapistRoster.data?.therapists ?? [];
+  const therapists = therapistRows.length ? therapistRows.map((t) => t.name) : therapistRoster.data?.suggestions ?? [];
+  const codePrefix = therapistRows.find((t) => t.name === f.therapist)?.code_prefix ?? null;
+  const code = useQuery({ queryKey: ["children", "next-code", f.therapist],
+    queryFn: () => api<{ code_prefix: string | null; alias: string | null }>(`/children/next-code?therapist=${encodeURIComponent(f.therapist)}`),
+    enabled: !!f.therapist && !!codePrefix });
   const create = useMutation({
-    mutationFn: () => api("/children", { method: "POST", json: { alias: f.alias, display_name: f.display_name, birth_date: f.birth_date, sex: f.sex || null, therapist: f.therapist.trim() || null,
+    mutationFn: () => api("/children", { method: "POST", json: { alias: codePrefix ? code.data?.alias : f.alias, display_name: f.display_name, birth_date: f.birth_date, sex: f.sex || null, therapist: f.therapist.trim() || null,
       voucher_grade: f.voucher_grade || null, disability_registered: yn(f.disability) } }),
     onSuccess: () => { setF(empty); setFormOpen(false); ["settlement", "children", "org"].forEach((k) => qc.invalidateQueries({ queryKey: [k] })); },
   });
@@ -44,15 +52,17 @@ export default function Children() {
         </Row>)}
       {showForm && (
         <Card title="아동 등록">
-          <TextField label="가명코드 (예: A-01)" value={f.alias} onChangeText={(alias) => setF({ ...f, alias })} />
+          <TextField label="아이 코드" value={codePrefix ? code.data?.alias ?? "" : f.alias} editable={!codePrefix} onChangeText={(alias) => setF({ ...f, alias })} />
           <TextField label="이름" value={f.display_name} onChangeText={(display_name) => setF({ ...f, display_name })} />
           <DateField label="생년월일" value={f.birth_date} onChange={(birth_date) => setF({ ...f, birth_date })} />
           <Select label="성별" value={f.sex} options={[["", "미입력"], ["남", "남"], ["여", "여"]]} onChange={(sex) => setF({ ...f, sex })} />
-          <Select label="담당 치료사" value={f.therapist} options={[["", "선택 안 함"], ...therapists.map((t) => [t, t] as [string, string])]} onChange={(therapist) => setF({ ...f, therapist })} />
-          <Select label="장애등록 여부" value={f.disability} options={[["", "미입력"], ["Y", "Y (등록)"], ["N", "N (미등록)"]]} onChange={(disability) => setF({ ...f, disability })} />
-          <Select label="바우처 등급" value={f.voucher_grade} options={[["", "유형 미설정"], ...GRADES.map(([g, d]) => [g, `${g}형 (${d})`] as [string, string])]} onChange={(voucher_grade) => setF({ ...f, voucher_grade })} />
+          <Select label="담당 치료사" value={f.therapist} options={[["", "선택 안 함"], ...therapists.map((t) => [t, t] as [string, string])]} onChange={(therapist) => setF({ ...f, therapist, alias: "" })} />
+          <Select label="장애등록 여부" value={f.disability} options={[["", "미입력"], ["Y", "Y (등록)"], ["N", "N (미등록)"]]} onChange={(disability) => setF({ ...f, disability, voucher_grade: disability === "N" ? "" : f.voucher_grade })} />
+          <Select label="바우처 등급" value={f.voucher_grade} options={[["", "유형 미설정"], ...GRADES.map(([g, d]) => [g, `${g}형 (${d})`] as [string, string])]} disabled={f.disability === "N"} onChange={(voucher_grade) => setF({ ...f, voucher_grade, disability: voucher_grade ? "Y" : f.disability })} />
+          {f.therapist && !codePrefix && <T small muted>관리자가 기관 설정에서 이 치료사의 아이 코드 알파벳을 지정하면 자동 입력돼요.</T>}
+          {codePrefix && code.error && <Notice tone="red">{errText(code.error)}</Notice>}
           {create.error && <Notice tone="red">{errText(create.error)}</Notice>}
-          <Button title="등록" loading={create.isPending} disabled={!f.alias.trim() || !f.display_name.trim() || !f.birth_date} onPress={() => create.mutate()} />
+          <Button title="등록" loading={create.isPending} disabled={!!codePrefix && (!code.data?.alias || code.isFetching || !!code.error) || !codePrefix && !f.alias.trim() || !f.display_name.trim() || !f.birth_date} onPress={() => create.mutate()} />
         </Card>)}
       <Input value={q} onChangeText={setQ} placeholder={`아동 ${children.length}명 · 이름·코드·담당 검색`} />
       {children.length === 0 ? <Empty>{role === "therapist" ? "담당 아동이 없어요. 치료사는 담당 아동만 보여요. 기관 관리자가 기관 설정 › 치료사 목록에서 이 계정을 연결하고 아동의 담당 치료사로 지정하면 나타나요." : "등록된 아동이 없습니다."}</Empty>
@@ -76,6 +86,10 @@ export default function Children() {
         {edit && <EditChild key={edit.id} c={edit} therapists={therapists} onClose={() => setEdit(null)} />}
       </Sheet>
       <Sheet visible={importing} onClose={() => setImporting(false)} title="엑셀로 한꺼번에 등록">{importing && <ChildImport />}</Sheet>
+      <Card title={`종결된 아동 (${ended.data?.length ?? 0})`}>
+        {ended.error ? <Notice tone="red">{errText(ended.error)}</Notice> : ended.data?.length ? ended.data.map(c =>
+          <T key={c.id}>{`${c.alias} ${c.display_name} · ${c.terminated_on}`}</T>) : <T muted>{ended.isLoading ? "불러오는 중…" : "종결된 아동이 없습니다."}</T>}
+      </Card>
       <Trash isAdmin={role === "admin"} writable={writable} />
     </Screen>
   );
@@ -94,13 +108,23 @@ function EditChild({ c, therapists, onClose }: { c: Child; therapists: string[];
     onSuccess: () => { if (c.id === childId) setChildId(null); inval("children", "timetable", "schedules"); onClose(); },
   });
   const choices = c.therapist && !therapists.includes(c.therapist) ? [...therapists, c.therapist] : therapists;
-  const err = assign.error || grade.error || disability.error || trash.error;
+  const [ending, setEnding] = useState(false), [endDay, setEndDay] = useState(today);
+  const terminate = useMutation({ mutationFn: () => api(`/children/${c.id}/terminate`, { method: "POST", json: { terminated_on: endDay } }),
+    onSuccess: () => { if (childId === c.id) setChildId(null); onClose(); return qc.invalidateQueries(); } });
+  const err = assign.error || grade.error || disability.error || trash.error || terminate.error;
   return (
     <>
       <Select label="담당 치료사" value={c.therapist ?? ""} disabled={assign.isPending} options={[["", "-"], ...choices.map((t) => [t, t] as [string, string])]} onChange={(v) => assign.mutate(v || null)} />
-      <Select label="바우처 등급" value={c.voucher_grade ?? ""} disabled={grade.isPending} options={[["", "미설정"], ...GRADES.map(([g, d]) => [g, `${g}형 (${d})`] as [string, string])]} onChange={(v) => grade.mutate(v || null)} />
-      <Select label="장애등록 여부" value={ynOf(c.disability_registered)} disabled={disability.isPending} options={[["", "-"], ["Y", "Y"], ["N", "N"]]} onChange={(v) => disability.mutate(yn(v))} />
+      <Select label="바우처 등급" value={c.voucher_grade ?? ""} disabled={grade.isPending || c.disability_registered === false && !c.voucher_grade} options={[["", "미설정"], ...GRADES.map(([g, d]) => [g, `${g}형 (${d})`] as [string, string])]} onChange={(v) => grade.mutate(v || null)} />
+      <Select label="장애등록 여부" value={ynOf(c.disability_registered)} disabled={disability.isPending || !!c.voucher_grade && c.disability_registered === true} options={[["", "-"], ["Y", "Y"], ["N", "N"]]} onChange={(v) => disability.mutate(yn(v))} />
       {err && <Notice tone="red">{errText(err)}</Notice>}
+      {ending ? <>
+        <DateField label="종결일" value={endDay} onChange={setEndDay} />
+        <Row><Button variant="outline" title="닫기" disabled={terminate.isPending} onPress={() => setEnding(false)} />
+          <Button title="종결 처리" loading={terminate.isPending} onPress={async () => {
+            if (await confirm(`${c.display_name} 아동을 종결할까요?`, `${endDay}부터 모든 수업을 취소합니다. 종결일 전 수업과 출결 기록은 보존됩니다.`, "종결 처리")) terminate.mutate();
+          }} /></Row>
+      </> : <Button variant="outline" title="아동 종결" onPress={() => setEnding(true)} />}
       <Button variant="danger" icon="trash-outline" title="삭제 (휴지통으로)" loading={trash.isPending} onPress={async () => {
         if (await confirm(`${c.display_name} (${c.alias}) 아동을 삭제할까요?`, "아동 목록과 주간 시간표에서 빠지고, 오늘 이후 예정된 일정은 취소돼요. 기록은 지워지지 않고 ‘삭제된 아동’에 남아서 언제든 복구할 수 있어요.", "삭제", true)) trash.mutate();
       }} />

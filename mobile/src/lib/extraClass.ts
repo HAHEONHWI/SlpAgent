@@ -6,4 +6,6 @@ export const EXTRA: Record<Extra, string> = { voucher: CLASS_PAY.voucher, paid: 
 
 export type Pay = "voucher" | "private" | "cognitive";
 export const PAY: Record<Pay, string> = { voucher: "바우처", private: "사비", cognitive: "인지" };
-export const payTone = (p?: Pay | null) => (p === "voucher" ? "indigo" : p === "cognitive" ? "green" : "amber") as "indigo" | "green" | "amber";
+export type EffectivePay = Pay | "pending";
+export const PAY_LABEL = { ...PAY, pending: "결제 미설정" };
+export const payTone = (p?: EffectivePay | null) => p === "pending" ? "slate" : p === "voucher" ? "indigo" : p === "cognitive" ? "green" : "amber";

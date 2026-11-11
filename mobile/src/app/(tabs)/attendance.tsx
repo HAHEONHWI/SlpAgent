@@ -7,7 +7,7 @@ import { md, monthLabel, today } from "@/lib/dates";
 import { refreshSchedules } from "@/lib/hooks";
 import { useMe } from "@/lib/me";
 import { shareXlsx } from "@/lib/share";
-import { EXTRA, PAY, type Extra, type Pay } from "@/lib/extraClass";
+import { EXTRA, PAY, PAY_LABEL, type EffectivePay, type Extra, type Pay } from "@/lib/extraClass";
 import { ChildPicker } from "@/components/ChildPicker";
 import EditClassSheet, { type Cls } from "@/components/EditClassForm";
 import { Badge, Button, C, Card, DateField, DayNav, Empty, IconButton, Input, Loading, MonthNav, Notice, Row, Screen, Segmented, Select, T, Tabs, TextField, confirm, type Tone } from "@/components/ui";
@@ -15,12 +15,12 @@ import { Badge, Button, C, Card, DateField, DayNav, Empty, IconButton, Input, Lo
 type State = { status: string | null; auto: boolean; reason: string | null };
 type Mark = { status: string; minutes_late?: number | null; note?: string | null };
 type RowT = { schedule_id: string; child_id: string; date: string; start: string; end: string; therapist: string; attendance: Mark | null; state: State;
-  moved_to: { date: string; start: string } | null; moved_from: string | null; extra?: Extra | null; source?: string | null; pay?: Pay | null; pay_auto?: boolean };
+  moved_to: { date: string; start: string } | null; moved_from: string | null; extra?: Extra | null; source?: string | null; pay?: EffectivePay | null; pay_auto?: boolean };
 type Summary = { child_id: string; scheduled: number; present: number; late: number; absent: number; excused: number; makeup: number;
   auto: number; upcoming: number; moved: number; rate_pct: number | null };
 type Closure = { date: string; reason: string | null; classes: number };
 type Absence = { id: string; child_id: string; start: string; end: string; reason: string | null };
-type Rec = { date: string; start: string; end: string; status: string | null; auto: boolean; reason: string | null; extra?: Extra | null; pay?: Pay | null };
+type Rec = { date: string; start: string; end: string; status: string | null; auto: boolean; reason: string | null; extra?: Extra | null; pay?: EffectivePay | null };
 
 const ST: Record<string, [string, Tone]> = {
   present: ["출석", "green"], late: ["지각", "amber"], absent: ["결석", "red"], excused: ["사유결석", "slate"], makeup: ["보강", "indigo"],
@@ -49,7 +49,7 @@ export default function Attendance() {
       const totals = [["아동", "수업", "출석", "(자동)", "지각", "결석", "사유결석", "옮김", "남은 수업", "출석률(%)"],
         ...rows.map((s) => [who(s.child_id), s.scheduled, s.present + s.makeup, s.auto, s.late, s.absent, s.excused, s.moved, s.upcoming, s.rate_pct])];
       const classes = [["날짜", "시간", "아동", "구분", "결제", "출결", "사유"],
-        ...rows.flatMap((s, i) => recs[i].records.map((r) => [r.date, `${r.start}–${r.end}`, who(s.child_id), r.extra ? EXTRA[r.extra] : "정규", r.pay ? PAY[r.pay] : "-",
+        ...rows.flatMap((s, i) => recs[i].records.map((r) => [r.date, `${r.start}–${r.end}`, who(s.child_id), r.extra ? EXTRA[r.extra] : "정규", r.pay ? PAY_LABEL[r.pay] : "-",
           r.status ? `${ST[r.status]?.[0] ?? r.status}${r.auto && r.status === "present" ? " (자동)" : ""}` : "예정", r.reason]))
           .sort((x, y) => `${x[0]}${x[1]}`.localeCompare(`${y[0]}${y[1]}`))];
       await shareXlsx(`출결_${month}.xlsx`, [
@@ -111,7 +111,7 @@ function AddClass({ day, onDone }: { day: string; onDone: () => void }) {
       <Segmented value={f.extra} onChange={(extra) => setF({ ...f, extra })} items={(Object.keys(EXTRA) as Extra[]).map((k) => [k, EXTRA[k]] as [Extra, string])} />
       <ChildPicker value={f.child_id || null} onChange={(id) => setF({ ...f, child_id: id ?? "" })} />
       <DateField label="시작 시간" mode="time" value={f.start} onChange={(start) => setF({ ...f, start })} />
-      <T small muted>수업은 기본 바우처예요. 결제 일정이 ‘실제와 동일’이면 그 달 처음 5회만 바우처이고 나머지는 자동 사비, 결제 일정을 입력했으면 그 날짜 수업만 바우처예요(일정 › 월간 일정표). 담당 치료사와 수업 길이는 아동·시간표 설정을 따라요.</T>
+      <T small muted>월간 일정표에서 ‘실제 일정과 동일’을 저장하면 담당 아동별로 매달 처음 5회가 바우처로 잡혀요. 따로 결제 일정을 저장한 아동은 그 날짜를 따르고, 둘 다 없으면 자동 분류를 보류해요.</T>
       {add.error && <Notice tone="red">{errText(add.error)}</Notice>}
       <Button title="추가" loading={add.isPending} disabled={!f.child_id || !f.start} onPress={() => add.mutate()} />
     </Card>
@@ -144,7 +144,8 @@ function RollRow({ r, who, onDone }: { r: RowT; who: string; onDone: () => void 
       </Row>
       <T bold style={{ fontSize: 17 }}>{who}</T>
       <Row><T small muted>{r.therapist}</T>{r.state.reason && <T small muted>{r.state.reason}</T>}</Row>
-      {r.pay && <Select label="결제 구분" value={r.pay} disabled={pay.isPending} options={(Object.keys(PAY) as Pay[]).map((k) => [k, PAY[k]] as [Pay, string])} onChange={(v) => pay.mutate(v)} />}
+      {r.pay && <Select label="결제 구분" value={r.pay === "pending" ? "" : r.pay} placeholder="결제 미설정" disabled={pay.isPending} options={(Object.keys(PAY) as Pay[]).map((k) => [k, PAY[k]] as [Pay, string])} onChange={(v) => pay.mutate(v)} />}
+      {r.pay === "pending" && <T small muted>담당 치료사의 내 계정에서 ‘내 결제 설정’을 저장하거나, 월간 일정표의 ‘결제 일정’에서 아동별 날짜를 지정해 주세요.</T>}
       {controls && (
         <>
           <Segmented value={(st && ["present", "absent", "excused", "late"].includes(st) && !(r.state.auto && st !== "present") ? st : "") as "present"}

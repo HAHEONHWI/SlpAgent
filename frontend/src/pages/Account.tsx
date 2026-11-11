@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { useMe } from "../lib/me";
 import { Button, Card, Input, Label, Notice, PageTitle } from "../components/ui";
 import { LoginAlert } from "./Login";
+import PaymentSettings from "../components/PaymentSettings";
 
 type Err = { title: string; detail: string } | null;
 const asErr = (x: any): Err => x instanceof AuthError ? { title: x.title, detail: x.message }
@@ -16,6 +17,7 @@ export default function Account() {
     <>
       <PageTitle title="내 계정" sub={me?.email ?? undefined} />
       <div className="max-w-xl space-y-4">
+        <PaymentSettings />
         <ChangePassword />
         <Withdraw />
       </div>

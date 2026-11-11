@@ -128,6 +128,7 @@ def test_therapist_choices_and_assignment(client, child):
     assert client.get(f"/children/{child['id']}", headers=H()).status_code == 404
     assert all(c["id"] != child["id"] for c in client.get("/children", headers=H()).json())
     assert client.get(f"/children/{child['id']}", headers=H(role="admin")).status_code == 200
-    assert client.get(f"/children/{child['id']}", headers=H(role="assistant")).status_code == 200
+    # a read-only assistant is scoped the same way: only the children of the 치료사 its account is linked to
+    assert client.get(f"/children/{child['id']}", headers=H(role="assistant")).status_code == 404
     assert client.put(f"/children/{child['id']}/therapist", headers=H(role="assistant"), json={"therapist": None}).status_code == 403
     assert client.put(f"/children/{child['id']}/therapist", headers=H("orgB", "admin"), json={"therapist": None}).status_code == 404

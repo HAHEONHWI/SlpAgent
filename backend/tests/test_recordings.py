@@ -299,11 +299,15 @@ def test_edit_transcript_resummarizes_with_edited_text(client, repo, child, deps
 
 
 def test_child_name_is_masked_before_llm(client, repo, child, deps, clips):
-    deps.groq.transcribe = lambda p: providers.Result(text="x", duration=60, segments=[{"start": 1, "end": 5, "text": "테스트아동 어머니 010-1234-5678"}])
+    repo.create("children", "orgA", {"alias": "A-02", "display_name": "옆아동",
+                                       "guardian_contact": "010-9999-9999", "birth_date": "2021-05-01"},
+                doc_id="other-child")
+    deps.groq.transcribe = lambda p: providers.Result(text="x", duration=60, segments=[{"start": 1, "end": 5, "text": "테스트아동 옆아동 어머니 010-1234-5678"}])
     jid = upload(client, child, clips["5"])
     drive(deps)
     sent = json.loads(deps.llm.calls[0]["input"])["transcript"]
-    assert "테스트아동" not in sent and "010-1234-5678" not in sent
+    assert "테스트아동" not in sent and "옆아동" not in sent and "A-01" in sent
+    assert "010-1234-5678" not in sent
     assert "테스트아동" in repo.get("stt_transcripts", "orgA", jid)["text"]  # stored transcript keeps what was said
 
 

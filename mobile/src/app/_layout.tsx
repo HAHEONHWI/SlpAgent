@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AppState } from "react-native";
+import { AppState, KeyboardAvoidingView, Platform } from "react-native";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import { ChildProvider } from "@/lib/child";
 import { useMe } from "@/lib/me";
 import { C } from "@/components/ui";
+import { WidgetSync } from "@/widgets/WidgetSync";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 // Refetch on return to the app, like the web app's window-focus refetch.
@@ -22,7 +23,9 @@ export default function Root() {
         <AuthProvider>
           <ChildProvider>
             <StatusBar style="dark" />
-            <Nav />
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "android" ? "padding" : undefined}>
+              <Nav />
+            </KeyboardAvoidingView>
           </ChildProvider>
         </AuthProvider>
       </QueryClientProvider>
@@ -38,6 +41,7 @@ function Nav() {
   useEffect(() => { if (state) SplashScreen.hideAsync().catch(() => {}); }, [state]);
   if (!state) return null; // the splash screen stays up meanwhile
   return (
+    <><WidgetSync identity={state === "app" ? `${me.data?.uid}:${me.data?.org_id}` : null} />
     <Stack screenOptions={{ headerStyle: { backgroundColor: C.bg }, headerTintColor: C.inkDark, headerTitleStyle: { fontWeight: "700" }, headerShadowVisible: false, contentStyle: { backgroundColor: C.bg } }}>
       <Stack.Protected guard={state === "app"}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -50,6 +54,6 @@ function Nav() {
       <Stack.Protected guard={state === "gate"}>
         <Stack.Screen name="signup" options={{ title: "기관 가입 신청" }} />
       </Stack.Protected>
-    </Stack>
+    </Stack></>
   );
 }

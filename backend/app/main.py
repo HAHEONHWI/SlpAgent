@@ -27,7 +27,7 @@ class StripApiPrefix:
         await self.app(scope, receive, send)
 
 
-app.add_middleware(RateLimitMiddleware, limit=get_settings().rate_limit_requests,
+app.add_middleware(RateLimitMiddleware, limit=get_settings().rate_limit_address_requests,
                    window_seconds=get_settings().rate_limit_window_seconds)
 app.add_middleware(CORSMiddleware, allow_origins=get_settings().cors_origins.split(","),
                    allow_methods=["*"], allow_headers=["*"])

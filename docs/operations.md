@@ -2,6 +2,16 @@
 
 운영 서비스의 최근 배포 검증은 아래에 기록한다. `cloudbuild.yaml`은 배포 또는 재배포 시 변수를 채워 사용한다. 실제 프로젝트 ID, Secret, 도메인을 저장소에 넣지 않는다.
 
+### 아동 등록 폼·아이 코드 자동 표시 배포 (2026-11-11)
+
+- Firebase Hosting `slp-agent-2026`을 20:23:02 KST에 배포했다(53개 파일). `/`, `/children`, `/api/healthz`는 200, 미인증 `/api/children/next-code`는 401이다. `app.html`, 앱 JavaScript, 아동 관리 번들의 SHA-256이 `frontend/dist`와 일치한다.
+- 등록 폼을 담당 치료사·이름·생년월일·성별·장애등록·바우처 등급·아이 코드 순서로 표시한다. 코드 입력은 읽기 전용이며, 치료사 코드 알파벳이 설정되지 않으면 등록을 막고 관리자에게 안내한다. Python 3.12 pytest 280개와 `npm run build`가 통과했다. Cloud Run·Firestore·Android는 변경하지 않았다.
+
+### 대시보드 인사말·오늘 일정 세로 배치 배포 (2026-11-11)
+
+- Firebase Hosting `slp-agent-2026`을 20:17:13 KST에 배포했다(53개 파일). 운영 `/`, `/dashboard`, `/api/healthz`가 모두 200이다. `app.html`, 대시보드 JavaScript, CSS의 SHA-256이 `frontend/dist`와 일치한다.
+- Python 3.12 pytest 280개와 `npm run build`가 통과했다. Cloud Run, Firestore, Android 앱은 변경하지 않았다.
+
 ## Cloud Run
 
 1. Artifact Registry 저장소 `slp-agent`와 Cloud Run 런타임 서비스 계정을 만든다.
@@ -13,6 +23,47 @@
 보존 작업을 Cloud Run Job으로 실행할 때는 동일 이미지를 사용하고 `python -m scripts.purge_archived_children --org-id ORG_ID --retention-days APPROVED_DAYS --apply`를 컨테이너 command/args로 지정한다. 기관별 승인 기간과 실행 주기를 운영자가 설정하며, 이 저장소에서는 Job이나 Scheduler를 생성하지 않는다.
 
 비공개 Cloud Storage 객체는 V4 서명 URL로 15분간 제공한다. 런타임 서비스 계정이 서명할 수 있도록 IAM Sign Blob 권한이 필요하다. 로컬 대체 저장소는 `DOCUMENT_URL_SIGNING_KEY`가 있어야 하며, 운영에서는 GCS를 사용한다.
+
+### 백엔드 전체 변경 배포 (2026-11-11)
+
+- Python 3.12 pytest 280개 통과 후 Cloud Run `slp-agent-api-00050-8wj`에 트래픽 100% 전환했다. 이미지 digest는 `sha256:90d46be1adfc72efff0b97eaf9a6a7fb95787649f61c8bbd44d1c281b93d186c`다.
+- 기존 런타임 서비스 계정·환경변수·Secret 연결을 유지했다. `/api/healthz` 200, 미인증 `/api/children` 401, 새 revision 오류 로그 0건을 확인했다. Firestore 인덱스·규칙 변경은 없다.
+- Firebase Hosting `slp-agent-2026`을 19:27:58 KST에 배포했다(53개 파일). 공개 홈과 `/terms`는 200이며 운영 홈·앱 셸·개인정보 문서 번들이 빌드 결과와 일치한다. 이용약관·환불정책 초안은 번들에서 제외했고 해당 경로에는 미게시 안내만 표시한다. `frontend` build와 테스트 26개 통과.
+
+### 아동 종결 화면 복구 배포 (2026-11-11)
+
+- 현재 운영 번들에 종결 화면이 빠진 것을 확인한 뒤, 운영 HTML·JS와 일치하는 2026-11-10 배포 소스의 `frontend/src/pages/Children.tsx`에 종결 버튼·날짜 확인창·종결된 아동 목록만 복구했다. 동시 작업 중인 아이 코드 자동 생성과 공개 소개·정책 변경은 포함하지 않았다. 녹음 기록 삭제 기능과 기존 공개 홈페이지를 보존했다.
+- Firebase Hosting `616fba34e391530f`을 17:59 KST에 배포했다(50개 파일). 이전 버전은 `78ef61f7916f71a4`다. Cloud Run·Firestore·Android는 변경하지 않았다.
+- Python 3.12 pytest 277개, 배포본의 공개 페이지 검증 14개, frontend build와 draft guard 통과. 1440px에서 종결 버튼·빈 목록·날짜 확인창, 390px 확인창, 로컬 가상 아동 종결 후 목록 반영을 확인했다. 운영 `/children`·entry JS·Children JS·CSS의 SHA-256이 배포본과 일치하며 health 200, 익명 아동·종결 목록 API 401을 확인했다. 운영 임상 문서는 읽거나 쓰지 않았다.
+
+### 임상 AI 아동 이름 가명 처리 배포 (2026-11-11)
+
+- 대화 입력·기록·검색 결과·도구 출력·분석 문맥에서 선택 아동 이름을 가명 코드로 바꾸고, 기관 내 다른 등록 아동 이름은 `[개인정보]`로 가린다. 녹취록은 OpenAI 요약 전 가명 처리한다.
+- Python 3.12 pytest 274개 통과. Cloud Build `f80563bb-2bc1-46c6-bb1a-ac992073a81f`는 기존 운영 이미지 `sha256:6ff8d6fec37c641a3669b0465553e3bf9607a6386587b098b382865f921fb215`에 수정 소스 7개만 덮어써 `sha256:ac2dc575bb11954031e97bafccf68afc6c2d4ca0e7785fb3051390f09e3ddb9e`를 만들었다. `slp-agent-api-00062-yil`에 트래픽 100%, 이전 `slp-agent-api-00059-wok`는 `keep-rollback`으로 보존했다.
+- 기존 런타임 설정을 유지했다. 후보·운영 health는 200, 미인증 `/api/children`은 401, 새 revision 오류 로그 0건. 임상 데이터와 프론트엔드는 배포에서 읽거나 변경하지 않았다.
+
+### 수업 녹음 기록 삭제 배포 (2026-11-10)
+
+- 치료사·관리자가 승인된 수업 녹음 기록을 삭제할 수 있도록 프론트 버튼과 `DELETE /recording-records/{record_id}`를 배포했다. 권한·아동 범위·감사 로그를 적용하고, 공유 중이지 않은 연결 녹취록·STT 작업·임시 파일·승인 제안을 정리한다. DB 스키마와 Firestore 인덱스 변경은 없다.
+- Python 3.12 pytest 272개와 frontend build가 통과했다. Cloud Build `dcd64e89-f23a-489c-b5d0-cf67f973da54`는 기존 운영 이미지 `slp-agent-api-00047-gq4`의 `app/routers/recordings.py`만 교체해 digest `sha256:6ff8d6fec37c641a3669b0465553e3bf9607a6386587b098b382865f921fb215`를 만들었다. `slp-agent-api-00059-wok`가 트래픽 100%를 처리하며 이전 `00047-gq4`를 `keep-rollback`으로 보존했다. 런타임 설정은 동일하다.
+- Hosting은 운영 HTML과 asset 해시가 일치한 `feat/dashboard-home`의 `b37e6eb` 기준에 삭제 버튼만 적용해 2026-11-10 15:38 KST 배포했다. `/sessions`는 200, 새 JS 번들에 삭제 API와 확인 문구가 포함됐다. API health는 200, 미인증 삭제 요청은 401이었다. 임상 자료는 읽거나 변경하지 않았다.
+
+### 구버전 앱의 날짜별 수업 수정 호환 패치 (2026-11-09)
+
+- 구버전 앱이 시간 수정 요청에 조회값 `pay=pending`을 보내도 저장된 결제 구분을 보존한다. 같은 치료사 또는 아동의 실제 겹침은 409로 차단하며 결석 처리된 슬롯은 사용할 수 있다.
+- Python 3.12 테스트 258개 통과. Cloud Build `551a5054-8261-4d97-9c13-ded606369440`으로 운영 이미지의 `app/routers/schedules.py`만 교체했다. Cloud Run `slp-agent-api-00046-pzg` 트래픽 100%, 직전 `slp-agent-api-00052-tod`. 운영 health 200, 익명 수업 수정 401 확인.
+
+### 월간 일정표 수정 및 치료사별 결제 설정 배포 (2026-11-09)
+
+- Cloud Build `2b061ab0-7875-4de1-a986-bf36095fd56c`에서 기존 운영 이미지의 소스 8개를 검증 후 교체했다. 무트래픽 후보의 인증과 상태를 확인하고 Cloud Run `slp-agent-api-00052-tod`로 100% 전환했다. 롤백 대상은 `slp-agent-api-00044-4ct`다.
+- Firebase Hosting의 운영 `/schedule`, `/account`와 관련 JS 번들이 검증한 빌드와 일치했다. 운영 `/api/healthz`는 200, 익명 개인 결제 설정과 월간 일정표 요청은 401이었다. 배포 전 Python 3.12 테스트 257개가 통과했다.
+- 2026년 11월부터 담당 치료사가 직접 저장한 자동 설정 또는 아동별 수동 결제 날짜가 적용된다. 배포 작업에서 교사 설정이나 아동의 결제 내역을 일괄 변경하지 않았다.
+
+### 상담 녹음 시간 자동 입력 배포: 2026-11-09
+
+- 기존 운영 이미지에 `app/routers/schedules.py`와 `app/services/billing.py`만 교체했다. Cloud Build `317944d9-61b2-45a1-bf04-f39dc77da2df`, Cloud Run `slp-agent-api-00044-4ct`에 트래픽 100%. 직전 revision은 `slp-agent-api-00048-qut`다. 런타임 컨테이너 설정은 동일하며 DB 마이그레이션은 없다.
+- Firebase Hosting의 `/sessions`와 새 JS 번들이 로컬 빌드와 일치한다. 운영 `/api/healthz` 200, 익명 `/api/schedules` 401. Python 3.12 테스트 243개 통과. 웹의 40분 입력과 제출은 가상 일정으로 검증했다.
+- 같은 날 아동 등록·수정 화면에서 장애등록이 N이면 바우처 등급을 수정할 수 없도록 Hosting을 갱신했다. 운영 `/children`과 해당 JS 번들이 검증한 빌드와 일치한다. 기존 저장 등급은 유지한다.
 
 ### 월간 일정표 교사별 보기 배포: 2026-11-02
 
@@ -140,6 +191,14 @@ OpenAI 전송 점검: 알려진 아동 이름·보호자 연락처·전화번호
 ## 운영 보안
 
 - 모든 업무 API 라우트는 `Principal` 인증 또는 제한된 서명 다운로드를 사용한다. org 경계는 Repo 조회에서 강제한다.
-- 기본 속도 제한은 설정된 요청 수/분, 토큰 해시별 프로세스 메모리 기준이다. Cloud Run 인스턴스 사이에는 공유되지 않으므로 다중 인스턴스 한도는 Cloud Armor 등 앞단에서 설정한다.
+- 속도 제한은 두 단계이며 모두 프로세스 메모리 기준이다. (1) 계정별: 토큰 검증 뒤 uid마다 `RATE_LIMIT_REQUESTS`(기본 120)/분. (2) TCP 연결 상대 주소별: 인증 전에 `RATE_LIMIT_ADDRESS_REQUESTS`(기본 1200)/분. `X-Forwarded-For`와 검증 전 `Authorization` 값은 키에 쓰지 않는다. Cloud Run에서 같은 프록시 주소로 들어오는 요청은 (2)의 버킷을 공유하므로 (2)는 서비스 전체 과부하 방지용이다. 인스턴스 사이에 상태가 공유되지 않으므로, 전체 서비스 한도는 Cloud Armor 등 앞단에서 설정한다.
 - 감사로그 조회는 기관 `admin` 전용 `GET /admin/audit-logs`다.
 - GitHub Actions는 pytest와 `pip-audit`를 실행한다. dependency 취약점 해결은 승인된 버전 변경으로 진행한다.
+
+## 2026-11-09 월간 일정·아동 종결 배포
+
+- 사용자 승인으로 Cloud Run `slp-agent-api-00047-gq4`에 트래픽 100% 전환. 이미지 digest는 `sha256:8e85194fbee5ae9b783deb9f9e94ab04b6bc1fc9d3759411d4fff887d00e5d68`. 직전 serving revision은 `slp-agent-api-00046-pzg`.
+- 직전 운영 이미지를 기준으로 `deps.py`, routers의 `children.py`, `schedules.py`, `attendance.py`, `timetable.py`, `voucher_doc.py`, `settlement.py` 7개 파일만 교체했다. Cloud Build `8676cb63-aa00-4097-9547-a5bf496cba78` 성공.
+- 월간 실제 일정 빈칸에서 등록 아동 수업 추가, 관리자의 기관 전체 월간 수정, 선택한 종결일부터 수업 취소·이전 기록 보존, 바우처 등급 저장 시 장애등록 Y를 반영했다. 다른 기관 경계와 치료사 담당 범위는 API에서 검증한다.
+- Firebase Hosting에 삭제 확인 모달, 날짜별 보강 잡기, 종결 아동 목록, 개인정보 FAQ를 배포했다. 운영 관리자 계정에서 월간 수정 열기·추가 버튼, 삭제·보강 모달, 공개 FAQ와 개인정보처리방침 링크를 확인했다.
+- Python 3.12 pytest 267개, 공개 페이지 테스트 14개, frontend build와 mobile typecheck, 합성 브라우저의 추가·삭제 확인·보강·종결·FAQ 흐름을 통과했다. 운영 health 및 SPA 라우팅을 확인했다. Android 새 바이너리 배포는 이번 승인 범위에 포함되지 않았다.

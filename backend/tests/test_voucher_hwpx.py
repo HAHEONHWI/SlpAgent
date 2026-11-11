@@ -67,21 +67,37 @@ def test_more_than_five_visits_repeat_pages_and_months_differ():
     ET.fromstring(empty)
 
 
-def test_api_uses_schedules_attendance_and_notes(client, child):
+def test_api_uses_only_completed_class_activities_not_notes_consultations_or_recordings(client, child, repo):
     cid = child["id"]
     mk = lambda d, s: client.post("/schedules", headers=H(), json={"child_id": cid, "date": d, "start": s, "end": "10:30" if s == "09:50" else "11:20", "therapist": "김치료"}).json()
     a, b, c = mk("2026-10-06", "09:50"), mk("2026-10-13", "09:50"), mk("2026-10-20", "10:40")
     client.put(f"/schedules/{b['id']}/attendance", headers=H(), json={"status": "absent"})
     client.post(f"/schedules/{c['id']}/cancel", headers=H())
-    sess = client.post(f"/children/{cid}/sessions", headers=H(), json={"date": "2026-10-06", "start": "09:50", "end": "10:30", "therapist": "김치료"}).json()
+    sess = client.post(f"/children/{cid}/sessions", headers=H(), json={"date": "2026-10-06", "start": "09:50", "end": "10:30", "therapist": "김치료",
+                                                                        "activities": [{"name": "장소 그림 가리키기", "correct": 2, "trials": 3},
+                                                                                       {"name": "확인되지 않음", "correct": 0, "trials": 0},
+                                                                                       {"name": "녹취 후반 이야기", "correct": 0, "trials": 0}]}).json()
     client.post(f"/sessions/{sess['id']}/note", headers=H(), json={"text": "FAKE 노트"})
+    repo.create("parent_consultations", "orgA", {"child_id": cid, "date": "2026-10-06", "summary": "상담 기록 내용"})
+    repo.create("recording_records", "orgA", {"child_id": cid, "date": "2026-10-06", "source": "recording_ai_approved", "sections": {
+        "activities": "장소 그림을 보고 가리키며, 어휘를 모델링하고 따라 말하기를 진행함.",
+        "child_responses": "시원은 기분 좋게 참여했다고 보고됨. 녹취 후반에 동희가 인사하나 이후 반응은 확인되지 않음.",
+        "spontaneous_speech": "자발 발화인지 모방 발화인지는 확인되지 않음."}})
+    client.post(f"/children/{cid}/sessions", headers=H(), json={"date": "2026-10-07", "start": "10:00", "end": "10:40", "therapist": "김치료",
+                                                                 "activities": [{"name": "그림카드 이름 말하기", "correct": 2, "trials": 3}]})
+    repo.create("recording_records", "orgA", {"child_id": cid, "date": "2026-10-07", "source": "recording_ai_approved", "sections": {
+        "activities": "녹취 후반에 다른 활동이 있었으나 확인되지 않음"}})
     v = client.get(f"/children/{cid}/voucher-visits?month=2026-10", headers=H()).json()
-    assert [(x["date"], x["start"], x["end"], x["content"]) for x in v["visits"]] == [("2026-10-06", "09:50", "10:40", "FAKE 노트")]
+    assert [(x["date"], x["start"], x["end"], x["content"], x["content_source"]) for x in v["visits"]] == [
+        ("2026-10-06", "09:50", "10:40", "장소 그림을 보고 가리키며, 어휘를 모델링하고 따라 말하기를 진행함.", "activities"),
+        ("2026-10-07", "10:00", "10:50", "그림카드 이름 말하기", "activities")]
     r = client.post(f"/children/{cid}/voucher-hwpx", headers=H(), json={"months": [{"month": "2026-10"}]})
     assert r.status_code == 200 and "filename*=UTF-8''" in r.headers["content-disposition"]
     assert "%ED%85%8C%EC%8A%A4%ED%8A%B8%EC%95%84%EB%8F%99-10%EC%9B%94.hwpx" in r.headers["content-disposition"]  # 테스트아동-10월.hwpx
     api_xml = _section(r.content)
-    assert "FAKE 노트" in api_xml
+    assert "장소 그림을 보고 가리키며, 어휘를 모델링하고 따라 말하기를 진행함." in api_xml
+    assert "그림카드 이름 말하기" in api_xml
+    assert all(text not in api_xml for text in ("FAKE 노트", "상담 기록 내용", "녹취", "확인되지 않음", "다른 아동", "시원", "동희", "보고됨", "자발 발화"))
     schedule_info = next(x for x in _tables(api_xml) if x and x[0][0] == "사회복지서비스관리번호")
     assert schedule_info[0][1] == "8001" and schedule_info[1][3] == "2026. 9. 30"
     multi = client.post(f"/children/{cid}/voucher-hwpx", headers=H(), json={"months": [

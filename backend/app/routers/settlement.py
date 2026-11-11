@@ -43,7 +43,7 @@ def month_settlement(month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"), p: 
     classes = classify_month(repo, p.org_id, month, plans=plans)  # one read of the month for the whole organization
     rows = []
     for c in repo.list("children", p.org_id):
-        if c.get("archived"):
+        if c.get("archived") or (c.get("terminated_on") and c["terminated_on"] <= month + "-01"):
             continue
         mine = classes.get(c["id"], [])
         grade = c.get("voucher_grade")
@@ -53,5 +53,5 @@ def month_settlement(month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"), p: 
         slots = plan_slots(plans.get(c["id"]))  # 결제 일정 entered: the claimed 바우처 sessions are its dates
         rows.append({"child_id": c["id"], "auto_private": sum(1 for x in mine if x["pay"] == "private" and x["pay_auto"]),
                      **billing.settlement(grade, pick("voucher") if slots is None else slots, pick("private"), paid_price, day_price, night_price,
-                                          org.get("paid_night_price"), pick("cognitive"))})
+                                          org.get("paid_night_price"), pick("cognitive"), pick("pending"))})
     return {"month": month, "paid_price": paid_price, "paid_night_price": org.get("paid_night_price"), "rows": rows}

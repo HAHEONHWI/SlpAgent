@@ -186,6 +186,8 @@ def _schedule(repo, p: Principal, sid: str) -> dict:
 def move(sid: str, body: MoveIn, p: Principal = Depends(require_write), repo=Depends(get_repo)):
     """The class does not happen on its day; a 보강 class is booked instead. Both stay linked so it can be undone."""
     s = _schedule(repo, p, sid)
+    from ..deps import check_class_date
+    check_class_date(child_or_404(repo, p, s["child_id"]), body.date.isoformat())
     if s.get("status") != "scheduled":
         raise HTTPException(409, "이미 옮겼거나 취소된 수업입니다")
     try:
@@ -213,6 +215,8 @@ def move(sid: str, body: MoveIn, p: Principal = Depends(require_write), repo=Dep
 @router.post("/schedules/{sid}/unmove")
 def unmove(sid: str, p: Principal = Depends(require_write), repo=Depends(get_repo)):
     s = _schedule(repo, p, sid)
+    from ..deps import check_class_date
+    check_class_date(child_or_404(repo, p, s["child_id"]), s["date"])
     if s.get("status") != "moved":
         raise HTTPException(409, "옮긴 수업이 아닙니다")
     if s.get("moved_to"):

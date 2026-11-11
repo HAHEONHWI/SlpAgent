@@ -6,10 +6,11 @@ import { errText } from "../lib/hooks";
 import { useMe } from "../lib/me";
 import { Badge, Button, Card, Empty, Input, Notice, Select } from "./ui";
 
-type Row = { id?: string; name: string; uid: string | null; email?: string | null };
+type Row = { id?: string; name: string; uid: string | null; email?: string | null; code_prefix?: string | null };
 type Member = { uid: string; email: string | null; name: string | null; role: string | null };
 type Roster = { therapists: Row[]; suggestions: string[]; members?: Member[] };
 const ROLE: Record<string, string> = { admin: "관리자", therapist: "치료사", assistant: "보조" };
+const CODE_PREFIXES = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
 /** 기관 설정 › 치료사 목록: the names used for 담당 치료사 and the timetable, each linked to a sign-in account. */
 export default function TherapistRoster() {
@@ -19,18 +20,19 @@ export default function TherapistRoster() {
   const [rows, setRows] = useState<Row[]>([]), [dirty, setDirty] = useState(false);
   useEffect(() => { if (q.data && !dirty) setRows(q.data.therapists); }, [q.data, dirty]);
   const save = useMutation({
-    mutationFn: () => api<Roster>("/org/roster", { method: "PUT", json: { therapists: rows.map(({ id, name, uid }) => ({ id, name: name.trim(), uid })) } }),
+    mutationFn: () => api<Roster>("/org/roster", { method: "PUT", json: { therapists: rows.map(({ id, name, uid, code_prefix }) => ({ id, name: name.trim(), uid, code_prefix })) } }),
     onSuccess: (r) => { setRows(r.therapists); setDirty(false); qc.setQueryData(["org", "roster"], r);
       ["children", "me", "timetable"].forEach((k) => qc.invalidateQueries({ queryKey: [k] })); qc.invalidateQueries({ queryKey: ["org", "therapists"] }); },
   });
   const set = (next: Row[]) => { setRows(next); setDirty(true); };
   const members = q.data?.members ?? [];
   const taken = new Set(rows.map((r) => r.uid).filter(Boolean));
+  const usedPrefixes = new Set(rows.map((r) => r.code_prefix).filter(Boolean));
   const label = (m: Member) => `${m.name ?? "(이름 없음)"} · ${m.email ?? m.uid}${m.role ? ` · ${ROLE[m.role] ?? m.role}` : ""}`;
 
   return (
     <Card title="치료사 목록" className="mt-4 max-w-3xl">
-      <p className="mb-3 text-sm text-slate-600">아동의 담당 치료사와 주간 시간표 교사 이름은 이 목록에서 고릅니다. 계정을 연결하면 그 치료사가 로그인했을 때 맨 위 아동 선택에 ‘내 아동’이 먼저 보여요. 이름을 바꾸면 아동 담당과 시간표 이름도 함께 바뀝니다. 아동에게 배정된 치료사는 자동으로 이 목록에 들어와요.</p>
+      <p className="mb-3 text-sm text-slate-600">아동의 담당 치료사와 주간 시간표 교사 이름은 이 목록에서 고릅니다. 아이 코드 알파벳을 지정하면 A-01~A-99 형식으로 자동 입력돼요. 계정을 연결하면 그 치료사가 로그인했을 때 맨 위 아동 선택에 ‘내 아동’이 먼저 보여요. 이름을 바꾸면 아동 담당과 시간표 이름도 함께 바뀝니다. 아동에게 배정된 치료사는 자동으로 이 목록에 들어와요.</p>
       {q.isLoading ? <p className="text-sm text-slate-400">불러오는 중…</p> : (
         <div className="space-y-2">
           {!rows.length && <Empty>아직 치료사 목록이 없어요.</Empty>}
@@ -43,6 +45,10 @@ export default function TherapistRoster() {
             <div key={r.id ?? `new-${i}`} className="flex flex-wrap items-center gap-2">
               <div className="w-36 shrink-0"><Input value={r.name} maxLength={20} placeholder="치료사 이름" disabled={!isAdmin} aria-label="치료사 이름"
                 onChange={(e) => set(rows.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} /></div>
+              <div className="w-28 shrink-0"><Select value={r.code_prefix ?? ""} disabled={!isAdmin} aria-label={`${r.name} 아이 코드 알파벳`}
+                onChange={(e) => set(rows.map((x, j) => (j === i ? { ...x, code_prefix: e.target.value || null } : x)))}>
+                <option value="">코드 미지정</option>{CODE_PREFIXES.map((prefix) => <option key={prefix} value={prefix} disabled={usedPrefixes.has(prefix) && r.code_prefix !== prefix}>{prefix}</option>)}
+              </Select></div>
               {isAdmin ? (
                 <div className="min-w-56 flex-1"><Select value={r.uid ?? ""} aria-label={`${r.name} 계정`} onChange={(e) => set(rows.map((x, j) => (j === i ? { ...x, uid: e.target.value || null } : x)))}>
                   <option value="">계정 연결 안 함</option>

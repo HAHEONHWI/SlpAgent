@@ -4,21 +4,22 @@ GET  /children/{id}/voucher-visits?month=YYYY-MM -> the visits the form would co
 POST /children/{id}/voucher-hwpx                 -> one HWP/HWPX (one month) or a ZIP (multiple months).
 GET  /month-sheet?month=YYYY-MM&therapist=NAME    -> one teacher's 월간 일정표 (실제 classes and 결제 일정); admins pick the teacher.
 PUT  /children/{id}/pay-plan?month=YYYY-MM        -> 실제와 동일, or the 결제 날짜·시간 entered by hand.
-Visits are the month's 결제 일정: 실제와 동일 (the default) = the first 5 held 바우처 classes (not cancelled, not
+Visits are the month's 결제 일정: 실제와 동일 (teacher opt-in) = the first 5 held 바우처 classes (not cancelled, not
 absent/excused; therapy session records without a schedule are added); otherwise the entered 결제 날짜·시간.
-Page-2 text is the approved session note, else the session's recording record."""
+Page-2 content comes from the therapist-approved activities section or activity names in completed therapy session records."""
 import io
 import re
 import zipfile
 from datetime import date, datetime, timedelta
 from typing import Literal, assert_never
 from urllib.parse import quote
+from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 from ..auth import Principal, current_principal, require_write
-from ..deps import audit, child_or_404, get_repo, my_therapist_name
-from ..repo.base import NotFound
+from ..deps import audit, audit_change, child_or_404, get_repo, linked_therapist_name, monthly_edit_owner, my_therapist_name
+from ..repo.base import NotFound, RevisionConflict, VersionedChange
 from ..services import billing, hwp, voucher_hwpx as vh
 from ..services.attendance_state import effective, held, other_notes
 
@@ -48,36 +49,119 @@ def _service_minutes(repo, org_id: str) -> int:
         return 50
 
 
-def _content(day: str, notes_by_date: dict[str, str], records_by_date: dict[str, dict],
-             consult_by_date: dict[str, str] | None = None) -> tuple[str, str]:
-    if notes_by_date.get(day):
-        return notes_by_date[day], "session_note"
-    if consult_by_date and consult_by_date.get(day):  # 보호자 상담 written after the class
-        return consult_by_date[day], "consultation"
-    rec = records_by_date.get(day)
-    if rec:
-        sec = rec.get("sections") or {}
-        parts = [sec.get(k, "").strip() for k in ("activities", "child_responses", "spontaneous_speech")]
-        text = " ".join(p for p in parts if p and p != UNKNOWN)
-        if text:
-            return text, "recording"
-    return "", "none"
+def _content(day: str, activity_summaries: dict[str, list[str]],
+             activities_by_date: dict[str, list[str]]) -> tuple[str, str]:
+    summary = " ".join(dict.fromkeys(activity_summaries.get(day, [])))
+    if summary:
+        return summary, "activities"
+    activities = activities_by_date.get(day, [])
+    return (", ".join(dict.fromkeys(activities)), "activities") if activities else ("", "none")
 
 
 def visits_for(repo, p: Principal, child_id: str, month: str, minutes: int) -> list[dict]:
     return month_data(repo, p, child_id, month, minutes)[0]
 
 
-def pay_plan(repo, org_id: str, child_id: str, month: str) -> dict | None:
-    """The child's saved 결제 일정 for the month; None = 실제와 동일."""
+# Earlier accounting months were prepared under the implicit first-five rule.
+EXPLICIT_PAYMENT_MONTH = "2026-11"
+
+
+def _current_month() -> str:
+    return datetime.now(ZoneInfo("Asia/Seoul")).strftime("%Y-%m")
+
+
+def _auto_in_month(member: dict, month: str) -> bool:
+    if month < EXPLICIT_PAYMENT_MONTH:
+        return True
+    history = member.get("monthly_voucher_defaults") or {}
+    last = max((m for m in history if m <= month), default=None)
+    return last is not None and history[last] is True
+
+
+def teacher_auto_for_name(repo, org_id: str, name: str, month: str) -> bool:
+    if month < EXPLICIT_PAYMENT_MONTH:
+        return True
+    from .org import roster
+    uid = next((t.get("uid") for t in roster(repo, org_id) if t.get("name") == name), None)
+    if not uid:
+        return False
     try:
-        return repo.get("pay_plans", org_id, f"{child_id}_{month}")
+        return _auto_in_month(repo.get("users", org_id, uid), month)
     except NotFound:
-        return None
+        return False
+
+
+def teacher_auto_for_child(repo, org_id: str, child: dict, month: str) -> bool:
+    return teacher_auto_for_name(repo, org_id, (child.get("therapist") or "").strip(), month)
+
+
+class PaymentSettingsIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    same_as_actual: bool
+    expected_revision: str | None
+
+
+def _member_settings(repo, p: Principal):
+    org = _org(repo, p.org_id)
+    teacher = linked_therapist_name(org, p.uid)
+    if not teacher:
+        raise HTTPException(403, "치료사 목록에 연결된 본인 계정으로 설정해 주세요")
+    try:
+        return teacher, repo.get("users", p.org_id, p.uid), org["updated_at"]
+    except NotFound:
+        raise HTTPException(403, "기관 계정 연결을 확인해 주세요")
+
+
+@router.get("/me/payment-settings")
+def my_payment_settings(p: Principal = Depends(require_write), repo=Depends(get_repo)):
+    teacher, member, _ = _member_settings(repo, p)
+    return {"therapist": teacher, "same_as_actual": _auto_in_month(member, _current_month()),
+            "revision": member["updated_at"]}
+
+
+@router.put("/me/payment-settings")
+def save_payment_settings(body: PaymentSettingsIn, p: Principal = Depends(require_write), repo=Depends(get_repo)):
+    teacher, member, org_revision = _member_settings(repo, p)
+    month = _current_month()
+    if body.expected_revision != member["updated_at"]:
+        raise HTTPException(409, "설정이 변경되었습니다. 새로고침 후 다시 확인해 주세요")
+    history = {**(member.get("monthly_voucher_defaults") or {}), month: body.same_as_actual}
+    try:
+        member = repo.save_versioned("users", p.org_id, p.uid, {"monthly_voucher_defaults": history}, body.expected_revision,
+                                     also=(VersionedChange("organizations", p.org_id, org_revision),
+                                           audit_change(p, "update_payment_settings", "users", p.uid)))
+    except RevisionConflict:
+        raise HTTPException(409, "설정이 변경되었습니다. 새로고침 후 다시 확인해 주세요")
+    return {"therapist": teacher, "same_as_actual": body.same_as_actual, "revision": member["updated_at"]}
+
+
+def _resolved_plan(raw: dict | None, auto: bool) -> dict:
+    manual = raw is not None and raw.get("same_as_actual") is False
+    return {"mode": "manual" if manual else "actual" if auto else "unset",
+            "same_as_actual": auto and not manual, "slots": raw.get("slots", []) if manual else [],
+            "revision": raw.get("updated_at") if raw else None}
+
+
+def pay_plan(repo, org_id: str, child_id: str, month: str) -> dict:
+    try:
+        raw = repo.get("pay_plans", org_id, f"{child_id}_{month}")
+    except NotFound:
+        raw = None
+    if month < EXPLICIT_PAYMENT_MONTH or (raw and raw.get("same_as_actual") is False):
+        return _resolved_plan(raw, month < EXPLICIT_PAYMENT_MONTH)
+    child = repo.get("children", org_id, child_id)
+    return _resolved_plan(raw, teacher_auto_for_child(repo, org_id, child, month))
 
 
 def pay_plans(repo, org_id: str, month: str) -> dict[str, dict]:
-    return {d["child_id"]: d for d in repo.list("pay_plans", org_id, month=month)}
+    from .org import roster
+    saved = {d["child_id"]: d for d in repo.list("pay_plans", org_id, month=month)}
+    if month < EXPLICIT_PAYMENT_MONTH:
+        return {cid: _resolved_plan(raw, True) for cid, raw in saved.items()}
+    members = {u["uid"]: u for u in repo.list("users", org_id)}
+    auto = {t["name"] for t in roster(repo, org_id) if _auto_in_month(members.get(t.get("uid"), {}), month)}
+    return {c["id"]: _resolved_plan(saved.get(c["id"]), (c.get("therapist") or "").strip() in auto)
+            for c in repo.list("children", org_id)}
 
 
 def plan_slots(plan: dict | None) -> list[dict] | None:
@@ -87,6 +171,11 @@ def plan_slots(plan: dict | None) -> list[dict] | None:
     return sorted(plan.get("slots", []), key=lambda s: (s["date"], s["start"]))
 
 
+def without_chosen_other(slots: list[dict], schedules: list[dict]) -> list[dict]:
+    excluded = {(s["date"], s["start"]) for s in schedules if billing.chosen_other(s)}
+    return [slot for slot in slots if (slot["date"], slot["start"]) not in excluded]
+
+
 def month_classes(schedules: list[dict], marks: dict[str, dict], absences: list[dict], sessions: list[dict], month: str) -> list[dict]:
     """One child's classes that happened in the month ({'id','date','start','therapist','from','extra','pay'}): not
     moved/cancelled, not 결석·사유결석, not in a 장기결강 period (unmarked ones count as held, later days as planned),
@@ -94,7 +183,7 @@ def month_classes(schedules: list[dict], marks: dict[str, dict], absences: list[
     out = [{"id": s["id"], "date": s["date"], "start": s["start"], "therapist": s.get("therapist", ""), "extra": s.get("extra"),
             "pay": s.get("pay"), "from": "makeup" if s.get("moved_from") else "schedule"}
            for s in schedules if s["date"].startswith(month) and held(effective(s, marks.get(s["id"]), absences, today="9999-12-31"))]
-    days = {c["date"] for c in out} | {s["date"] for s in schedules if billing.chosen_other(s)}
+    days = {c["date"] for c in out} | {s["date"] for s in schedules if billing.chosen_other(s) or s.get("cancel_reason") == "아동 종결"}
     for s in sessions:  # session records without a schedule entry
         if s.get("date", "").startswith(month) and s.get("status", "completed") != "cancelled" and s["date"] not in days:
             out.append({"id": None, "date": s["date"], "start": s["start"], "therapist": s.get("therapist", ""), "extra": None, "pay": None, "from": "session"})
@@ -109,6 +198,7 @@ def held_visits(schedules: list[dict], marks: dict[str, dict], absences: list[di
     slots = plan_slots(plan)
     if slots is None:
         return [c for c in billing.assign_pay(held, plan) if c["pay"] == "voucher"]
+    slots = without_chosen_other(slots, schedules)
     by_day = {c["date"]: c for c in held}
     names = [c["therapist"] for c in held if c["therapist"]]
     usual = max(set(names), key=names.count) if names else ""
@@ -130,7 +220,9 @@ def classify_month(repo, org_id: str, month: str, child_id: str | None = None,
     marks = {m["schedule_id"]: m for m in repo.list_range("attendance", org_id, "date", first, last, **flt)}
     absences = repo.list("absences", org_id, **flt)
     plans = pay_plans(repo, org_id, month) if plans is None else plans
-    return {cid: billing.assign_pay(month_classes(d["s"], marks, absences, d["t"], month), plans.get(cid))
+    cutoffs = {c["id"]: c["terminated_on"] for c in repo.list("children", org_id) if c.get("terminated_on")}
+    return {cid: billing.assign_pay(month_classes(d["s"], marks, absences,
+                       [s for s in d["t"] if s["date"] < cutoffs.get(cid, "9999")], month), plans.get(cid))
             for cid, d in by.items()}
 
 
@@ -144,19 +236,29 @@ def month_data(repo, p: Principal, child_id: str, month: str, minutes: int) -> t
     absences = repo.list("absences", p.org_id, child_id=child_id)
     schedules = repo.list_range("schedules", p.org_id, "date", first, last, child_id=child_id)
     sessions = repo.list_range("therapy_sessions", p.org_id, "date", first, last, child_id=child_id)
+    cutoff = child_or_404(repo, p, child_id).get("terminated_on")
+    if cutoff:
+        sessions = [s for s in sessions if s["date"] < cutoff]
     plan = pay_plan(repo, p.org_id, child_id, month)
     visits = held_visits(schedules, marks, absences, sessions, month, plan)
-    notes_by_date: dict[str, str] = {}
+    activities_by_date: dict[str, list[str]] = {}
+    activity_summaries: dict[str, list[str]] = {}
+    for record in repo.list_range("recording_records", p.org_id, "date", first, last, child_id=child_id):
+        if record.get("source") != "recording_ai_approved":
+            continue
+        text = ((record.get("sections") or {}).get("activities") or "").strip()
+        if text and not any(marker in text for marker in ("확인되지", "확인 불가", "미확인", "보고됨", "녹취", "녹음", "전사")):
+            activity_summaries.setdefault(record["date"], []).append(text)
     for s in sessions:
-        for n in repo.list("session_notes", p.org_id, session_id=s["id"]):
-            if n.get("status", "approved") == "approved" and n.get("text"):
-                notes_by_date[s["date"]] = n["text"]
-    records_by_date = {r["date"]: r for r in repo.list_range("recording_records", p.org_id, "date", first, last, child_id=child_id)}
-    consult_by_date = {c["date"]: (c.get("session_summary") or c.get("summary") or "").strip()
-                       for c in repo.list_range("parent_consultations", p.org_id, "date", first, last, child_id=child_id)}
+        if s.get("status") != "completed":
+            continue
+        for activity in s.get("activities") or s.get("activity_accuracy") or []:
+            name = activity.get("name") if isinstance(activity, dict) else None
+            if isinstance(name, str) and name.strip() and UNKNOWN not in name and "녹취" not in name:
+                activities_by_date.setdefault(s["date"], []).append(name.strip())
     for v in visits:
         v["end"] = _plus(v["start"], minutes)
-        v["content"], v["content_source"] = _content(v["date"], notes_by_date, records_by_date, consult_by_date)
+        v["content"], v["content_source"] = _content(v["date"], activity_summaries, activities_by_date)
     # a class moved to another month: 기타사항 still names where it went. With a 결제 일정, only its dates.
     days = billing.pay_days(plan)
     voucher = [s for s in schedules if not billing.chosen_other(s) and (days is None or s["date"] in days)]
@@ -179,7 +281,8 @@ def voucher_visits(child_id: str, month: str, p: Principal = Depends(current_pri
     org = _org(repo, p.org_id)
     visits, other = month_data(repo, p, child_id, month, minutes)
     grade = child.get("voucher_grade")
-    return {"month": month, "minutes": minutes, "same_as_actual": plan_slots(pay_plan(repo, p.org_id, child_id, month)) is None, "unit_price": billing.voucher_price(visits, *billing.voucher_prices(org)),
+    plan = pay_plan(repo, p.org_id, child_id, month)
+    return {"month": month, "minutes": minutes, "mode": plan["mode"], "same_as_actual": plan["same_as_actual"], "unit_price": billing.voucher_price(visits, *billing.voucher_prices(org)),
             "copay": billing.VOUCHER_COPAY.get(grade or ""), "visits": visits,
             "other": [{"date": d, "text": t} for d, t in other]}
 
@@ -286,8 +389,9 @@ class PaySlot(BaseModel):
 
 class PayPlanIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    same_as_actual: bool = True
+    same_as_actual: bool
     slots: list[PaySlot] = Field(default_factory=list, max_length=31)
+    expected_revision: str | None = Field(default=None, max_length=128)
 
 
 @router.get("/month-sheet")
@@ -301,45 +405,84 @@ def month_sheet(month: str, therapist: str | None = None, p: Principal = Depends
     from .timetable import sync_month
     sync_month(repo, p.org_id, month)
     rows = [s for s in repo.list_range("schedules", p.org_id, "date", *month_bounds(month)) if s.get("status") not in ("cancelled", "moved")]
+    own_name = my_therapist_name(repo, p)
     therapists = None
     if p.role == "admin":
         therapists = sorted({t["name"].strip() for t in roster(repo, p.org_id) if t.get("name", "").strip()}
                             | {(s.get("therapist") or "").strip() for s in rows} - {""})
-        name = therapist if therapist is not None else (my_therapist_name(repo, p) or (therapists[0] if therapists else ""))
+        name = therapist if therapist is not None else (own_name or (therapists[0] if therapists else ""))
     else:
-        name = my_therapist_name(repo, p)
-    mine = [s for s in rows if name and (s.get("therapist") or "").strip() == name]
-    kids = {s["child_id"] for s in mine}
+        name = own_name
+    can_edit = bool(name and p.can_write and (name in (therapists or []) if p.role == "admin" else own_name == name))
+    children = {c["id"]: c for c in repo.list("children", p.org_id)
+                if p.role == "admin" or (own_name and (c.get("therapist") or "").strip() == own_name)}
+    editable = {cid for cid, c in children.items()
+                if can_edit and not c.get("archived") and not c.get("terminated_on")
+                and (p.role == "admin" or (c.get("therapist") or "").strip() == own_name)}
+    mine = [s for s in rows if name and (s.get("therapist") or "").strip() == name and s["child_id"] in children]
+    hidden = [s for s in rows if can_edit and (s.get("therapist") or "").strip() == name and s["child_id"] not in children]
+    reserved = []
+    if hidden:
+        marks = {m["schedule_id"]: m for m in repo.list_range("attendance", p.org_id, "date", *month_bounds(month))}
+        absences = repo.list("absences", p.org_id)
+        reserved = [{k: s[k] for k in ("date", "start", "end")} for s in hidden
+                    if held(effective(s, marks.get(s["id"]), absences))]
+    taught_kids = {s["child_id"] for s in mine}
+    kids = {cid for cid, c in children.items() if name and (c.get("therapist") or "").strip() == name
+            and ((not c.get("archived") and not c.get("terminated_on")) or cid in taught_kids)}
     plans = {cid: plan for cid, plan in pay_plans(repo, p.org_id, month).items() if cid in kids}
-    classes = classify_month(repo, p.org_id, month, plans=plans) if kids else {}
+    classes = classify_month(repo, p.org_id, month, plans=plans) if mine else {}
+    payments = {c["id"]: c["pay"] for rows_for_child in classes.values() for c in rows_for_child if c.get("id")}
+    explicit_other = {(s["child_id"], s["date"], s["start"]) for s in rows if billing.chosen_other(s)}
     taught = {(s["child_id"], s["date"], s["start"]) for s in mine}
     out = []
     for cid in sorted(kids):
-        slots = plan_slots(plans.get(cid))
+        plan = plans.get(cid) or _resolved_plan(None, month < EXPLICIT_PAYMENT_MONTH)
+        slots = plan_slots(plan)
         if slots is None:
             slots = [{"date": c["date"], "start": c["start"]} for c in classes.get(cid, [])
                      if c["pay"] == "voucher" and (cid, c["date"], c["start"]) in taught]
-        out.append({"child_id": cid, "same_as_actual": billing.pay_days(plans.get(cid)) is None, "slots": slots})
-    names = {c["id"]: c["display_name"] for c in repo.list("children", p.org_id) if c["id"] in kids}
-    return {"therapist": name, "therapists": therapists, "names": names,
-            "classes": [{"child_id": s["child_id"], "date": s["date"], "start": s["start"]} for s in sorted(mine, key=lambda s: (s["date"], s["start"]))],
-            "plans": out}
+        else:
+            slots = [s for s in slots if (cid, s["date"], s["start"]) not in explicit_other]
+        out.append({"child_id": cid, "mode": plan["mode"], "same_as_actual": plan["same_as_actual"], "slots": slots,
+                    "can_edit": cid in editable, "revision": plan["revision"]})
+    names = {cid: children[cid]["display_name"] for cid in sorted(kids | taught_kids)}
+    lessons = [{**{field: s.get(field) for field in ("id", "child_id", "date", "start", "end")},
+                "pay": payments.get(s["id"], s.get("pay") or ("private" if s.get("extra") == "paid" else "voucher")),
+                "revision": s["updated_at"],
+                "note": s.get("note") if s["child_id"] in kids else None,
+                "can_edit": s["child_id"] in editable and s.get("status") == "scheduled"}
+               for s in sorted(mine, key=lambda s: (s["date"], s["start"]))]
+    return {"therapist": name, "therapists": therapists, "can_edit": can_edit, "names": names, "aliases": {cid: children[cid].get("alias") for cid in editable}, "reserved": reserved,
+            "default_same_as_actual": teacher_auto_for_name(repo, p.org_id, name, month), "classes": lessons, "plans": out}
 
 
 @router.put("/children/{child_id}/pay-plan")
 def put_pay_plan(child_id: str, month: str, body: PayPlanIn, p: Principal = Depends(require_write), repo=Depends(get_repo)):
     if not re.match(MONTH, month):
         raise HTTPException(422, "month must be YYYY-MM")
-    child_or_404(repo, p, child_id)
+    teacher, guards = monthly_edit_owner(repo, p, child_id)
     slots = sorted({(s.date.isoformat(), s.start) for s in body.slots})
     if any(not d.startswith(month) for d, _ in slots):
         raise HTTPException(422, f"{month}에 다른 달 날짜가 섞여 있습니다")
+    if not body.same_as_actual and not slots:
+        raise HTTPException(422, "결제 날짜를 한 개 이상 입력하세요")
+    if body.same_as_actual and month >= EXPLICIT_PAYMENT_MONTH:
+        from .org import roster
+        uid = next((t.get("uid") for t in roster(repo, p.org_id) if t.get("name") == teacher), None)
+        try:
+            member = repo.get("users", p.org_id, uid) if uid else {}
+        except NotFound:
+            member = {}
+        if not _auto_in_month(member, month):
+            raise HTTPException(409, "담당 치료사의 내 설정에서 실제 일정과 동일을 먼저 체크하고 저장하세요")
+        guards += (VersionedChange("users", uid, member["updated_at"]),)
     doc = {"child_id": child_id, "month": month, "same_as_actual": body.same_as_actual,
            "slots": [] if body.same_as_actual else [{"date": d, "start": t} for d, t in slots]}
     pid = f"{child_id}_{month}"
     try:
-        saved = repo.update("pay_plans", p.org_id, pid, doc)
-    except NotFound:
-        saved = repo.create("pay_plans", p.org_id, doc, doc_id=pid)
-    audit(repo, p, "update", "pay_plans", pid, child_id)
+        saved = repo.save_versioned("pay_plans", p.org_id, pid, doc, body.expected_revision,
+                                   also=(*guards, audit_change(p, "update", "pay_plans", pid, child_id)))
+    except RevisionConflict:
+        raise HTTPException(409, "결제 일정이 변경되었습니다. 다시 열어 확인하세요")
     return saved

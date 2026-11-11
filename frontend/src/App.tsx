@@ -38,6 +38,8 @@ export default function App() {
   const me = useMe();
   const { pathname } = useLocation();
   if (pathname === "/privacy") return page(<Privacy />); // public: readable before sign-in or signup
+  if (pathname === "/terms") return page(<Privacy kind="terms" />);
+  if (pathname === "/refund") return page(<Privacy kind="refund" />);
   if (!ready) return null;
   if (!signedIn) return <Login />;
   if (me.isLoading) return <p className="p-6 text-sm text-slate-400">계정 확인 중…</p>;

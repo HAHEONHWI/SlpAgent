@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, ConfigDict, model_validator
-from ..auth import Identity, Role, current_identity, effective_identity, require_site_admin
+from ..auth import Identity, Role, current_identity, effective_identity, require_recent_sign_in, require_site_admin
 from ..deps import get_repo
 from ..repo.base import NotFound, now_iso
 from ..services.accounts import PLATFORM, get_claims_setter, get_account_directory
@@ -261,9 +261,10 @@ def me(identity: Identity = Depends(current_identity), repo=Depends(get_repo)):
 @router.delete("/me")
 def delete_me(identity: Identity = Depends(current_identity), repo=Depends(get_repo),
               directory=Depends(get_account_directory)):
-    """회원 탈퇴. The client re-checks the password before calling this."""
+    """회원 탈퇴. The client re-checks the password first; the fresh token's auth_time proves it here."""
     if identity.site_admin:
         raise HTTPException(409, "site admin accounts cannot be deleted here")
+    require_recent_sign_in(identity)
     identity = effective_identity(identity, repo)  # suspended accounts cannot withdraw themselves
     _delete_account(repo, directory, identity.uid, identity.org_id, identity.role, identity.uid, "withdraw_account")
     return {"uid": identity.uid, "deleted": True}

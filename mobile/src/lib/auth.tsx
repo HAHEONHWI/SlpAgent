@@ -19,9 +19,10 @@ const fbAuth: Auth | null = (() => {
 export const FIREBASE_ENABLED = !!fbAuth;
 export const CHILD_KEY = "childId";
 
-let currentUser: User | null = null;
+// Widgets run without AuthProvider; wait for the persisted Firebase session there too.
+export const getSessionUser = async () => { await fbAuth?.authStateReady(); return fbAuth?.currentUser ?? null; };
 /** force=true fetches a fresh ID token so newly granted claims (org/role after approval) take effect. */
-export const getToken = async (force = false) => (currentUser ? currentUser.getIdToken(force) : null);
+export const getToken = async (force = false) => (await getSessionUser())?.getIdToken(force) ?? null;
 
 type Ctx = {
   ready: boolean; signedIn: boolean; label: string;
@@ -68,7 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!fbAuth) return;
-    return onIdTokenChanged(fbAuth, (u) => { currentUser = u; setUser(u); setReady(true); });
+    return onIdTokenChanged(fbAuth, (u) => { setUser(u); setReady(true); });
   }, []);
 
   const value: Ctx = {

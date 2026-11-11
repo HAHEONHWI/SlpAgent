@@ -4,6 +4,7 @@ import { useMe, roleLabel } from "@/lib/me";
 import { WEB_URL } from "@/lib/config";
 import { ChangePassword, LogoutButton, Withdraw } from "@/components/Account";
 import { Button, Card, Screen, T } from "@/components/ui";
+import { ScheduleWidgets } from "@/components/ScheduleWidgets";
 
 export default function Account() {
   const me = useMe().data;
@@ -19,6 +20,7 @@ export default function Account() {
         <Button variant="outline" icon="open-outline" title="웹 열기" onPress={() => Linking.openURL(`${WEB_URL}/dashboard`)} />
         <Button variant="ghost" title="개인정보처리방침" onPress={() => Linking.openURL(`${WEB_URL}/privacy`)} />
       </Card>
+      <ScheduleWidgets />
       <ChangePassword />
       <Withdraw />
       <T small muted style={{ textAlign: "center" }}>{`SLP AI ${Application.nativeApplicationVersion ?? ""} (${Application.nativeBuildVersion ?? ""})`}</T>

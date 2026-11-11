@@ -52,7 +52,7 @@ export function ChildSheet({ visible, value, onPick, onClose, emptyLabel }: { vi
   const sections = useChildSections(q);
   const pick = (id: string | null) => { onPick(id); setQ(""); onClose(); };
   return (
-    <Sheet visible={visible} onClose={onClose} title="아동 선택">
+    <Sheet visible={visible} onClose={onClose} title="아동 선택" expanded>
       <Input value={q} onChangeText={setQ} placeholder="이름·코드·초성 검색" autoCorrect={false} />
       {emptyLabel && !q && <Pressable onPress={() => pick(null)} style={[s.option, value === null && { backgroundColor: C.accentSoft }]}><Text style={{ fontWeight: "700", color: C.ink }}>{emptyLabel}</Text></Pressable>}
       {sections.map((sec) => (

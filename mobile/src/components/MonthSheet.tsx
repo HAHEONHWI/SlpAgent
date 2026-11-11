@@ -1,15 +1,19 @@
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, errText } from "@/lib/api";
+import { ApiError, api, errText } from "@/lib/api";
 import { dow, hm, plusMinutes, today } from "@/lib/dates";
 import { refreshSchedules } from "@/lib/hooks";
 import { canWrite, useMe } from "@/lib/me";
-import { Button, C, Checkbox, Loading, MonthNav, Notice, Row, Segmented, Select, T } from "./ui";
+import EditClassSheet, { type Cls } from "./EditClassForm";
+import { Button, C, Checkbox, Loading, MonthNav, Notice, Row, Segmented, Select, Sheet as ModalSheet, T, confirm } from "./ui";
 
 type Slot = { date: string; start: string };
-type Plan = { child_id: string; same_as_actual: boolean; slots: Slot[] };
-type Sheet = { therapist: string; therapists: string[] | null; names: Record<string, string>; classes: (Slot & { child_id: string })[]; plans: Plan[] };
+type Lesson = Cls & { child_id: string; can_edit: boolean; revision: string };
+type Plan = { child_id: string; mode: "actual" | "manual" | "unset"; slots: Slot[]; can_edit: boolean; revision: string | null };
+type Sheet = { reserved?: (Slot & { end: string })[]; aliases?: Record<string, string>; therapist: string; therapists: string[] | null; can_edit: boolean; default_same_as_actual: boolean; names: Record<string, string>; classes: Lesson[]; plans: Plan[] };
+type Draft = { childId: string; month: string; same: boolean; slots: Slot[]; revision: string | null };
+type Preference = { therapist: string; same_as_actual: boolean; revision: string | null };
 type Data = { config: { session_minutes: number; days: number[] }; morning: string[]; afternoon: string[] };
 
 const isoDay = (d: string) => new Date(d + "T00:00:00").getDay() || 7;
@@ -20,69 +24,132 @@ const daysOf = (month: string, keep: number[]) => {
 const sorted = (s: Slot[]) => [...s].sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
 const COL = 74;
 
+function PaymentSetting({ account, locked }: { account: string; locked: boolean }) {
+  const qc = useQueryClient();
+  const key = ["payment-settings", account];
+  const settings = useQuery({ queryKey: key, queryFn: () => api<Preference>("/me/payment-settings") });
+  const [draft, setDraft] = useState<Preference | null>(null);
+  const save = useMutation({
+    mutationFn: (d: Preference) => api<Preference>("/me/payment-settings", { method: "PUT", json: { same_as_actual: d.same_as_actual, expected_revision: d.revision } }),
+    onSuccess: (saved) => { qc.setQueryData(key, saved); setDraft(null); refreshSchedules(qc); },
+    onError: (error) => { if (error instanceof ApiError && error.status === 409) { setDraft(null); void settings.refetch(); } },
+  });
+  const current = settings.data;
+  const close = () => { if (!save.isPending) setDraft(null); };
+  return <>
+    <T bold>내 결제 설정</T>
+    {current && <Row>
+      <T small muted>{current.same_as_actual ? "실제 일정과 동일 · 처음 5회 바우처" : "실제 일정 자동 적용 꺼짐"}</T>
+      <Button small variant="outline" title="내 설정 변경" disabled={locked || settings.isFetching} onPress={() => { save.reset(); setDraft(current); }} />
+    </Row>}
+    {settings.isLoading && <Loading />}
+    {settings.error && <Notice tone="red">{errText(settings.error)}</Notice>}
+    {!draft && save.error && <Notice tone="red">{errText(save.error)}</Notice>}
+    <ModalSheet visible={!!draft} onClose={close} title="내 결제 설정">
+      {draft && <>
+        <T>{draft.therapist} 선생님이 저장한 달부터 매달 적용돼요. 아동별로 따로 저장한 결제 일정이 우선해요.</T>
+        <Checkbox label="실제 일정과 동일 · 아동별 매달 앞 5회만 바우처로 계산" checked={draft.same_as_actual} disabled={save.isPending}
+          onChange={(same_as_actual) => setDraft({ ...draft, same_as_actual })} />
+        <T small muted>체크하면 해당 월의 바우처 대상 수업 중 6회째부터 사비로 잡혀요. 체크를 해제하면 별도 일정이 없는 아동의 자동 분류를 보류해요.</T>
+        {save.error && <Notice tone="red">{errText(save.error)}</Notice>}
+        <Row>
+          <Button small title="설정 저장" loading={save.isPending} disabled={draft.same_as_actual === current?.same_as_actual}
+            onPress={async () => { if (await confirm("내 결제 설정을 저장할까요?", draft.same_as_actual ? "이번 달부터 실제 일정의 첫 5회를 바우처로 계산해요." : "이번 달부터 실제 일정 자동 적용을 해제해요.", "저장")) save.mutate(draft); }} />
+          <Button small variant="ghost" title="취소" disabled={save.isPending} onPress={close} />
+        </Row>
+      </>}
+    </ModalSheet>
+  </>;
+}
+
 /** 월간 수업일정표, one teacher at a time: rows = days, columns = time slots (scroll sideways). 실제 = the teacher's classes,
  *  결제 = the dates each child's 바우처 서류 claims (실제와 동일: the first 5 classes; otherwise the 결제 날짜 entered here). */
 export default function MonthSheet() {
   const qc = useQueryClient();
-  const writable = canWrite(useMe().data);
+  const me = useMe().data;
+  const writable = canWrite(me);
   const [month, setMonth] = useState(today().slice(0, 7));
   const [view, setView] = useState<"actual" | "pay">("actual");
+  const [slot, setSlot] = useState<Slot | null>(null), [newChild, setNewChild] = useState("");
+  const [lesson, setLesson] = useState<Lesson | null>(null);
   const [teacher, setTeacher] = useState<string | null>(null); // null = the server's default (admin: own name or first)
-  const [childId, setChildId] = useState(""), [draft, setDraft] = useState<{ same: boolean; slots: Slot[] } | null>(null);
+  const [childId, setChildId] = useState(""), [draft, setDraft] = useState<Draft | null>(null);
   const tt = useQuery({ queryKey: ["timetable"], queryFn: () => api<Data>("/timetable") });
   const q = new URLSearchParams({ month, ...(teacher !== null && { therapist: teacher }) });
-  const sheet = useQuery({ queryKey: ["month-sheet", q.toString()], queryFn: () => api<Sheet>(`/month-sheet?${q}`) });
+  const sheet = useQuery({ queryKey: ["month-sheet", me?.org_id, me?.uid, q.toString()], queryFn: () => api<Sheet>(`/month-sheet?${q}`), enabled: !!me });
   const name = (id: string) => sheet.data?.names[id] ?? "?";
   const plan = sheet.data?.plans.find((p) => p.child_id === childId);
   const actual = useMemo(() => sheet.data?.classes ?? [], [sheet.data]);
+  const add = useMutation({
+    mutationFn: (where: Slot) => api("/schedules/month-sheet", { method: "POST", json: { ...where, child_id: newChild, therapist: sheet.data?.therapist } }),
+    onSuccess: () => { setSlot(null); refreshSchedules(qc); },
+    onError: () => { void sheet.refetch(); },
+  });
+  const openSlot = (date: string, start: string) => { setNewChild(""); add.reset(); setSlot({ date, start }); };
+  const available = (sheet.data?.plans ?? []).filter(p => p.can_edit);
+  const reserved = view === "actual" ? sheet.data?.reserved ?? [] : [];
   const save = useMutation({
-    mutationFn: () => api(`/children/${childId}/pay-plan?month=${month}`, { method: "PUT", json: { same_as_actual: draft!.same, slots: draft!.slots } }),
+    mutationFn: (d: Draft) => api(`/children/${d.childId}/pay-plan?month=${d.month}`, { method: "PUT", json: { same_as_actual: d.same, slots: d.same ? [] : d.slots, expected_revision: d.revision } }),
     onSuccess: () => { setDraft(null); refreshSchedules(qc); },
+    onError: (error) => { if (error instanceof ApiError && error.status === 409) { setDraft(null); void sheet.refetch(); } },
   });
 
   // Each cell's names: 결제 view shows the open draft in place of that child's saved 결제 일정.
   const cells = useMemo(() => {
-    const m = new Map<string, string[]>();
-    const put = (cid: string, s: Slot) => { const k = `${s.date}|${s.start}`; m.set(k, [...(m.get(k) ?? []), cid]); };
-    if (view === "actual") actual.forEach((s) => put(s.child_id, s));
-    else for (const p of sheet.data?.plans ?? []) (p.child_id === childId && draft ? draft.slots : p.slots).forEach((s) => put(p.child_id, s));
-    if (view === "pay" && draft && childId && !sheet.data?.plans.some((p) => p.child_id === childId)) draft.slots.forEach((s) => put(childId, s));
+    const m = new Map<string, { childId: string; lesson?: Lesson }[]>();
+    const put = (childId: string, s: Slot, lesson?: Lesson) => { const k = `${s.date}|${s.start}`; m.set(k, [...(m.get(k) ?? []), { childId, lesson }]); };
+    if (view === "actual") actual.forEach((s) => put(s.child_id, s, s));
+    else for (const p of sheet.data?.plans ?? []) {
+      let slots = p.slots;
+      if (draft && p.child_id === draft.childId) slots = draft.same ? (p.mode === "actual" ? p.slots : []) : draft.slots;
+      slots.forEach((s) => put(p.child_id, s));
+    }
     return m;
-  }, [view, actual, sheet.data, childId, draft]);
+  }, [view, actual, sheet.data, draft]);
 
   if (!tt.data) return tt.error ? <Notice tone="red">{errText(tt.error)}</Notice> : <Loading />;
   const { config, morning, afternoon } = tt.data;
-  const times = [...new Set([...morning, ...afternoon, ...[...cells.keys()].map((k) => k.split("|")[1])])].sort();
-  const days = daysOf(month, config.days.length ? config.days : [1, 2, 3, 4, 5]);
-  const editing = view === "pay" && !!draft && !draft.same;
+  const times = [...new Set([...morning, ...afternoon, ...reserved.map(s => s.start), ...[...cells.keys()].map((k) => k.split("|")[1])])].sort();
+  const days = [...new Set([...daysOf(month, config.days.length ? config.days : [1, 2, 3, 4, 5]), ...reserved.map(s => s.date), ...[...cells.keys()].map((k) => k.split("|")[0])])].sort();
+  const ownSheet = writable && !!sheet.data?.can_edit;
+  const mayEditPlan = ownSheet && !!plan?.can_edit;
+  const editing = view === "pay" && !!draft && !draft.same && mayEditPlan;
   const pick = (cid: string) => { setChildId(cid); setDraft(null); save.reset(); };
-  const open = () => setDraft({ same: plan?.same_as_actual ?? true, slots: sorted(plan?.slots ?? []) });
+  const open = () => {
+    if (!mayEditPlan || !plan) return;
+    save.reset();
+    setDraft({ childId, month, same: plan.mode === "actual" && !!sheet.data?.default_same_as_actual, slots: sorted(plan.slots), revision: plan.revision });
+  };
   const toggle = (sl: Slot) => draft && setDraft({ ...draft, slots: draft.slots.some((x) => x.date === sl.date && x.start === sl.start)
     ? draft.slots.filter((x) => !(x.date === sl.date && x.start === sl.start)) : sorted([...draft.slots, sl]) });
 
   return (
     <View style={{ gap: 12 }}>
-      <MonthNav value={month} onChange={(m) => { setMonth(m); setDraft(null); }} />
+      <MonthNav value={month} disabled={!!draft} onChange={(m) => { setMonth(m); pick(""); }} />
       {sheet.data?.therapists && <Select label="교사" value={sheet.data.therapist} placeholder="교사 선택" options={sheet.data.therapists.map((t) => [t, t] as [string, string])}
-        onChange={(t) => { setTeacher(t); setChildId(""); setDraft(null); }} />}
-      <Segmented value={view} onChange={setView} items={[["actual", "실제 일정"], ["pay", "결제 일정"]]} />
+        disabled={!!draft} onChange={(t) => { setTeacher(t); pick(""); }} />}
+      <Segmented value={view} onChange={setView} disabled={!!draft} items={[["actual", "실제 일정"], ["pay", "결제 일정"]]} />
+      {view === "actual" && ownSheet && <T small muted>빈칸을 눌러 담당 아동의 수업을 추가하고, 이름을 눌러 그날 수업을 수정할 수 있어요.</T>}
       {view === "pay" && (
         <View style={{ gap: 8, padding: 12, borderRadius: 16, borderWidth: 1, borderColor: C.line }}>
-          <T small muted>결제 일정의 날짜가 바우처 서류에 올라가요. ‘실제와 동일’이면 따로 입력하지 않고 그 달 실제 수업 중 처음 5회만 바우처, 나머지는 사비로 잡혀요.</T>
-          <Select value={childId} placeholder="아동 선택" title="아동 선택" options={Object.entries(sheet.data?.names ?? {}) as [string, string][]} onChange={pick} />
-          {childId && !draft && (
+          {ownSheet && me && me.therapist_name === sheet.data?.therapist && <PaymentSetting key={me.uid} account={`${me.org_id}/${me.uid}`} locked={!!draft} />}
+          <Select label="월별 결제 일정을 볼 아동" value={childId} disabled={!!draft} placeholder="아동 선택" options={(sheet.data?.plans ?? []).map((p) => [p.child_id, name(p.child_id)])} onChange={pick} />
+          <T small muted>선택한 아동의 이번 달 바우처 서류와 정산에 사용할 날짜를 확인해요.</T>
+          {plan && !draft && (
             <Row>
-              <T small muted>{plan?.same_as_actual === false ? `결제 일정 ${plan.slots.length}회` : "실제와 동일 (처음 5회)"}</T>
-              {writable && <Button small variant="outline" title="결제 일정 수정" onPress={open} />}
+              <T small muted>{plan.mode === "manual" ? `별도 결제 일정 ${plan.slots.length}회` : plan.mode === "actual" ? "실제 일정과 동일 · 처음 5회" : "결제 미설정"}</T>
+              {mayEditPlan && <Button small variant="outline" title="월별 결제 일정 수정" disabled={sheet.isFetching} onPress={open} />}
             </Row>)}
           {childId && draft && (
             <>
-              <Checkbox checked={draft.same} label="실제와 동일" onChange={(same) => setDraft({ same, slots: draft.slots.length ? draft.slots : sorted(plan?.slots ?? []) })} />
+              {sheet.data?.default_same_as_actual && <Checkbox checked={draft.same} label="이번 달에도 기본 설정 사용 · 실제 일정과 동일" disabled={save.isPending}
+                onChange={(same) => setDraft({ ...draft, same })} />}
               {!draft.same && <T small muted>{`아래 표에서 칸을 눌러 ${name(childId)}의 결제 날짜를 넣고 빼요 · ${draft.slots.length}회`}</T>}
-              {!draft.same && plan?.same_as_actual !== false && <T small muted>실제 수업 처음 5회로 미리 채웠어요</T>}
+              {draft.same && plan?.mode === "manual" && <T small muted>저장하면 이 아동의 이번 달 수동 일정을 실제 일정으로 대체해요.</T>}
               <Row>
-                <Button small title="저장" loading={save.isPending} disabled={!draft.same && !draft.slots.length} onPress={() => save.mutate()} />
-                <Button small variant="ghost" title="취소" onPress={() => setDraft(null)} />
+                <Button small title="이 아동의 일정 저장" loading={save.isPending} disabled={!mayEditPlan || (draft.same ? plan?.mode === "actual" || !sheet.data?.default_same_as_actual : !draft.slots.length)}
+                  onPress={async () => { if (await confirm(`${name(childId)} · ${month} 결제 일정을 저장할까요?`, draft.same ? "기본 설정의 실제 수업 일정을 사용해요." : `선택한 결제 일정 ${draft.slots.length}회를 적용해요.`, "저장")) save.mutate(draft); }} />
+                <Button small variant="ghost" title="취소" disabled={save.isPending} onPress={() => { setDraft(null); save.reset(); }} />
               </Row>
             </>)}
           {save.error && <Notice tone="red">{errText(save.error)}</Notice>}
@@ -105,19 +172,45 @@ export default function MonthSheet() {
                 <Text style={{ fontSize: 12, color: C.ink, textAlign: "center" }}>{`${Number(d.slice(8))} ${dow(d)}`}</Text>
               </View>
               {times.map((t) => {
-                const who = cells.get(`${d}|${t}`) ?? [];
-                const mine = editing && who.includes(childId);
-                return (
-                  <Pressable key={t} disabled={!editing && !(view === "pay" && !draft && who.length > 0)}
-                    onPress={() => (editing ? toggle({ date: d, start: t }) : who[0] && pick(who[0]))}
-                    style={{ width: COL, minHeight: 36, padding: 3, borderRightWidth: 1, borderColor: C.border, backgroundColor: mine ? C.accentSoft : "transparent" }}>
-                    {who.map((cid, j) => (
-                      <Text key={cid + j} numberOfLines={1} style={{ fontSize: 12, color: cid === childId && view === "pay" ? C.accentDark : "#9f1239", fontWeight: cid === childId && view === "pay" ? "700" : "400" }}>{name(cid)}</Text>))}
+                const entries = cells.get(`${d}|${t}`) ?? [];
+                const mine = editing && entries.some((e) => e.childId === childId);
+                const cellStyle = { width: COL, minHeight: 36, padding: 3, borderRightWidth: 1, borderColor: C.border, backgroundColor: mine ? C.accentSoft : "transparent" };
+                if (view === "actual" && !entries.length && ownSheet) {
+                  const blocked = reserved.some(s => s.date === d && s.start < plusMinutes(t, config.session_minutes) && t < s.end);
+                  if (blocked) return <View key={t} style={cellStyle}><T small muted>예약됨</T></View>;
+                  return <Pressable key={t} style={cellStyle} disabled={sheet.isFetching || sheet.isError || !available.length}
+                    accessibilityRole="button" accessibilityLabel={`${d} ${t} 수업 추가`} onPress={() => openSlot(d, t)} />;
+                }
+                if (editing) return (
+                  <Pressable key={t} disabled={save.isPending} accessibilityRole="checkbox" accessibilityState={{ checked: mine }} accessibilityLabel={`${d} ${t} ${name(childId)} 결제 수업`}
+                    style={cellStyle} onPress={() => toggle({ date: d, start: t })}>
+                    <Text style={{ fontSize: 12, color: C.ink }}>{entries.map((e) => name(e.childId)).join("\n")}</Text>
                   </Pressable>);
+                return (
+                  <View key={t} style={cellStyle}>
+                    {entries.map(({ childId: cid, lesson }, index) => {
+                      const editLesson = writable && sheet.data?.can_edit && !sheet.isFetching && lesson?.can_edit && lesson.revision;
+                      const selectable = view === "pay" && !draft;
+                      const title = name(cid);
+                      return <Text key={lesson?.id ?? cid + index} numberOfLines={1}
+                        accessibilityRole={selectable || editLesson ? "button" : undefined}
+                        accessibilityLabel={editLesson ? `${title} ${d} ${t} 수업 수정` : title}
+                        onPress={editLesson ? () => setLesson(lesson) : selectable ? () => pick(cid) : undefined}
+                        style={{ fontSize: 13, color: C.accentDark, paddingVertical: 4, fontWeight: cid === childId && view === "pay" ? "700" : "400" }}>{title}</Text>;
+                    })}
+                  </View>);
               })}
             </View>))}
         </View>
       </ScrollView>
+      <ModalSheet visible={!!slot} onClose={() => { if (!add.isPending) setSlot(null); }} title="수업 추가">
+        {slot && <><T bold>{`${slot.date} ${slot.start}~${plusMinutes(slot.start, config.session_minutes)}`}</T>
+          <Select label="등록된 담당 아동" value={newChild} onChange={setNewChild} disabled={add.isPending} placeholder="아동 선택"
+            options={available.map(p => [p.child_id, [name(p.child_id), sheet.data?.aliases?.[p.child_id]].filter(Boolean).join(" · ")] as [string, string])} />
+          {add.error && <Notice tone="red">{errText(add.error)}</Notice>}
+          <Button title="추가" disabled={!newChild || !ownSheet} loading={add.isPending} onPress={() => add.mutate(slot)} /></>}
+      </ModalSheet>
+      <EditClassSheet monthly c={lesson} onClose={() => setLesson((opened) => opened === lesson ? null : opened)} onDone={() => refreshSchedules(qc)} />
     </View>
   );
 }

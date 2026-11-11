@@ -5,7 +5,7 @@ import time
 import uuid
 from typing import Any
 from pydantic import JsonValue
-from .base import NotFound, now_iso
+from .base import NotFound, VersionedChange, now_iso, versioned_document
 from .request_cache import clear_request_reads, current_request_reads
 
 
@@ -120,6 +120,28 @@ class FirestoreRepo:
         self.c.collection(col).document(doc_id).delete()
         if col == "knowledge_documents":
             self._invalidate_knowledge_documents(org_id)
+
+    def save_versioned(self, col, org_id, doc_id, data, expected_revision, *, also=()):
+        from google.cloud import firestore
+        changes = (VersionedChange(col, doc_id, expected_revision, data), *also)
+
+        @firestore.transactional
+        def save(transaction):
+            writes = []
+            for change in changes:
+                ref = self.c.collection(change.collection).document(change.id)
+                saved = versioned_document(ref.get(transaction=transaction).to_dict(), org_id, change)
+                if saved is not None:
+                    writes.append((ref, saved))
+            for ref, saved in writes:
+                transaction.set(ref, saved)
+            return writes[0][1]
+
+        result = save(self.c.transaction())
+        clear_request_reads()
+        if any(change.collection == "knowledge_documents" and change.patch is not None for change in changes):
+            self._invalidate_knowledge_documents(org_id)
+        return result
 
     def organization_documents(self, org_id):
         return [(col.id, snap.to_dict()) for col in self.c.collections()

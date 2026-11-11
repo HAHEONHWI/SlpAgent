@@ -7,6 +7,8 @@ import { SelectedChildButton } from "@/components/ChildPicker";
 import { C, IconButton, Sheet, s } from "@/components/ui";
 import { roleLabel, useMe } from "@/lib/me";
 
+export const unstable_settings = { anchor: "index" };
+
 type Icon = keyof typeof Ionicons.glyphMap;
 const icon = (on: Icon, off: Icon) => ({ color, focused }: { color: ColorValue; focused: boolean }) => <Ionicons name={focused ? on : off} size={23} color={color as string} />;
 

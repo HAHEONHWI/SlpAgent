@@ -131,6 +131,14 @@ cd backend && GOOGLE_CLOUD_PROJECT=slp-agent-2026 .venv/bin/python scripts/set_f
 
 자세한 운영 절차는 [docs/operations.md](docs/operations.md)를 참고하세요.
 
+## 라이선스
+
+Copyright (c) 2026 하헌휘. All rights reserved.
+
+이 프로젝트의 자체 소스 코드·문서·자산은 [독점 라이선스](LICENSE)를 따릅니다. 저작권자의 사전 서면 허가 없는 사용·복제·수정·재배포·판매·별도 서버 운영을 금지하며, 비상업적 사용에도 동일하게 적용됩니다. 이용 허가 문의: [3h@heonhwi.dev](mailto:3h@heonhwi.dev).
+
+운영자가 승인한 사용자의 공식 서비스·앱 이용은 허용 범위 안에서 유지됩니다. 외부 라이브러리·폰트·서식·검사 자료 등 제3자 자료의 권리와 별도 라이선스는 그대로 유지됩니다.
+
 ## 데이터와 저작권
 
 - `reference-docs/`(검사 원문), `extracted/`(추출본), `backend/app/data/assessments/`(문항 은행)는 **커밋하지 않고**, 컨테이너 이미지와 Cloud Build 업로드에도 포함하지 않습니다(`.gitignore`, `.dockerignore`, `.gcloudignore`).

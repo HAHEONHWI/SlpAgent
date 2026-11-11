@@ -2,6 +2,7 @@
 suspension, and organization merge."""
 from app.main import app
 from app.services.accounts import get_claims_setter
+from app.services.child_codes import counter_id
 from tests.conftest import H
 
 SITE = H("-", "site_admin", "root")
@@ -67,6 +68,10 @@ def test_merge_moves_members_and_records_into_target(client, repo):
     app.dependency_overrides[get_claims_setter] = lambda: Recorder()
     keep = _new_org(client, "a", "히즈언어치료")
     dup = _new_org(client, "b", "히즈언어치료")
+    repo.create("child_code_counters", keep, {"prefix": "A", "next_number": 5, "used_numbers": [1, 2, 4]},
+                doc_id=counter_id(keep, "A"))
+    repo.create("child_code_counters", dup, {"prefix": "A", "next_number": 10, "used_numbers": [1, 9]},
+                doc_id=counter_id(dup, "A"))
     child = client.post("/children", headers=H("-", "none", "b"), json={"alias": "D-1", "display_name": "x", "birth_date": "2022-01-01"}).json()
     preview = client.post(f"/platform/organizations/{dup}/merge-preview", headers=SITE, json={"target_org_id": keep}).json()
     assert preview["counts"]["children"] == 1
@@ -76,6 +81,8 @@ def test_merge_moves_members_and_records_into_target(client, repo):
     done = client.post(f"/platform/organizations/{dup}/merge", headers=SITE,
                        json={"target_org_id": keep, "preview_token": preview["preview_token"], "confirmation": dup})
     assert done.status_code == 200
+    counter = repo.get("child_code_counters", keep, counter_id(keep, "A"))
+    assert counter["next_number"] == 10 and counter["used_numbers"] == [1, 2, 4, 9]
     b = H("-", "none", "b")  # b's old token still says nothing; the access record now points at the target
     assert client.get("/me", headers=b).json()["org_id"] == keep
     assert [c["id"] for c in client.get("/children", headers=b).json()] == [child["id"]]

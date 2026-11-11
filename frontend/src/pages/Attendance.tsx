@@ -37,7 +37,7 @@ export default function Attendance() {
   const isAdmin = useMe().data?.role === "admin";
   const closed = useQuery({ queryKey: ["attendance", "closures"], queryFn: () => api<Closure[]>("/attendance/closures") });
   const closure = closed.data?.find((c) => c.date === day);
-  const refresh = () => ["attendance", "schedules", "voucher-visits", "settlement", "class-records"].forEach((key) => qc.invalidateQueries({ queryKey: [key] }));
+  const refresh = () => ["attendance", "schedules", "voucher-visits", "month-sheet", "settlement", "class-records"].forEach((key) => qc.invalidateQueries({ queryKey: [key] }));
   const who = (id: string) => { const c = children.find((x) => x.id === id); return c ? `${c.display_name} · ${c.alias}` : "–"; };
   const roll = useQuery({ queryKey: ["attendance", "day", day], queryFn: () => api<Row[]>(`/attendance/day?on=${day}`) });
   const summary = useQuery({ queryKey: ["attendance", "summary", month], queryFn: () => api<Summary[]>(`/attendance/summary?month=${month}`) });
@@ -79,6 +79,7 @@ export default function Attendance() {
             </div>
           </div>
           {closure && <div className="mb-3"><Notice tone="amber">이 날은 치료실 전체 휴강이에요{closure.reason ? ` (${closure.reason})` : ""}. 수업 {closure.classes}개가 취소되어 출결·정산·바우처 서류에서 빠졌어요. ‘전체 휴강’ 탭에서 되돌릴 수 있어요.</Notice></div>}
+          {roll.data?.some(r => r.pay === "pending") && <Notice tone="amber">결제 미설정 수업이 있어요. 담당 치료사의 내 계정에서 ‘내 결제 설정’을 저장하거나, 월간 일정표의 ‘결제 일정’에서 아동별 날짜를 지정해 주세요.</Notice>}
           {roll.isLoading ? <p className="text-sm text-slate-400">불러오는 중…</p> : !roll.data?.length ? <Empty>이 날짜에 수업이 없습니다.</Empty> : (
             <ul className="divide-y divide-slate-200 border-y border-slate-300">{roll.data.map((r) => <RollRow key={r.schedule_id} r={r} who={who(r.child_id)} onDone={refresh} />)}</ul>)}
           {roll.error && <Notice tone="red">{errText(roll.error)}</Notice>}
@@ -132,7 +133,7 @@ function AddClass({ day, onDone }: { day: string; onDone: () => void }) {
         <Button disabled={add.isPending || !f.child_id || !f.extra}>추가</Button>
         <Button type="button" variant="ghost" onClick={() => setOpen(false)}>취소</Button>
       </div>
-      <p className="text-xs text-slate-500">수업은 기본 바우처예요. 결제 일정이 ‘실제와 동일’이면 그 달 처음 5회만 바우처이고 나머지는 자동 사비, 결제 일정을 입력했으면 그 날짜 수업만 바우처예요(일정 관리 › 월간 일정표). 담당 치료사와 수업 길이는 아동·시간표 설정을 따라요.</p>
+      <p className="text-xs text-slate-500">월간 일정표에서 ‘실제 일정과 동일’을 저장하면 아동별 월 첫 5회가 바우처예요. 직접 결제 일정을 입력한 달은 지정한 날짜를 사용해요. 결제 미설정 수업은 정산을 보류해요.</p>
       {add.error && <Notice tone="red">{errText(add.error)}</Notice>}
     </form>
   );
@@ -166,7 +167,7 @@ function RollRow({ r, who, onDone }: { r: Row; who: string; onDone: () => void }
         {r.extra && <Badge>추가</Badge>}
         {badge}
         {r.pay && <Select aria-label="수업 구분" className="w-28 py-1 text-xs" disabled={pay.isPending} value={r.pay} onChange={(e) => pay.mutate(e.target.value)}>
-          {(Object.keys(PAY) as Pay[]).map((k) => <option key={k} value={k}>{PAY[k]}</option>)}
+          {(Object.keys(PAY) as Pay[]).filter((k) => k !== "pending" || r.pay === "pending").map((k) => <option key={k} value={k} disabled={k === "pending"}>{PAY[k]}</option>)}
         </Select>}
         {r.state.reason && <span className="text-xs text-slate-500">{r.state.reason}</span>}
         {controls && (

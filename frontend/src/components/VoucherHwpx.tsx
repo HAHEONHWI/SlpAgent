@@ -8,7 +8,7 @@ import { Badge, Button, Input, Label, Notice, Textarea } from "./ui";
 
 type Visit = { date: string; start: string; end: string; therapist: string; content: string; content_source?: string };
 type Other = { date: string; text: string };
-type MonthData = { month: string; minutes: number; same_as_actual?: boolean; unit_price: number | null; copay?: number | null; visits: Visit[]; other: Other[] };
+type MonthData = { month: string; minutes: number; mode: "actual" | "manual" | "unset"; unit_price: number | null; copay?: number | null; visits: Visit[]; other: Other[] };
 
 const addMonths = (ym: string, n: number) => {
   const [y, m] = ym.split("-").map(Number);
@@ -78,7 +78,7 @@ export default function VoucherHwpx({ childId, month, format }: { readonly child
       <div className="rounded-lg border border-slate-200">
         <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-2 text-sm">
           <b>{current.slice(0, 4)}년 {label(current)}</b><span className="text-slate-500">{visits.length}회</span>
-          {data && <Badge tone={data.same_as_actual ? "slate" : "indigo"}>{data.same_as_actual ? "실제와 동일 · 처음 5회" : "결제 일정 기준"}</Badge>}
+          {data && <Badge tone={data.mode === "manual" ? "indigo" : "slate"}>{data.mode === "actual" ? "실제 일정과 동일 · 월 첫 5회" : data.mode === "manual" ? "결제 일정 기준" : "결제 일정 미설정"}</Badge>}
           {empty > 0 && <Badge tone="amber">내용 없는 회기 {empty}</Badge>}
           {edits[current] && <button className="ml-auto text-xs text-slate-500 underline" onClick={() => { const { [current]: _drop, ...rest } = edits; setEdits(rest); }}>기록에서 다시 불러오기</button>}
         </div>

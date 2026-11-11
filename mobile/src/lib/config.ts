@@ -12,4 +12,4 @@ export const API_URL = trim(process.env.EXPO_PUBLIC_API_URL);
 export const API_DIRECT_URL = trim(process.env.EXPO_PUBLIC_API_DIRECT_URL) || API_URL;
 export const WEB_URL = trim(process.env.EXPO_PUBLIC_WEB_URL);
 /** Same version string as frontend/src/lib/privacy.ts; signups record it. */
-export const PRIVACY_POLICY_VERSION = "2026-10-15.1";
+export const PRIVACY_POLICY_VERSION = "2026-11-03.1";

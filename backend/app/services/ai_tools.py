@@ -70,10 +70,11 @@ class RecentRecord(TypedDict):
 class ToolRunner:
     def __init__(self, repo, p: Principal, child_id: str | None,
                  allowed_tools: frozenset[str] | None = None,
-                 sensitive_values: tuple[str | None, ...] = ()):
+                 sensitive_values: tuple[str | None, ...] = (), child: dict | None = None):
         self.repo, self.p, self.child_id = repo, p, child_id
         self.allowed_tools = frozenset(READ) if allowed_tools is None else allowed_tools
         self.sensitive_values = sensitive_values
+        self.child = child
 
     def _need_child(self):
         if not self.child_id:
@@ -98,7 +99,7 @@ class ToolRunner:
         except (ValueError, TypeError, KeyError) as e:
             return {"error": str(e)}
         audit(self.repo, self.p, f"ai_tool:{name}", "ai_tools", name, self.child_id, via_ai=True)
-        return sanitize_external_value(out, list(self.sensitive_values))
+        return sanitize_external_value(out, list(self.sensitive_values), self.child)
 
     def _rows(self, col):
         return sorted(self.repo.list(col, self.p.org_id, child_id=self._need_child()), key=lambda d: d.get("created_at", ""))

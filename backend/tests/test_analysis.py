@@ -24,7 +24,10 @@ def _session(repo, child, date="2026-09-01", note="2음절 모방"):
 
 
 def test_integrated_analysis_is_evidence_checked_draft_until_approval(client, repo, child):
-    _session(repo, child, note="테스트아동 010-0000-0000 test@example.com")
+    repo.create("children", "orgA", {"alias": "A-02", "display_name": "옆아동",
+                                       "guardian_contact": "010-9999-9999", "birth_date": "2021-05-01"},
+                doc_id="other-child")
+    _session(repo, child, note="테스트아동 옆아동 010-0000-0000 test@example.com")
     repo.create("vocabulary_records", "orgA", {"child_id": child["id"], "word": "공", "modality": "expressive",
                 "status": "emerging", "observed_on": "2026-09-02"})
     claim = {"text": "회기 기록이 있습니다", "evidence": [{"document": "회기기록", "evaluation_date": "2026-09-01"}]}
@@ -41,7 +44,8 @@ def test_integrated_analysis_is_evidence_checked_draft_until_approval(client, re
     assert proposal["status"] == "draft"
     assert repo.list("clinical_analyses", "orgA") == []
     context = fake.calls[0]["input"]
-    assert "테스트아동" not in context and "010-0000-0000" not in context
+    assert "테스트아동" not in context and "옆아동" not in context and "A-01" in context
+    assert "010-0000-0000" not in context
     assert "test@example.com" not in context
     approved = client.post(f"/proposals/{proposal['id']}/approve", headers=H())
     assert approved.status_code == 200

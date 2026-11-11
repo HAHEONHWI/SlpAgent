@@ -1,6 +1,6 @@
 """Therapists reach only their own 담당 아동, also through routes addressed by a record's own id."""
 import pytest
-from app.services.privacy import sanitize_external_text
+from app.services.privacy import pseudonymize_child_text, sanitize_external_text
 from tests.conftest import H, THERAPIST
 
 
@@ -81,3 +81,22 @@ def test_known_names_are_masked_in_any_case():
     out = sanitize_external_text("JANE DOE and jane doe and Jane Doe", ["Jane Doe"])
     assert out == "[개인정보] and [개인정보] and [개인정보]"
     assert sanitize_external_text("a.b 테스트아동", ["a.b", "테스트아동"]) == "[개인정보] [개인정보]"
+
+
+def test_child_names_are_pseudonymized_and_other_children_redacted():
+    child = {"display_name": "테스트아동", "alias": "A-01", "guardian_contact": "010-0000-0000"}
+    text = pseudonymize_child_text("테스트아동과 다른아동 010-0000-0000", child,
+                                   ["테스트아동", "다른아동", "010-0000-0000"])
+    assert text == "A-01과 [개인정보] [개인정보]"
+    assert pseudonymize_child_text("테스트아동", {"display_name": "테스트아동", "alias": ""}) == "[개인정보]"
+
+
+def test_assistant_reads_only_the_linked_therapists_children(client, child):
+    linked, unlinked = H(role="assistant"), H(role="assistant", uid="aide")  # u1 is linked to the child's 담당 치료사
+    cid = child["id"]
+    assert [c["id"] for c in client.get("/children", headers=linked).json()] == [cid]
+    assert client.get(f"/children/{cid}", headers=linked).status_code == 200
+    assert client.get("/children", headers=unlinked).json() == []
+    for path in (f"/children/{cid}", f"/children/{cid}/consultations", f"/children/{cid}/recordings",
+                 f"/children/{cid}/documents", f"/children/{cid}/clinical-analyses"):
+        assert client.get(path, headers=unlinked).status_code == 404, path

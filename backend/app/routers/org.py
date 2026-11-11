@@ -54,6 +54,7 @@ class RosterEntry(BaseModel):
     id: str | None = Field(default=None, max_length=40)
     name: str = Field(min_length=1, max_length=20)
     uid: str | None = Field(default=None, max_length=128, description="the member account this therapist signs in with")
+    code_prefix: str | None = Field(default=None, pattern=r"^[A-Z]$", description="아이 코드 알파벳")
 
 
 class RosterIn(BaseModel):
@@ -133,11 +134,16 @@ def put_roster(body: RosterIn, p: Principal = Depends(current_principal), repo=D
         raise HTTPException(422, "한 계정을 두 치료사에 연결할 수 없습니다")
     if any(u not in member_uids for u in uids):
         raise HTTPException(422, "이 기관의 계정이 아닙니다")
-    old = {t["id"]: t["name"] for t in roster(repo, p.org_id) if t.get("id")}
+    old_rows = {t["id"]: t for t in roster(repo, p.org_id) if t.get("id")}
     import uuid
-    new = [{"id": t.id if t.id in old else uuid.uuid4().hex[:12], "name": t.name.strip(), "uid": t.uid} for t in body.therapists]
+    new = [{"id": t.id if t.id in old_rows else uuid.uuid4().hex[:12], "name": t.name.strip(), "uid": t.uid,
+            "code_prefix": t.code_prefix if "code_prefix" in t.model_fields_set else (old_rows.get(t.id) or {}).get("code_prefix")}
+           for t in body.therapists]
+    prefixes = [t["code_prefix"] for t in new if t["code_prefix"]]
+    if len(set(prefixes)) != len(prefixes):
+        raise HTTPException(422, "아이 코드 알파벳은 치료사마다 다르게 지정해 주세요")
     # renamed therapists: children's 담당 and the timetable's teacher names follow the new name
-    renames = {old[t["id"]]: t["name"] for t in new if t["id"] in old and old[t["id"]] != t["name"]}
+    renames = {old_rows[t["id"]]["name"]: t["name"] for t in new if t["id"] in old_rows and old_rows[t["id"]]["name"] != t["name"]}
     if renames:
         for c in repo.list("children", p.org_id):
             if c.get("therapist") in renames:

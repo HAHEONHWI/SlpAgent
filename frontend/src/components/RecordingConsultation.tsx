@@ -4,6 +4,7 @@ import { Upload } from "lucide-react";
 import { api } from "../lib/api";
 import { errText, useClassSlot } from "../lib/hooks";
 import { resumableUpload, type UploadTarget } from "../lib/upload";
+import ClassTimeFields from "./ClassTimeFields";
 import { Badge, Button, Card, Input, Label, Notice, Section, Segmented, Textarea } from "./ui";
 
 type Job = {
@@ -31,7 +32,6 @@ const WAIT: Record<string, string> = {
 // 처리 단계 표시: 업로드 → 압축·분할 → 받아쓰기 → 요약 (상태에서 어느 단계인지 계산)
 const STEPS = ["업로드", "압축·분할", "받아쓰기", "요약"];
 const STEP_AT: Record<string, number> = { uploading: 0, queued: 1, transcribing: 2, waiting: 2, merging: 2, summarizing: 3, draft_ready: 3, approved: 4, rejected: 4 };
-const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const mb = (b?: number) => (b ? `${(b / 1024 / 1024).toFixed(1)}MB` : "-");
 const mins = (s?: number) => (s ? `${Math.round(s / 60)}분` : "-");
 const time = (iso?: string | null) => (iso ? new Date(iso).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }) : "");
@@ -41,10 +41,9 @@ export default function RecordingConsultation({ childId, defaultKind = "consulta
   const qc = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
   const [inputKey, setInputKey] = useState(0);
-  const [form, setForm] = useState({ kind: defaultKind, date: today(), start: "", end: "", counselor: "", consent: false });
+  const [form, setForm] = useState({ kind: defaultKind, consent: false });
   const [progress, setProgress] = useState<number | null>(null);
-  // 날짜를 고르면 그날 시간표의 수업 시간·담당을 채운다 (수업이 없는 날은 시간을 비운다)
-  useClassSlot(childId, form.date, (s) => setForm((f) => ({ ...f, start: s?.start ?? "", end: s?.end ?? "", counselor: s?.therapist || f.counselor })));
+  const slot = useClassSlot(childId);
   const jobs = useQuery({
     queryKey: ["recordings", childId],
     queryFn: () => api<Job[]>(`/children/${childId}/recordings`),
@@ -57,8 +56,8 @@ export default function RecordingConsultation({ childId, defaultKind = "consulta
   const start = useMutation({
     mutationFn: async () => {
       const created = await api<{ job: Job; upload: UploadTarget }>(`/children/${childId}/recordings`, { method: "POST", json: {
-        filename: file!.name, size: file!.size, content_type: file!.type || "application/octet-stream", kind: form.kind, date: form.date,
-        start: form.start && form.end ? form.start : null, end: form.start && form.end ? form.end : null, counselor: form.counselor, consent: form.consent } });
+        filename: file!.name, size: file!.size, content_type: file!.type || "application/octet-stream", kind: form.kind, date: slot.date,
+        start: slot.start || null, end: slot.end || null, counselor: slot.counselor, consent: form.consent } });
       qc.invalidateQueries({ queryKey: ["recordings", childId] });
       setProgress(0);
       await resumableUpload(created.upload, file!, setProgress);
@@ -80,12 +79,8 @@ export default function RecordingConsultation({ childId, defaultKind = "consulta
             <input key={inputKey} type="file" className="sr-only" aria-label="녹음 파일" accept="audio/*,.m4a,.mp3,.wav,.webm,.ogg,.flac,.aac" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required />
           </label>
           {fileError && <Notice tone="red">{fileError}</Notice>}
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-            <Label label="날짜"><Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required /></Label>
-            <Label label="시작 (선택)"><Input type="time" value={form.start} onChange={(e) => setForm({ ...form, start: e.target.value })} /></Label>
-            <Label label="종료 (선택)"><Input type="time" value={form.end} onChange={(e) => setForm({ ...form, end: e.target.value })} /></Label>
-          </div>
-          <Label label="담당 치료사"><Input value={form.counselor} onChange={(e) => setForm({ ...form, counselor: e.target.value })} required /></Label>
+          <ClassTimeFields slot={slot} />
+          <Label label="담당 치료사"><Input value={slot.counselor} onChange={(e) => slot.setCounselor(e.target.value)} required /></Label>
           <label className="flex items-start gap-2 text-sm">
             <input type="checkbox" className="mt-1" checked={form.consent} onChange={(e) => setForm({ ...form, consent: e.target.checked })} required />
             <span>(필수) 녹음 대상자(보호자·법정대리인)에게 녹음과 외부 음성 인식 서비스 전송에 대한 동의를 받았습니다.</span>

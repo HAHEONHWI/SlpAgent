@@ -1,5 +1,5 @@
 """Weekly timetable grid: slot math, cell rules, permissions and turning it into dated schedules."""
-from tests.conftest import H
+from tests.conftest import H, THERAPIST
 
 ADMIN = H(role="admin")
 CFG = {"teachers": [{"id": "eo", "name": "어선생", "short": "어", "color": "#2563eb"},
@@ -26,8 +26,13 @@ def test_config_is_admin_only_and_rejects_overlap(client):
 
 
 def test_cell_rules(client, child):
-    client.put("/timetable/config", headers=ADMIN, json=CFG)
+    config = {**CFG, "teachers": [{**CFG["teachers"][0], "name": THERAPIST}, CFG["teachers"][1]]}
+    client.put("/timetable/config", headers=ADMIN, json=config)
     assert _entry(client, label="이준우", note="-20일", valid_to="2026-10-20").status_code == 201
+    assert _entry(client, label="다른 치료사 이름", teacher_id="sil", day=3).status_code == 404
+    own_entry = _entry(client, label="내 이름", day=3).json()
+    assert client.put(f"/timetable/entries/{own_entry['id']}", headers=H(), json={"day": 3, "slot": "09:00",
+                                                                                 "teacher_id": "sil", "label": "내 이름"}).status_code == 404
     assert _entry(client, label="다른아동").status_code == 409  # same cell, overlapping period
     assert _entry(client, label="다음아동", valid_from="2026-10-21").status_code == 201  # takes over after the 20th
     assert _entry(client, child_id=child["id"], teacher_id="sil").status_code == 201
@@ -45,7 +50,8 @@ def test_cell_rules(client, child):
 def test_generate_creates_dated_schedules_once(client, child):
     client.put("/timetable/config", headers=ADMIN, json=CFG)
     e = _entry(client, child_id=child["id"], note="(10월-)", valid_from="2026-10-12").json()  # Mondays 09:00
-    _entry(client, label="미등록아동", day=2, valid_from="2026-10-01")
+    client.post("/timetable/entries", headers=ADMIN, json={"day": 2, "slot": "09:00", "teacher_id": "eo",
+                                                           "label": "미등록아동", "valid_from": "2026-10-01"})
     r = client.post("/timetable/generate", headers=H(), json={"start": "2026-10-01", "end": "2026-10-31"}).json()
     assert r["created"] == 3 and r["unlinked"] == 4  # Oct 12, 19, 26; four Tuesdays with an unregistered name
     rows = client.get("/schedules?month=2026-10", headers=H()).json()

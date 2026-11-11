@@ -5,7 +5,7 @@ from ..auth import Principal, require_write
 from ..config import get_settings
 from ..deps import audit, child_or_404, get_repo
 from ..services import agent, analysis
-from ..services.privacy import sanitize_external_value
+from ..services.privacy import organization_child_sensitive_values, sanitize_external_value
 
 
 router = APIRouter(prefix="/children/{child_id}", tags=["analysis"])
@@ -75,7 +75,7 @@ def generate_activity(child_id: str, body: ActivityRequest, p: Principal = Depen
     child = child_or_404(repo, p, child_id)
     age = analysis.age_months(child["birth_date"], date.today())
     request_data = {"age_months": age, **body.model_dump(mode="json")}
-    request_data = sanitize_external_value(request_data, [child.get("display_name"), child.get("guardian_contact")])
+    request_data = sanitize_external_value(request_data, organization_child_sensitive_values(repo, p.org_id), child)
     request_fields = set(request_data)
     context = {"child_alias": child["alias"], "activity_request": request_data}
     refs = {("user_request", None, field, None) for field in request_fields}

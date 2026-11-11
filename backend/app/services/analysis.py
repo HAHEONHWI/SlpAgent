@@ -1,7 +1,7 @@
 import json
 from datetime import date
 from pydantic import BaseModel, Field, ValidationError, model_validator
-from .privacy import sanitize_external_value
+from .privacy import organization_child_sensitive_values, sanitize_external_value
 from ..repo.base import NotFound
 
 
@@ -103,8 +103,8 @@ def child_context(repo, org_id: str, child_id: str, include_behavior: bool = Tru
         source_refs.add(("어휘기록", None, row["id"], row["observed_on"]))
         source_refs.add(("어휘기록", None, None, row["observed_on"]))
 
-    safe_values = [child.get("display_name"), child.get("guardian_contact")]
-    return sanitize_external_value(context, safe_values), source_refs
+    safe_values = organization_child_sensitive_values(repo, org_id)
+    return sanitize_external_value(context, safe_values, child), source_refs
 
 
 def _reference_tuple(evidence: Evidence) -> tuple:
